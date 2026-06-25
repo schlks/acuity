@@ -14,7 +14,7 @@ Edit the volume in the [docker-compose](docker-compose.yml) to where
 your images are.
 Change `:ro` to `:rw` if you want to move/copy/delete files.
 Since you can create separate galleries for your folders, I
-recommend setting the Volume to the most root folder you can, or
+recommend setting the volume to the most root folder you can, or
 do something like this:
 
 ```yaml
@@ -51,7 +51,7 @@ make up
 > [!NOTE]
 > Weaviate will take some GB to download its model.
 >
-> You can also install Docker Destkop on Linux if you want to.
+> You can also install Docker Desktop on Linux if you want to.
 
 ## Features
 
@@ -75,3 +75,4 @@ make up
 - [ ] Image carousel
 - [ ] Sort Search/Gallery by Date/Extension
 - [ ] Keybindings
+- [ ] Settings
