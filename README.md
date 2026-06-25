@@ -4,7 +4,7 @@
 
 ## About
 
-Acuity is a selfhosted photomanagement service.
+Acuity is a self-hosted photomanagement service.
 
 ## Install
 
@@ -35,11 +35,13 @@ make up
 
 ### Step 2 (Windows)
 
-Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and run [docker-run](docker-run.bat).
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+and run [docker-run.bat](docker-run.bat).
 
 ### Step 2 (MacOS)
 
-Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then run
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/),
+then run
 
 ```bash
 make docker
