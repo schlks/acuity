@@ -181,6 +181,27 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	err := r.ParseForm()
+	if err != nil {
+		message := "Failed to parse Form"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
+
+	imageIDs := r.Form["image_id"]
+
+	var images []db.Image
+	for _, id := range imageIDs {
+		images = append(images, db.Image{ID: id})
+	}
+
+	if err := s.Service.DeleteImages(ctx, images)
+}
+
 func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -230,7 +251,7 @@ func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	imageIDs := r.Form["imade_id"]
+	imageIDs := r.Form["image_id"]
 
 	var images []db.Image
 	for _, id := range imageIDs {

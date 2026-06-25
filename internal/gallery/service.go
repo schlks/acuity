@@ -141,21 +141,24 @@ func (g *GalleryService) ConvertImage(file []byte) (string, error) {
 	return base64Image, nil
 }
 
-func (g *GalleryService) DeleteImages(files []db.Image) error {
-	for _, file := range files {
-		if err := os.Remove(file.Path); err != nil {
-			return err
-		}
+func (g *GalleryService) DeleteImage(ctx context.Context, file db.Image) error {
+	if err := g.wDB.RemoveImage(ctx, file); err != nil {
+		return err
+	}
+	if err := os.Remove(file.Path); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (g *GalleryService) DeleteImage(ctx context.Context, file db.Image) error {
-	if err := os.Remove(file.Path); err != nil {
+func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image) error {
+	if err := g.wDB.RemoveImages(ctx, images); err != nil {
 		return err
 	}
-	if err := g.wDB.RemoveImage(ctx, file); err != nil {
-		return err
+	for _, image := range images {
+		if err := os.Remove(image.Path); err != nil {
+			return err
+		}
 	}
 	return nil
 }

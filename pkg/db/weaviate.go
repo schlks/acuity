@@ -433,6 +433,23 @@ func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []
 	return g.Wait()
 }
 
+func (w *WeaviateClient) RemoveImages(ctx context.Context, images []Image) error {
+	threads := runtime.NumCPU()
+	maxWorkers := max(threads-2, threads/2)
+	maxWorkers = max(maxWorkers, 1)
+
+	g := new(errgroup.Group)
+	g.SetLimit(maxWorkers)
+
+	for _, image := range images {
+		g.Go(func() error{
+			return w.RemoveImage(ctx, image)
+		})
+	}
+	
+	return g.Wait()
+}
+
 func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int) ([]Image, error) {
 	result, err := w.Client.GraphQL().Get().
 		WithClassName("Image").
