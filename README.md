@@ -6,7 +6,23 @@
 
 Acuity is a selfhosted photomanagement service.
 
-## Install
+## Install (Linux)
+
+Edit the volume in the [docker-compose](docker-compose.yml) to where
+your images are.
+Change `:ro` to `:rw` if you want to move/copy/delete files.
+Since you can create separate galleries for your folders, I
+recommend setting the Volume to the most root folder you can, or
+do something like this:
+
+```yaml
+volumes:
+ - ./config.yaml:/app/config.yaml
+ - /your/folder/1:/images/1:ro
+ - /your/folder/2:/images/2:ro
+```
+
+After editing the compose file, you can run:
 
 ```bash
 make docker
@@ -36,3 +52,5 @@ make up
 - [ ] Copy to gallery, currently only move
 - [ ] Add rating system
 - [ ] Image carousel
+- [ ] Sort Search/Gallery by Date/Extension
+- [ ] Keybindings

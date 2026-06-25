@@ -1,6 +1,6 @@
 FROM golang:1.26-alpine AS builder
 
-RUN apk add --no-cache vips-dev gcc musl-dev
+RUN apk add --no-cache vips-dev gcc musl-dev glycin-loaders-all
 
 WORKDIR /app
 COPY go.mod go.sum ./
