@@ -6,7 +6,9 @@
 
 Acuity is a selfhosted photomanagement service.
 
-## Install (Linux)
+## Install
+
+### Step 1
 
 Edit the volume in the [docker-compose](docker-compose.yml) to where
 your images are.
@@ -22,7 +24,22 @@ volumes:
  - /your/folder/2:/images/2:ro
 ```
 
-After editing the compose file, you can run:
+### Step 2 (Linux)
+
+Install `make` and `docker`, with your package manager, then run
+
+```bash
+make docker
+make up
+```
+
+### Step 2 (Windows)
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and run [docker-run](docker-run.bat).
+
+### Step 2 (MacOS)
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then run
 
 ```bash
 make docker
@@ -31,6 +48,8 @@ make up
 
 > [!NOTE]
 > Weaviate will take some GB to download its model.
+>
+> You can also install Docker Destkop on Linux if you want to.
 
 ## Features
 
