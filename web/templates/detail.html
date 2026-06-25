@@ -1,0 +1,54 @@
+<style>
+    .detail-image {
+        width: 100%;
+        border-radius: 8px;
+        margin-bottom: 15px;
+    }
+    .meta-block {
+        background: var(--bg-base);
+        padding: 12px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-size: 0.85rem;
+        word-break: break-all;
+    }
+    .meta-label {
+        color: var(--text-muted);
+        text-transform: uppercase;
+        font-size: 0.7rem;
+        margin-bottom: 4px;
+        display: block;
+    }
+    .action-btn {
+        width: 100%;
+        background: var(--accent);
+        color: var(--bg-base);
+        border: none;
+        padding: 12px;
+        border-radius: 6px;
+        font-weight: bold;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+    .action-btn:hover {
+        opacity: 0.9;
+    }
+</style>
+
+<img src="/image?path={{ .Filepath }}" class="detail-image" alt="Detailansicht">
+
+<div class="meta-block">
+    <span class="meta-label">Absoluter Pfad</span>
+    {{ .Filepath }}
+</div>
+
+<div class="meta-block">
+    <span class="meta-label">Vektor-Distanz zur Suche</span>
+    {{ printf "%.4f" .Distance }}
+</div>
+
+<button class="action-btn" 
+        hx-get="/search-similar?path={{ .Filepath }}" 
+        hx-target="#gallery">
+    Ähnliche Bilder finden
+</button>

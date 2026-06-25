@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acuity</title>
+    
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style>
+        /* Farbpalette: Dunkel, flach, kontrastarm */
+        :root {
+            --bg-base: #11111b;
+            --bg-surface: #181825;
+            --bg-overlay: #313244;
+            --text-main: #cdd6f4;
+            --text-muted: #a6adc8;
+            --accent: #89b4fa;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- Header / Topbar --- */
+        header {
+            height: 60px;
+            background-color: var(--bg-surface);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 20px;
+            border-bottom: 1px solid var(--bg-overlay);
+        }
+
+        .search-input {
+            flex-grow: 1;
+            background: var(--bg-base);
+            color: var(--text-main);
+            border: 1px solid var(--bg-overlay);
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent);
+        }
+
+        /* --- Workspace (Bereich unter dem Header) --- */
+        #workspace {
+            display: flex;
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* --- Linke Seitenleiste --- */
+        #left-sidebar {
+            width: 250px;
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--bg-overlay);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .tool-btn {
+            background: var(--bg-overlay);
+            color: var(--text-main);
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.2s;
+        }
+
+        .tool-btn:hover { background: var(--accent); color: var(--bg-base); }
+
+        /* --- Hauptgalerie (Mitte) --- */
+        #gallery {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            
+            /* Das responsive Raster */
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            align-content: start;
+        }
+
+        /* --- Rechte Seitenleiste (Detailansicht) --- */
+        #right-sidebar {
+            width: 350px;
+            background-color: var(--bg-surface);
+            border-left: 1px solid var(--bg-overlay);
+            padding: 20px;
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            box-sizing: border-box;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.4);
+            
+            /* Alpine.js Animation */
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow-y: auto;
+        }
+
+        #right-sidebar.is-open {
+            transform: translateX(0);
+        }
+
+        .close-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            float: right;
+        }
+    </style>
+</head>
+
+<body x-data="{ showDetailPanel: false }">
+
+    <header>
+        <div style="font-weight: bold; letter-spacing: 1px;">ACUITY</div>
+        <input type="text" 
+        		class="search-input" 
+        		name="q" 
+        		placeholder="Bilder durchsuchen..."
+        		hx-get="/search" 
+        		hx-trigger="keyup[key=='Enter']" 
+            	hx-target="#gallery"
+				hx-val='{"limit": "10000"}'>
+        <button class="tool-btn" @click="showDetailPanel = !showDetailPanel">Details umschalten</button>
+    </header>
+
+    <div id="workspace">
+
+        <aside id="left-sidebar">
+            <div style="color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">Aktionen</div>
+            <button class="tool-btn">Duplikate scannen</button>
+            <button class="tool-btn">Datenbank aufräumen</button>
+        </aside>
+
+        <main id="gallery">
+            <div style="color: var(--text-muted); grid-column: 1 / -1;">
+                Geben Sie einen Suchbegriff ein, um die Datenbank abzufragen.
+            </div>
+        </main>
+
+        <aside id="right-sidebar" :class="{ 'is-open': showDetailPanel }">
+            <button class="close-btn" @click="showDetailPanel = false">✕</button>
+            <div style="clear: both; margin-bottom: 20px;"></div>
+            
+            <div id="detail-content">
+                <p style="color: var(--text-muted);">Kein Bild ausgewählt.</p>
+            </div>
+        </aside>
+
+    </div>
+</body>
+</html>
