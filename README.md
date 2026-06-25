@@ -1,8 +1,12 @@
-# About
+# Acuity
+
+---
+
+## About
 
 Acuity is a selfhosted photomanagement service.
 
-# Install
+## Install
 
 ```bash
 make docker
