@@ -22,14 +22,14 @@ make up
 - find images by text/image
 - move/copy images between galleries
 - gallery culling (tbd)
-- image rating (tdb)
-- get image info
+- image rating (tbd)
+- get image info (tbd)
 
 ---
 
 ## TODO
 
-- [ ] Getting info for one image
+- [x] Getting info for one image
 - [ ] Paging
 - [x] Batch-Delete for selected images
 - [ ] Count the amount of images in a gallery

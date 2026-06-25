@@ -7,9 +7,11 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/h2non/bimg v1.1.9
 	github.com/mallardduck/go-http-helpers v0.1.0
+	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/spf13/viper v1.21.0
 	github.com/weaviate/weaviate v1.37.2
 	github.com/weaviate/weaviate-go-client/v5 v5.7.3
+	golang.org/x/sync v0.20.0
 	modernc.org/sqlite v1.52.0
 )
 
@@ -64,7 +66,6 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect

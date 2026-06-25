@@ -10,8 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"encoding/base64"
+	"strings"
 
 	"github.com/h2non/bimg"
+	"github.com/rwcarlsen/goexif/exif"
+	"github.com/rwcarlsen/goexif/mknote"
 )
 
 type GalleryService struct {
@@ -176,4 +179,40 @@ func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []
 		return err
 	}
 	return nil
+}
+
+func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[string]any, error) {
+	wInfo, err := g.wDB.GetInfo(ctx, imageID)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(wInfo.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	exif.RegisterParsers(mknote.All...)
+
+	x, err := exif.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+
+	camera, _ := x.Get(exif.Model)
+	tm, _ := x.DateTime()
+
+	baseName := filepath.Base(wInfo.Path)
+	imageInfo := map[string]any{
+		"ID": wInfo.ID,
+		"Name": strings.TrimSuffix(baseName, filepath.Ext(baseName)),
+		"Path": wInfo.Path,
+		"GalleryID": wInfo.Gallery,
+		"Camera": camera,
+		"Time": tm,
+	}
+	return imageInfo, nil
 }

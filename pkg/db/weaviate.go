@@ -27,6 +27,7 @@ type Image struct {
 	ID			string
 	Path		string
 	Base64		string
+	Gallery		string
 	Distance	float64
 }
 
@@ -201,6 +202,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 			for _, item := range imageArray {
 				imgProps := item.(map[string]any)
 				filepath := imgProps["filepath"].(string)
+				gallery := imgProps["galleryID"].(string)
 
 				var distance float64
 				var id string
@@ -216,6 +218,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 				images = append(images, Image{
 					ID: id,
 					Path: filepath,
+					Gallery: gallery,
 					Distance: distance,
 				})
 			}
@@ -508,6 +511,35 @@ func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[
 	}
 
 	return knownPaths, nil
+}
+
+func (w *WeaviateClient) GetInfo(ctx context.Context, imageID int) (Image, error) {
+	result, err := w.Client.GraphQL().Get().
+		WithClassName("Image").
+		WithFields(
+			graphql.Field{Name: "image"},
+			graphql.Field{Name: "gallery_id"},
+			graphql.Field{
+				Name: "_additional",
+				Fields: []graphql.Field{
+					{Name: "id"},
+				},
+			},
+		).
+		WithWhere(
+			filters.Where().
+			WithPath([]string{"id"}).
+			WithOperator(filters.Equal).
+			WithValueInt(int64(imageID))).
+		WithLimit(1).
+		Do(ctx)
+	if err != nil {
+		return Image{}, err
+	}
+
+	data := w.getData(result)
+	imageInfo := data[0]
+	return imageInfo, nil
 }
 
 func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {

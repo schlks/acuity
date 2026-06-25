@@ -38,6 +38,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", s.handleRoot)										// INFO: GET
 	mux.HandleFunc("/image", s.handleImage)								// INFO: GET
 	mux.HandleFunc("/image", s.deleteFile)								// INFO: DELETE
+	mux.HandleFunc("/image/{id}", s.getInfo)								// INFO: GET
 	mux.HandleFunc("/gallery/{name}/duplicates", s.handleDuplicates)		// INFO: GET
 	mux.HandleFunc("/gallery/{name}/search", s.handleTextSearch)			// INFO: GET
 	mux.HandleFunc("/gallery/{name}/search/image", s.handleImageSearch)	// INFO: POST
@@ -120,7 +121,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, message, http.StatusInternalServerError)
 			return
 		}
-		if err := s.Service.DeleteImages(files); err != nil {
+		if err := s.Service.DeleteImages(ctx, files); err != nil {
 			message := "Failed to delete Gallery"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -199,7 +200,12 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		images = append(images, db.Image{ID: id})
 	}
 
-	if err := s.Service.DeleteImages(ctx, images)
+	if err := s.Service.DeleteImages(ctx, images); err != nil {
+		message := "Failed to delete Image"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
@@ -290,8 +296,7 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.Template.ExecuteTemplate(w, "result.html", images)
-	if err != nil {
+	if err := s.Template.ExecuteTemplate(w, "result.html", images); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -369,6 +374,31 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 
 	err = s.Template.ExecuteTemplate(w, "result.html", images)
 	if err != nil {
+		message := "Internal server error during rendering"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	idString := r.PathValue("id")
+	id, err := strconv.Atoi(idString)
+	if err != nil {
+		message := "Failed to get Image ID"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+	imageInfo, err := s.Service.GetImageInfo(ctx, id)
+	if err != nil {
+		message := "Failed to get Image Info"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+	if err := s.Template.ExecuteTemplate(w, "info.html", imageInfo); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
