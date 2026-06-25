@@ -50,7 +50,7 @@ func (w *WeaviateClient) InitSchema() error {
 
 	exists, err := w.Client.Schema().ClassExistenceChecker().WithClassName(className).Do(ctx)
 	if err != nil {
-		return fmt.Errorf("fehler bei der existenzprüfung: %w", err)
+		return fmt.Errorf("error checking existence: %w", err)
 	}
 
 	if !exists {
@@ -80,9 +80,9 @@ func (w *WeaviateClient) InitSchema() error {
 
 		err = w.Client.Schema().ClassCreator().WithClass(classObj).Do(ctx)
 		if err != nil {
-			return fmt.Errorf("fehler beim erstellen des schemas: %w", err)
+			return fmt.Errorf("error creating schema: %w", err)
 		}
-		fmt.Println("Weaviate-Schema: 'Image' erfolgreich erstellt.")
+		fmt.Println("Weaviate schema: 'Image' successfully created.")
 	}
 
 	return nil
@@ -129,14 +129,14 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 		g.Go(func() error {
 			data, err := bimg.Read(path)
 			if err != nil {
-				log.Printf("Fehler beim Dekodieren: %v", err)
+				log.Printf("Error decoding: %v", err)
 				return err
 			}
 
 			bimgImg := bimg.NewImage(data)
 			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
 			if err != nil {
-				log.Printf("Fehler beim konvertieren zu JPEG: %v", err)
+				log.Printf("Error converting to JPEG: %v", err)
 				return err
 			}
 
@@ -151,7 +151,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 	}
 
 	if err := g.Wait(); err != nil {
-		log.Printf("Beim Importieren der Bilder sind Fehler aufgetreten: %v", err)
+		log.Printf("Errors occurred while importing images: %v", err)
 	}
 
 	close(resultChan)
@@ -170,13 +170,13 @@ func (w *WeaviateClient) RemoveGalleryImages(ctx context.Context, galleryID int)
 		WithOutput("minimal").
 		Do(ctx)
 	if err != nil {
-		return fmt.Errorf("batch delete fehlgeschlagen für gallery %d: %w", galleryID, err)
+		return fmt.Errorf("batch delete failed for gallery %d: %w", galleryID, err)
 	}
 
 	if response.Results != nil && response.Results.Matches > 0 && len(response.Results.Objects) > 0 {
 		for _, obj := range response.Results.Objects {
 			if obj.Errors != nil {
-				return fmt.Errorf("fehler beim löschen eines objektes: %v", obj.Errors)
+				return fmt.Errorf("error deleting an object: %v", obj.Errors)
 			}
 		}
 	}
@@ -189,7 +189,7 @@ func (w *WeaviateClient) RemoveImage(ctx context.Context, image Image) error {
 		WithID(image.ID).
 		Do(ctx)
 	if err != nil {
-		return fmt.Errorf("fehler beim löschen eines eines Bildes (ID: %s): %v",image.ID , err)
+		return fmt.Errorf("error deleting an image (ID: %s): %v", image.ID, err)
 	}
 	return nil
 }
@@ -231,9 +231,9 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 		WithObjects(batch...).
 		Do(ctx)
 	if err != nil {
-		log.Printf("Fehler beim Batch-Schreiben: %v", err)
+		log.Printf("Error during batch write: %v", err)
 	} else {
-		log.Printf("Erfolgreich %d Bilder in Weaviate geschrieben", len(batch))
+		log.Printf("Successfully wrote %d images to Weaviate", len(batch))
 	}
 }
 
@@ -277,7 +277,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit i
 
 	result, err := query.Do(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fehler beim suchen nach Bildern: %w", err)
+		return nil, fmt.Errorf("error searching for images: %w", err)
 	}
 
 	images := w.getData(result)
@@ -324,7 +324,7 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, limit 
 
 	result, err := query.Do(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fehler beim suchen nach Bildern: %w", err)
+		return nil, fmt.Errorf("error searching for images: %w", err)
 	}
 
 	images := w.getData(result)
@@ -374,12 +374,12 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID int, galler
 
 	result, err := query.Do(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fehler beim erhalten des Bildes")
+		return nil, fmt.Errorf("error retrieving image")
 	}
 
 	data := w.getData(result)
 	if data[0].ID == "" {
-		return nil, fmt.Errorf("fehler beim erhalten der ID: %w", err)
+		return nil, fmt.Errorf("error retrieving ID: %w", err)
 	}
 	imageObj := w.Client.GraphQL().NearObjectArgBuilder().WithID(data[0].ID)
 
@@ -393,7 +393,7 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID int, galler
 		WithLimit(100_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
 		Do(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fehler beim finden der duplikate")
+		return nil, fmt.Errorf("error finding duplicates")
 	}
 
 	images := w.getData(result)
@@ -472,7 +472,7 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int) ([]Image, er
 		Do(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("fehler beim erhalt aller Bildern: %w", err)
+		return nil, fmt.Errorf("error retrieving all images: %w", err)
 	}
 
 	images := w.getData(result)
@@ -495,7 +495,7 @@ func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[
 		WithLimit(100_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
 		Do(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fehler bei der Weaviate abfrage: %w", err)
+		return nil, fmt.Errorf("error querying Weaviate: %w", err)
 	}
 
 	data := result.Data["Get"].(map[string]any)
@@ -515,19 +515,19 @@ func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {
 
 	exists, err := w.Client.Schema().ClassExistenceChecker().WithClassName(className).Do(ctx)
 	if err != nil {
-		return fmt.Errorf("fehler bei der überprüfung der klasse: %w", err)
+		return fmt.Errorf("error checking class: %w", err)
 	}
 
 	if !exists {
-		log.Println("Die Datenbank ist bereits leer (Klasse existiert nicht).")
+		log.Println("Database is already empty (class does not exist).")
 		return nil
 	}
 
 	err = w.Client.Schema().ClassDeleter().WithClassName(className).Do(ctx)
 	if err != nil {
-		return fmt.Errorf("fehler beim löschen der datenbank: %w", err)
+		return fmt.Errorf("error deleting database: %w", err)
 	}
 
-	log.Println("Die Weaviate-Datenbank wurde erfolgreich und restlos geleert.")
+	log.Println("Weaviate database successfully and completely cleared.")
 	return nil
 }

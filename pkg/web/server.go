@@ -50,7 +50,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	err := s.Template.ExecuteTemplate(w, "landing.html", nil)
 	if err != nil {
-		message := "Index kann nicht geladen werden"
+		message := "Index cannot be loaded"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -60,7 +60,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	image := query.String(r, "path", "")
 	if image == "" {
-		http.Error(w, "Bild nicht gefunden", http.StatusNotFound)
+		http.Error(w, "Image not found", http.StatusNotFound)
 		return
 	}
 	http.ServeFile(w, r, image)
@@ -86,7 +86,7 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = s.Template.ExecuteTemplate(w, "gallery.html", id); err != nil {
-		message := "Interner Serverfehler beim Rendern"
+		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -159,7 +159,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	
 	err = s.Template.ExecuteTemplate(w, "result.html", images)
 	if err != nil {
-		message := "Interner Serverfehler beim Rendern"
+		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -219,13 +219,13 @@ func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
 
 	images, err := s.Service.GetAllImages(ctx, galleryID)
 	if err != nil {
-		message := "Bilder nicht gefunden"
+		message := "Images not found"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusNotFound)
 		return
 	}
 	if err = s.Template.ExecuteTemplate(w, "gallery.html", images); err != nil {
-		message := "Interner Serverfehler beim Rendern"
+		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -284,7 +284,7 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 
 	images, err := s.Service.SearchImages(ctx, search, limit, galleryID)
 	if err != nil {
-		message := "Fehler bei der Datenbankabfrage"
+		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -292,7 +292,7 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 
 	err = s.Template.ExecuteTemplate(w, "result.html", images)
 	if err != nil {
-		message := "Interner Serverfehler beim Rendern"
+		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -320,7 +320,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		message := "Fehler beim Parsen des Formulars"
+		message := "Error parsing the form"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusBadRequest)
 		return
@@ -328,7 +328,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		message := "Fehler beim Lesen der Datei"
+		message := "Error reading the file"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusBadRequest)
 		return
@@ -339,7 +339,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
-		message := "Fehler beim Lesen in den RAM"
+		message := "Error reading into memory"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -347,7 +347,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 
 	fileType := http.DetectContentType(fileBytes)
 	if !strings.HasPrefix(fileType, "image/") {
-		http.Error(w, "Nur Bilder sind erlaubt", http.StatusBadRequest)
+		http.Error(w, "Only images are allowed", http.StatusBadRequest)
 		return
 	}
 
@@ -361,7 +361,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 
 	images, err := s.Service.SearchImages64(ctx, file64, limit, galleryID)
 	if err != nil {
-		message := "Fehler bei der Datenbankabfrage"
+		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -369,7 +369,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 
 	err = s.Template.ExecuteTemplate(w, "result.html", images)
 	if err != nil {
-		message := "Interner Serverfehler beim Rendern"
+		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return

@@ -15,15 +15,15 @@ import (
 func main() {
 	wClient, err := db.NewWeaviateClient("localhost:8080")
 	if err != nil {
-		log.Fatalf("Konnte Weaviate-Client nicht erstellen: %v", err)
+		log.Fatalf("Failed to create Weaviate client: %v", err)
 	}
 	sClient, err := db.NewSqliteDB("acuity.db")
 	if err != nil {
-		log.Fatalf("Konnte SQLite nicht öffnen")
+		log.Fatalf("Failed to open SQLite database")
 	}
 	err = sClient.InitTable()
 	if err != nil {
-		log.Fatalf("Konnte Table nicht initializieren")
+		log.Fatalf("Failed to initialize table")
 	}
 
 	// ctx := context.Background()
@@ -31,13 +31,13 @@ func main() {
 
 	err = wClient.InitSchema()
 	if err != nil {
-		log.Fatalf("Fehler bei der Schema-Initialisierung: %v", err)
+		log.Fatalf("Error during schema initialization: %v", err)
 	}
 
 	/*
 	known, err := wClient.GetKnownPaths(ctx)
 	if err != nil {
-		log.Fatalf("Fehler beim erhalten der existierenden dateien: %v", err)
+		log.Fatalf("Error retrieving existing files: %v", err)
 	}
 	var filePaths []string
 	err = filepath.WalkDir("testdata", func(path string, d fs.DirEntry, err error) error {
@@ -74,9 +74,9 @@ func main() {
 	mux := http.NewServeMux()
 	webServer.RegisterRoutes(mux)
 
-	log.Println("acuity Web-Interface lauscht auf http://localhost:3000")
+	log.Println("acuity Web-Interface listening on http://localhost:3000")
 	err = http.ListenAndServe(":3000", mux)
 	if err != nil {
-		log.Fatalf("Server abgestürzt: %v", err)
+		log.Fatalf("Server crashed: %v", err)
 	}
 }

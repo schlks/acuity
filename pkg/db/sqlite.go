@@ -56,7 +56,7 @@ func (s *SQLiteClient) InsertGallery(path string, name string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Neue gallery mit der ID: %d\n", id)
+	fmt.Printf("New gallery with ID: %d\n", id)
 
 	return nil
 }
