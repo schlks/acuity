@@ -20,10 +20,10 @@ make up
 
 - find duplicates of images
 - find images by text/image
-- move/copy images between galleries
+- move/copy(tbd) images between galleries
 - gallery culling (tbd)
 - image rating (tbd)
-- get image info (tbd)
+- get image info
 
 ---
 
