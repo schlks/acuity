@@ -13,6 +13,9 @@ make docker
 make up
 ```
 
+> [!NOTE]
+> weaviate will take some GB to download its model
+
 ---
 
 ## TODO
