@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"strconv"
+	"fmt"
 
 	"github.com/mallardduck/go-http-helpers/pkg/query"
 	_ "github.com/weaviate/weaviate/entities/models"
@@ -230,7 +231,15 @@ func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusNotFound)
 		return
 	}
-	if err = s.Template.ExecuteTemplate(w, "gallery.html", images); err != nil {
+	count, err := s.Service.GetGalleryCount(ctx, galleryID)
+	if err != nil {
+		message := fmt.Sprintf("Failed to get count of images in Gallery: %d", galleryID)
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusNotFound)
+		return
+	}
+
+	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{images, count}); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)

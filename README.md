@@ -32,7 +32,7 @@ make up
 - [x] Getting info for one image
 - [ ] Paging
 - [x] Batch-Delete for selected images
-- [ ] Count the amount of images in a gallery
+- [x] Count the amount of images in a gallery
 - [ ] Copy to gallery, currently only move
 - [ ] Add rating system
 - [ ] Image carousel

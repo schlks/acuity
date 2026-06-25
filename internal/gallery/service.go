@@ -216,3 +216,7 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[str
 	}
 	return imageInfo, nil
 }
+
+func (g *GalleryService) GetGalleryCount(ctx context.Context, galleryID int) (int, error) {
+	return g.wDB.GetGalleryCount(ctx, galleryID)
+}
