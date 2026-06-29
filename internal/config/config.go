@@ -13,14 +13,16 @@ type Config struct {
 
 func Load() (*Config, error) {
 	viper.SetDefault("port", "3000")
-	viper.SetDefault("weaviate_host", "localhost:8080")
+	viper.SetDefault("weaviate_host", "localhost:50050")
 	viper.SetDefault("db_path", "./acuity.db")
 
 	viper.SetConfigName("config")
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
 
-	viper.ReadInConfig()
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, err
+	}
 
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {

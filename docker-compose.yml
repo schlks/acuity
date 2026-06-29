@@ -5,7 +5,6 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./config.yaml:/app/config.yaml
       - ./testdata:/images:ro
     depends_on:
       - weaviate
@@ -15,12 +14,12 @@ services:
     - --host
     - 0.0.0.0
     - --port
-    - '8080'
+    - '50050'
     - --scheme
     - http
     image: cr.weaviate.io/semitechnologies/weaviate:1.37.0
     ports:
-    - 8080:8080
+    - 50050:50050
     - 50051:50051
     volumes:
     - weaviate_data:/var/lib/weaviate

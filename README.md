@@ -19,7 +19,6 @@ do something like this:
 
 ```yaml
 volumes:
- - ./config.yaml:/app/config.yaml
  - /your/folder/1:/images/1:ro
  - /your/folder/2:/images/2:ro
 ```
