@@ -4,9 +4,9 @@
 
 ## About
 
-> acuity
-> /ə-kyoo͞′ĭ-tē/
-> noun
+> acuity  
+> /ə-kyoo͞′ĭ-tē/  
+> noun  
 >
 > 1. a quick and penetrating intelligence
 > 2. sharpness of vision; the visual ability to resolve fine detail
