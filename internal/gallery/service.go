@@ -186,6 +186,10 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[str
 	if err != nil {
 		return nil, err
 	}
+	rating, err := g.sDB.GetRating(imageID)
+	if err != nil {
+		return nil, err
+	}
 
 	f, err := os.Open(wInfo.Path)
 	if err != nil {
@@ -211,6 +215,7 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[str
 		"Name": strings.TrimSuffix(baseName, filepath.Ext(baseName)),
 		"Path": wInfo.Path,
 		"GalleryID": wInfo.Gallery,
+		"Rating": rating,
 		"Camera": camera,
 		"Time": tm,
 	}
@@ -219,4 +224,8 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[str
 
 func (g *GalleryService) GetGalleryCount(ctx context.Context, galleryID int) (int, error) {
 	return g.wDB.GetGalleryCount(ctx, galleryID)
+}
+
+func (g *GalleryService) SetRating(id int, rating int) error {
+	return g.sDB.InsertRating(id, rating)
 }

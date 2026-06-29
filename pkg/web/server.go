@@ -27,6 +27,7 @@ type SearchResult struct {
 	Distance float64
 }
 
+// NewServer creates a new server
 func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, tmpl *template.Template) *Server {
 	service := gallery.NewService(sdatabase, wdatabase)
 	return &Server{
@@ -35,11 +36,14 @@ func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, tmpl *t
 	}
 }
 
+// RegisterRoutes regusteres all the routes used by the webui
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", s.handleRoot)										// INFO: GET
 	mux.HandleFunc("/image", s.handleImage)								// INFO: GET
 	mux.HandleFunc("/image", s.deleteFile)								// INFO: DELETE
 	mux.HandleFunc("/image/{id}", s.getInfo)								// INFO: GET
+	mux.HandleFunc("/image/{id}", s.setRating)							// INFO: POST
+// TODO: Delete multiple images from selection
 	mux.HandleFunc("/gallery/{name}/duplicates", s.handleDuplicates)		// INFO: GET
 	mux.HandleFunc("/gallery/{name}/search", s.handleTextSearch)			// INFO: GET
 	mux.HandleFunc("/gallery/{name}/search/image", s.handleImageSearch)	// INFO: POST
@@ -409,6 +413,32 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.Template.ExecuteTemplate(w, "info.html", imageInfo); err != nil {
 		message := "Internal server error during rendering"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
+	idString := r.FormValue("id");
+	id, err := strconv.Atoi(idString)
+	if err != nil {
+		message := "Failed to get Image ID"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+
+	ratingString := r.FormValue("rating");
+	rating, err := strconv.Atoi(ratingString)
+	if err != nil {
+		message := "Failed to get Image rating"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+	if err := s.Server.SetRating(id, rating); err != nil {
+		message := "Failed to set Image rating"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return

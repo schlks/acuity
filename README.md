@@ -51,7 +51,7 @@ make up
 > [!NOTE]
 > Weaviate will take some GB to download its model.
 >
-> You can also install Docker Desktop on Linux if you want to.
+> You can also install `Docker Desktop` on Linux if you want to.
 
 ## Features
 
@@ -71,7 +71,7 @@ make up
 - [x] Batch-Delete for selected images
 - [x] Count the amount of images in a gallery
 - [ ] Copy to gallery, currently only move
-- [ ] Add rating system
+- [x] Add rating system
 - [ ] Image carousel
 - [ ] Sort Search/Gallery by Date/Extension
 - [ ] Keybindings
