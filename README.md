@@ -4,7 +4,18 @@
 
 ## About
 
+> acuity
+> /ə-kyoo͞′ĭ-tē/
+> noun
+>
+> 1. a quick and penetrating intelligence
+> 2. sharpness of vision; the visual ability to resolve fine detail
+
 Acuity is a self-hosted photomanagement service.
+It aims to help you find and organize your photos with precision and
+speed. Designed as a high-performance image management and labeling
+tool, it allows you to maintain complete control over your library
+while running entirely on your own infrastructure.
 
 ## Install
 
