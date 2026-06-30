@@ -44,10 +44,11 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/image/{id}", s.getInfo)								// INFO: GET
 	mux.HandleFunc("/image/{id}", s.setRating)							// INFO: POST
 // TODO: Delete multiple images from selection
+// TODO: Copy images to another Gallery
 	mux.HandleFunc("/gallery/{name}/duplicates", s.handleDuplicates)		// INFO: GET
 	mux.HandleFunc("/gallery/{name}/search", s.handleTextSearch)			// INFO: GET
 	mux.HandleFunc("/gallery/{name}/search/image", s.handleImageSearch)	// INFO: POST
-	mux.HandleFunc("/gallery/{name}", s.handleGallery)					// INFO: GET
+	mux.HandleFunc("/gallery/{name}", s.getGallery)						// INFO: GET
 	mux.HandleFunc("/gallery/{name}", s.createGallery)					// INFO: POST
 	mux.HandleFunc("/gallery/{name}", s.deleteGallery)					// INFO: DELETE
 	mux.HandleFunc("/gallery/move", s.changeGallery)						// INFO: GET
@@ -102,8 +103,8 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	delete := query.Bool(r, "deleteGallery", false)
 	name := r.PathValue("name")
+	delete := query.Bool(r, "deleteGallery", false)
 
 	id, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
@@ -119,7 +120,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if delete {
-		files, err := s.Service.GetGalleryFiles(ctx, name)
+		files, err := s.Service.GetGalleryFiles(ctx, name, "", "")
 		if err != nil {
 			message := "Failed to get Files in Gallery"
 			slog.Error(message, slog.Any("error", err))
@@ -213,11 +214,13 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// NOTE: strconv.ParseInt für mehr als base 10
 	name := r.PathValue("name")
+	sortBy := query.String(r, "sortBy", "name")
+	sortOrder := query.String(r, "sortOrder", "asc")
 
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
@@ -228,7 +231,7 @@ func (s *Server) handleGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.GetAllImages(ctx, galleryID)
+	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder)
 	if err != nil {
 		message := "Images not found"
 		slog.Error(message, slog.Any("error", err))
@@ -290,6 +293,8 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 
 	search := query.String(r, "q", "")
 	limit := query.Int(r, "limit", 100)
+	sortBy := query.String(r, "sortBy", "name")
+	sortOrder := query.String(r, "sortOrder", "asc")
 	//options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
@@ -301,7 +306,7 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.SearchImages(ctx, search, limit, galleryID)
+	images, err := s.Service.SearchImages(ctx, search, limit, galleryID, sortBy, sortOrder)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -321,6 +326,8 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	limit := query.Int(r, "limit", 100)
+	sortBy := query.String(r, "sortBy", "name")
+	sortOrder := query.String(r, "sortOrder", "asc")
 	//options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
@@ -377,7 +384,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.SearchImages64(ctx, file64, limit, galleryID)
+	images, err := s.Service.SearchImages64(ctx, file64, limit, galleryID, sortBy, sortOrder)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -420,14 +427,8 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
-	idString := r.FormValue("id");
-	id, err := strconv.Atoi(idString)
-	if err != nil {
-		message := "Failed to get Image ID"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
-	}
+	ctx := r.Context()
+	imageID := r.FormValue("id");
 
 	ratingString := r.FormValue("rating");
 	rating, err := strconv.Atoi(ratingString)
@@ -437,7 +438,8 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	if err := s.Server.SetRating(id, rating); err != nil {
+
+	if err := s.Service.SetRating(ctx, imageID, rating); err != nil {
 		message := "Failed to set Image rating"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)

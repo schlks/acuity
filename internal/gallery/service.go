@@ -13,8 +13,6 @@ import (
 	"strings"
 
 	"github.com/h2non/bimg"
-	"github.com/rwcarlsen/goexif/exif"
-	"github.com/rwcarlsen/goexif/mknote"
 )
 
 type GalleryService struct {
@@ -108,28 +106,28 @@ func (g *GalleryService) GetGalleryID(name string) (int, error, bool) {
 	return gallery.ID, nil, true
 }
 
-func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string) ([]db.Image, error) {
+func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string, sortBy string, sortOrder string) ([]db.Image, error) {
 	gallery, err := g.sDB.GetGalleryByName(name)
 	if err != nil {
 		return nil, err
 	}
-	files, err := g.wDB.GetAll(ctx, gallery.ID)
+	files, err := g.wDB.GetAll(ctx, gallery.ID, sortBy, sortOrder)
 	if err != nil {
 		return nil, err
 	}
 	return files, nil
 }
 
-func (g *GalleryService) SearchImages(ctx context.Context, search string, limit int, galleryID int) ([]db.Image, error) {
-	return g.wDB.SearchImage(ctx, search, limit, galleryID)
+func (g *GalleryService) SearchImages(ctx context.Context, search string, limit int, galleryID int, sortBy string, sortOrder string) ([]db.Image, error) {
+	return g.wDB.SearchImage(ctx, search, limit, galleryID, sortBy, sortOrder)
 }
 
-func (g *GalleryService) SearchImages64(ctx context.Context, search string, limit int, galleryID int) ([]db.Image, error) {
-	return g.wDB.SearchImage64(ctx, search, limit, galleryID)
+func (g *GalleryService) SearchImages64(ctx context.Context, search string, limit int, galleryID int, sortBy string, sortOrder string) ([]db.Image, error) {
+	return g.wDB.SearchImage64(ctx, search, limit, galleryID, sortBy, sortOrder)
 }
 
-func (g *GalleryService) GetAllImages(ctx context.Context, galleryID int) ([]db.Image, error) {
-	return g.wDB.GetAll(ctx, galleryID)
+func (g *GalleryService) GetAllImages(ctx context.Context, galleryID int, sortBy string, sortOrder string) ([]db.Image, error) {
+	return g.wDB.GetAll(ctx, galleryID, sortBy, sortOrder)
 }
 
 func (g *GalleryService) ConvertImage(file []byte) (string, error) {
@@ -186,11 +184,7 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[str
 	if err != nil {
 		return nil, err
 	}
-	rating, err := g.sDB.GetRating(imageID)
-	if err != nil {
-		return nil, err
-	}
-
+	/*
 	f, err := os.Open(wInfo.Path)
 	if err != nil {
 		return nil, err
@@ -207,17 +201,21 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[str
 	}
 
 	camera, _ := x.Get(exif.Model)
-	tm, _ := x.DateTime()
+	*/ // INFO: Maybe later
 
 	baseName := filepath.Base(wInfo.Path)
 	imageInfo := map[string]any{
-		"ID": wInfo.ID,
-		"Name": strings.TrimSuffix(baseName, filepath.Ext(baseName)),
-		"Path": wInfo.Path,
-		"GalleryID": wInfo.Gallery,
-		"Rating": rating,
-		"Camera": camera,
-		"Time": tm,
+		"ID":          wInfo.ID,
+		"Name":        strings.TrimSuffix(baseName, filepath.Ext(baseName)),
+		"Path":        wInfo.Path,
+		"GalleryID":   wInfo.Gallery,
+		"Rating":      wInfo.Rating,
+		"Time":        wInfo.Taken, // Genutzt von Weaviate
+		"Size":        wInfo.Size,
+		"Resolution":  wInfo.Resolution,
+		"AspectRatio": wInfo.AspectRatio,
+		"Extension":   wInfo.Extension,
+		"Date":        wInfo.Date,
 	}
 	return imageInfo, nil
 }
@@ -226,6 +224,6 @@ func (g *GalleryService) GetGalleryCount(ctx context.Context, galleryID int) (in
 	return g.wDB.GetGalleryCount(ctx, galleryID)
 }
 
-func (g *GalleryService) SetRating(id int, rating int) error {
-	return g.sDB.InsertRating(id, rating)
+func (g *GalleryService) SetRating(ctx context.Context, imageID string, rating int) error {
+	return g.wDB.SetRating(ctx, imageID, rating)
 }

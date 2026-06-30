@@ -43,20 +43,6 @@ func (s *SQLiteClient) InitTable() error {
 	return nil
 }
 
-func (s *SQLiteClient) InitRatingTable() error {
-	query := `
-	CREATE TABLE IF NOT EXISTS ratings (
-		id INTEGER PRIMARY KEY,
-		rating INTEGER,
-		CONSTRAINT chk_rating CHECK (rating < 10 AND rating >= 0)
-	);`
-	_, err := s.DB.Exec(query)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (s *SQLiteClient) InsertGallery(path string, name string) error {
 	query := "INSERT INTO galleries (name, path) VALUES (?, ?);"
 
@@ -68,28 +54,8 @@ func (s *SQLiteClient) InsertGallery(path string, name string) error {
 	return nil
 }
 
-func (s *SQLiteClient) InsertRating(id int, rating int) error {
-	query := "INSERT INTO ratings (id, rating) VALUES (?, ?);"
-
-	_, err := s.DB.Exec(query, id, rating)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (s *SQLiteClient) RemoveGallery(id int) error {
 	query := "DELETE FROM galleries WHERE id = ?;"
-
-	_, err := s.DB.Exec(query, id)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *SQLiteClient) RemoveRating(id int) error {
-	query := "DELETE FROM ratings WHERE id = ?;"
 
 	_, err := s.DB.Exec(query, id)
 	if err != nil {
@@ -108,18 +74,6 @@ func (s *SQLiteClient) GetGalleryByName(name string) (Gallery, error) {
 	}
 
 	return gallery, nil
-}
-
-func (s *SQLiteClient) GetRating(id int) (int, error) {
-	query := "SELECT id, rating FROM ratings WHERE id = ?;"
-
-	var rating int
-	err := s.DB.QueryRow(query, id).Scan(&rating)
-	if err != nil {
-		return -1, err
-	}
-
-	return rating, nil
 }
 
 func (s *SQLiteClient) GetGalleryByID(id int) (Gallery, error) { 

@@ -5,18 +5,23 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"path/filepath"
+	"os"
 	"runtime"
+	"time"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/weaviate/weaviate-go-client/v5/weaviate"
-	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/filters"
+	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 
-	"github.com/google/uuid"
 	"github.com/go-openapi/strfmt"
+	"github.com/google/uuid"
 	"github.com/h2non/bimg"
+	"github.com/rwcarlsen/goexif/exif"
 )
 
 type WeaviateClient struct {
@@ -29,6 +34,14 @@ type Image struct {
 	Base64		string
 	Gallery		string
 	Distance	float64
+	Name		string
+	Rating		int
+    Extension	string
+    Date		string // Weaviate akzeptiert und liefert RFC3339 formatierte Strings für Datum
+    Taken		string
+    Size		int64
+    Resolution	int
+    AspectRatio	float64
 }
 
 func NewWeaviateClient(host string) (*WeaviateClient, error) {
@@ -76,6 +89,38 @@ func (w *WeaviateClient) InitSchema() error {
 					Name: "gallery_id",
 					DataType: []string{"int"},
 				},
+				{
+					Name: "name",
+					DataType: []string{"text"},
+				},
+				{
+					Name: "rating",
+					DataType: []string{"int"},
+				},
+				{
+					Name: "extension",
+					DataType: []string{"text"},
+				},
+				{
+					Name: "date",
+					DataType: []string{"date"},
+				},
+				{
+					Name: "taken",
+					DataType: []string{"date"},
+				},
+				{
+					Name: "size",
+					DataType: []string{"int"},
+				},
+				{
+					Name: "resolution",
+					DataType: []string{"int"},
+				},
+				{
+					Name: "aspect_ratio",
+					DataType: []string{"number"},
+				},
 			},
 		}
 
@@ -106,9 +151,17 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 				ID:    strfmt.UUID(id),
 				Class: "Image",
 				Properties: map[string]any{
-					"filepath":   result.Path,
-					"image":      result.Base64,
-					"gallery_id": galleryID,
+					"filepath":		result.Path,
+					"image":		result.Base64,
+					"gallery_id":	galleryID,
+					"name":			filepath.Base(result.Path),
+					"rating":		0,
+					"extension":	filepath.Ext(result.Path),
+					"date":			result.Date,
+					"taken":		result.Taken,
+					"size":			result.Size,
+					"resolution":	result.Resolution,
+					"aspect_ratio": result.AspectRatio,
 				},
 			}
 			batch = append(batch, obj)
@@ -135,17 +188,59 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			}
 
 			bimgImg := bimg.NewImage(data)
+			bimgSize, err := bimgImg.Size()
+
+			var  resolution int
+			var aspectRatio float64
+
+			if err == nil {
+				resolution = bimgSize.Width * bimgSize.Height
+				if bimgSize.Height > 0 {
+					aspectRatio = float64(bimgSize.Width) / float64(bimgSize.Height)
+				}
+			}
+
 			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
 			if err != nil {
 				log.Printf("Error converting to JPEG: %v", err)
 				return err
 			}
 
+			stat, err := os.Stat(path)
+			var modTime time.Time
+			var imgSize int64
+			if err == nil {
+				modTime = stat.ModTime()
+				imgSize = stat.Size()
+			} else {
+				modTime = time.Now()
+				imgSize = stat.Size()
+			}
+
+			fileDate := modTime.Format(time.RFC3339)
+			takenDate := fileDate
+			file, err := os.Open(path)
+			if err == nil {
+				defer file.Close()
+				x, err := exif.Decode(file)
+				if err == nil {
+					tm, err := x.DateTime()
+					if err == nil {
+						takenDate = tm.Format(time.RFC3339)
+					}
+				}
+			}
+
 			base64Image := base64.StdEncoding.EncodeToString(jpegBuffer)
 
 			resultChan <- Image{
-				Path:   path,
-				Base64: base64Image,
+				Path:			path,
+				Base64:			base64Image,
+				Date:			fileDate,
+				Taken:			takenDate,
+				Size:			imgSize,
+				Resolution:		resolution,
+				AspectRatio:	aspectRatio,
 			}
 			return nil
 		})
@@ -200,26 +295,50 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 	if getMap, ok := result.Data["Get"].(map[string]any); ok {
 		if imageArray, ok := getMap["Image"].([]any); ok {
 			for _, item := range imageArray {
-				imgProps := item.(map[string]any)
-				filepath := imgProps["filepath"].(string)
-				gallery := imgProps["galleryID"].(string)
+				imgProps, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+
+				var filepath, gallery string
+				if val, ok := imgProps["filepath"].(string); ok { filepath = val }
+				if val, ok := imgProps["galleryID"].(string); ok { gallery = val }
+				if val, ok := imgProps["gallery_id"].(float64); ok { gallery = fmt.Sprintf("%.0f", val) }
 
 				var distance float64
 				var id string
 				if additional, ok := imgProps["_additional"].(map[string]any); ok {
-					if d, ok := additional["distance"].(float64); ok {
-						distance = d
-					}
-					if i, ok := additional["distance"].(string); ok {
-						id = i
-					}
+					if d, ok := additional["distance"].(float64); ok { distance = d }
+					if i, ok := additional["id"].(string); ok { id = i }
 				}
 
+				var rating int
+				var extension, date, taken string
+				var size int64
+				var resolution int
+				var aspectRatio float64
+				
+				if val, ok := imgProps["rating"].(float64); ok { rating = int(val) }
+				if val, ok := imgProps["extension"].(string); ok { extension = val }
+				if val, ok := imgProps["date"].(string); ok { date = val }
+				if val, ok := imgProps["taken"].(string); ok { taken = val }
+				if val, ok := imgProps["size"].(float64); ok { size = int64(val) }
+				if val, ok := imgProps["resolution"].(float64); ok { resolution = int(val) }
+				if val, ok := imgProps["aspectRatio"].(float64); ok { aspectRatio = val }
+				if val, ok := imgProps["aspect_ratio"].(float64); ok { aspectRatio = val }
+
 				images = append(images, Image{
-					ID: id,
-					Path: filepath,
-					Gallery: gallery,
-					Distance: distance,
+					ID:          id,
+					Path:        filepath,
+					Gallery:     gallery,
+					Distance:    distance,
+					Rating:      rating,
+					Extension:   extension,
+					Date:        date,
+					Taken:       taken,
+					Size:        size,
+					Resolution:  resolution,
+					AspectRatio: aspectRatio,
 				})
 			}
 		}
@@ -240,7 +359,7 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 	}
 }
 
-func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit int, galleryID int) ([]Image, error) {
+func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit int, galleryID int, sortBy string, sortOrder string) ([]Image, error) {
 	// TODO: bis zu einer bestimmten certainty
 	nearText := w.Client.GraphQL().
 		NearTextArgBuilder().
@@ -253,6 +372,13 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit i
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "image"},
 			graphql.Field{Name: "gallery_id"},
+			graphql.Field{Name: "rating"},
+			graphql.Field{Name: "extension"},
+			graphql.Field{Name: "date"},
+			graphql.Field{Name: "taken"},
+			graphql.Field{Name: "size"},
+			graphql.Field{Name: "resolution"},
+			graphql.Field{Name: "aspect_ratio"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -278,6 +404,20 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit i
 			WithLimit(limit)
 	}
 
+	var order graphql.SortOrder
+	
+	switch strings.ToLower(sortOrder) {
+	case "desc":
+		order = graphql.Desc
+	case "asc":
+		order = graphql.Asc
+	}
+	sort := graphql.Sort{
+		Path: []string{sortBy},
+		Order: order,
+	}
+	query = query.WithSort(sort)
+
 	result, err := query.Do(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error searching for images: %w", err)
@@ -287,7 +427,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit i
 	return images, nil
 }
 
-func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, limit int, galleryID int) ([]Image, error) {
+func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, limit int, galleryID int, sortBy string, sortOrder string) ([]Image, error) {
 	// TODO: bis zu einer bestimmten certainty
 	nearImage := w.Client.GraphQL().
 		NearImageArgBuilder().
@@ -300,6 +440,13 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, limit 
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "image"},
 			graphql.Field{Name: "gallery_id"},
+			graphql.Field{Name: "rating"},
+			graphql.Field{Name: "extension"},
+			graphql.Field{Name: "date"},
+			graphql.Field{Name: "taken"},
+			graphql.Field{Name: "size"},
+			graphql.Field{Name: "resolution"},
+			graphql.Field{Name: "aspect_ratio"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -324,6 +471,20 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, limit 
 			WithNearImage(nearImage).
 			WithLimit(limit)
 	}
+
+	var order graphql.SortOrder
+	
+	switch strings.ToLower(sortOrder) {
+	case "desc":
+		order = graphql.Desc
+	case "asc":
+		order = graphql.Asc
+	}
+	sort := graphql.Sort{
+		Path: []string{sortBy},
+		Order: order,
+	}
+	query = query.WithSort(sort)
 
 	result, err := query.Do(ctx)
 	if err != nil {
@@ -341,6 +502,13 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID int, galler
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "image"},
 			graphql.Field{Name: "gallery_id"},
+			graphql.Field{Name: "rating"},
+			graphql.Field{Name: "extension"},
+			graphql.Field{Name: "date"},
+			graphql.Field{Name: "taken"},
+			graphql.Field{Name: "size"},
+			graphql.Field{Name: "resolution"},
+			graphql.Field{Name: "aspect_ratio"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -453,12 +621,20 @@ func (w *WeaviateClient) RemoveImages(ctx context.Context, images []Image) error
 	return g.Wait()
 }
 
-func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int) ([]Image, error) {
-	result, err := w.Client.GraphQL().Get().
+func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string) ([]Image, error) {
+	query:= w.Client.GraphQL().Get().
 		WithClassName("Image").
 		WithFields(
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "image"},
+			graphql.Field{Name: "gallery_id"},
+			graphql.Field{Name: "rating"},
+			graphql.Field{Name: "extension"},
+			graphql.Field{Name: "date"},
+			graphql.Field{Name: "taken"},
+			graphql.Field{Name: "size"},
+			graphql.Field{Name: "resolution"},
+			graphql.Field{Name: "aspect_ratio"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -471,9 +647,23 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int) ([]Image, er
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
 			WithValueInt(int64(galleryID))).
-		WithLimit(100_000).
-		Do(ctx)
+		WithLimit(100_000)
 
+	var order graphql.SortOrder
+	
+	switch strings.ToLower(sortOrder) {
+	case "desc":
+		order = graphql.Desc
+	case "asc":
+		order = graphql.Asc
+	}
+	sort := graphql.Sort{
+		Path: []string{sortBy},
+		Order: order,
+	}
+	query = query.WithSort(sort)
+
+	result, err := query.Do(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving all images: %w", err)
 	}
@@ -517,8 +707,16 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID int) (Image, error
 	result, err := w.Client.GraphQL().Get().
 		WithClassName("Image").
 		WithFields(
+			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "image"},
 			graphql.Field{Name: "gallery_id"},
+			graphql.Field{Name: "rating"},
+			graphql.Field{Name: "extension"},
+			graphql.Field{Name: "date"},
+			graphql.Field{Name: "taken"},
+			graphql.Field{Name: "size"},
+			graphql.Field{Name: "resolution"},
+			graphql.Field{Name: "aspect_ratio"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -611,4 +809,16 @@ func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {
 
 	log.Println("Weaviate database successfully and completely cleared.")
 	return nil
+}
+
+func (w *WeaviateClient) SetRating(ctx context.Context, imageID string, rating int) error {
+	props := map[string]any{
+		"rating": rating,
+	}
+	return w.Client.Data().Updater().
+		WithMerge().
+		WithID(imageID).
+		WithClassName("Image").
+		WithProperties(props).
+		Do(ctx)
 }

@@ -83,6 +83,6 @@ make up
 - [ ] Copy to gallery, currently only move
 - [x] Add rating system
 - [ ] Image carousel
-- [ ] Sort Search/Gallery by Date/Extension
+- [x] Sort Search/Gallery by Date/Extension
 - [ ] Keybindings
 - [ ] Settings
