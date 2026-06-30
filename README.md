@@ -17,6 +17,8 @@ speed. Designed as a high-performance image management and labeling
 tool, it allows you to maintain complete control over your library
 while running entirely on your own infrastructure.
 
+---
+
 ## Install
 
 ### Step 1
