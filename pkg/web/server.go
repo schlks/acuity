@@ -51,7 +51,8 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/gallery/{name}", s.getGallery)						// INFO: GET
 	mux.HandleFunc("/gallery/{name}", s.createGallery)					// INFO: POST
 	mux.HandleFunc("/gallery/{name}", s.deleteGallery)					// INFO: DELETE
-	mux.HandleFunc("/gallery/move", s.changeGallery)						// INFO: GET
+	mux.HandleFunc("/gallery/move", s.changeGallery)						// INFO: POST
+	mux.HandleFunc("/gallery/copy", s.copyToGallery)						// INFO: POST
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -288,6 +289,40 @@ func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) copyToGallery(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	err := r.ParseForm()
+	if err != nil {
+		message := "Failed to parse Form"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
+
+	name := r.FormValue("name")
+	newID, err, ok := s.Service.GetGalleryID(name)
+	if err != nil && !ok {
+		message := "Failed to get Gallery ID"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+	imageIDs := r.Form["image_id"]
+
+	var images []db.Image
+	for _, id := range imageIDs {
+		images = append(images, db.Image{ID: id})
+	}
+
+	if err := s.Service.CopyToGallery(ctx, newID, images); err != nil {
+		message := "Failed to change Gallery"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+}
+
 func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -403,14 +438,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	idString := r.PathValue("id")
-	id, err := strconv.Atoi(idString)
-	if err != nil {
-		message := "Failed to get Image ID"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
-	}
+	id := r.PathValue("id")
 	imageInfo, err := s.Service.GetImageInfo(ctx, id)
 	if err != nil {
 		message := "Failed to get Image Info"

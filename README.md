@@ -69,7 +69,7 @@ make up
 
 - find duplicates of images
 - find images by text/image
-- move/copy(tbd) images between galleries
+- move/copy images between galleries
 - gallery culling (tbd)
 - image rating (tbd)
 - get image info
@@ -82,7 +82,7 @@ make up
 - [ ] Paging
 - [x] Batch-Delete for selected images
 - [x] Count the amount of images in a gallery
-- [ ] Copy to gallery, currently only move
+- [x] Copy to gallery, currently only move
 - [x] Add rating system
 - [ ] Image carousel
 - [x] Sort Search/Gallery by Date/Extension
