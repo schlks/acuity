@@ -64,7 +64,7 @@ func (s *SQLiteClient) RemoveGallery(id int) error {
 	return nil
 }
 
-func (s *SQLiteClient) GetGalleryByName(name string) (Gallery, error) { 
+func (s *SQLiteClient) GetGalleryByName(name string) (Gallery, error) {
 	query := "SELECT id, name, path FROM galleries WHERE name = ?;"
 
 	var gallery Gallery
@@ -76,7 +76,7 @@ func (s *SQLiteClient) GetGalleryByName(name string) (Gallery, error) {
 	return gallery, nil
 }
 
-func (s *SQLiteClient) GetGalleryByID(id int) (Gallery, error) { 
+func (s *SQLiteClient) GetGalleryByID(id int) (Gallery, error) {
 	query := "SELECT id, name, path FROM galleries WHERE id = ?;"
 
 	var gallery Gallery

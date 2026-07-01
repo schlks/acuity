@@ -9,6 +9,9 @@ run: build
 dev:
 	go run ./cmd/acuity
 
+test:
+	go test ./...
+
 docker:
 	docker build -t acuity:latest .
 

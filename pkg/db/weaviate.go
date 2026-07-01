@@ -692,7 +692,6 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 	return images, nil
 }
 
-
 func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[string]struct{}, error) {
 	knownPaths := make(map[string]struct{})
 

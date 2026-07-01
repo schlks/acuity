@@ -11,16 +11,43 @@ import (
 	"path/filepath"
 	"encoding/base64"
 	"strings"
+	"github.com/weaviate/weaviate/entities/models"
 
 	"github.com/h2non/bimg"
 )
 
-type GalleryService struct {
-	sDB *db.SQLiteClient
-	wDB *db.WeaviateClient
+//go:generate mockgen -source=service.go -destination=mock_test.go -package=gallery
+type sService interface {
+	InitTable() error
+	InsertGallery(path string, name string) error
+	RemoveGallery(id int) error
+	GetGalleryByName(name string) (db.Gallery, error)
+	GetGalleryByID(id int) (db.Gallery, error)
 }
 
-// TODO: move to different Gallery
+type wService interface {
+	ImportImages(ctx context.Context, filePaths []string, galleryID int)
+	RemoveGalleryImages(ctx context.Context, galleryID int) error
+	RemoveImage(ctx context.Context, image db.Image) error
+	WriteBatchDB(ctx context.Context, batch []*models.Object)
+	SearchImage(ctx context.Context, search string, limit int, galleryID int, sortBy string, sortOrder string) ([]db.Image, error)
+	SearchImage64(ctx context.Context, image string, limit int, galleryID int, sortBy string, sortOrder string) ([]db.Image, error)
+	FindDublicates(ctx context.Context, imageID int, galleryID int) ([]db.Image, error)
+	ChangeGallery(ctx context.Context, newID int, images []db.Image) error
+	CopyToGallery(ctx context.Context, newGalleryID int, images []db.Image) error
+	RemoveImages(ctx context.Context, images []db.Image) error
+	GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string) ([]db.Image, error)
+	GetKnownPaths(ctx context.Context, galleryID int) (map[string]struct{}, error)
+	GetInfo(ctx context.Context, imageID string) (db.Image, error)
+	GetGalleryCount(ctx context.Context, galleryID int) (int, error)
+	ResetDatabase(ctx context.Context) error
+	SetRating(ctx context.Context, imageID string, rating int) error
+}
+
+type GalleryService struct {
+	sDB sService
+	wDB wService
+}
 
 func NewService(sDB *db.SQLiteClient, wDB *db.WeaviateClient) *GalleryService {
 	return &GalleryService{
