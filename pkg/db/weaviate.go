@@ -348,7 +348,7 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 	}
 }
 
-func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit int, galleryID int, sortBy string, sortOrder string) ([]Image, error) {
+func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]Image, error) {
 	// TODO: bis zu einer bestimmten certainty
 	nearText := w.Client.GraphQL().
 		NearTextArgBuilder().
@@ -386,11 +386,13 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit i
 		query = query.
 			WithWhere(filter).
 			WithNearText(nearText).
-			WithLimit(limit)
+			WithLimit(imagesPerPage).
+			WithOffset(page * imagesPerPage)
 	} else {
 		query = query.
 			WithNearText(nearText).
-			WithLimit(limit)
+			WithLimit(imagesPerPage).
+			WithOffset(page * imagesPerPage)
 	}
 
 	var order graphql.SortOrder
@@ -414,7 +416,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, limit i
 	return images, nil
 }
 
-func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, limit int, galleryID int, sortBy string, sortOrder string) ([]Image, error) {
+func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]Image, error) {
 	// TODO: bis zu einer bestimmten certainty
 	nearImage := w.Client.GraphQL().
 		NearImageArgBuilder().
@@ -452,11 +454,13 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, limit 
 		query = query.
 			WithWhere(filter).
 			WithNearImage(nearImage).
-			WithLimit(limit)
+			WithLimit(imagesPerPage).
+			WithOffset(page * imagesPerPage)
 	} else {
 		query = query.
 			WithNearImage(nearImage).
-			WithLimit(limit)
+			WithLimit(imagesPerPage).
+			WithOffset(page * imagesPerPage)
 	}
 
 	var order graphql.SortOrder
@@ -480,7 +484,7 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, limit 
 	return images, nil
 }
 
-func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID int, galleryID int) ([]Image, error) {
+func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID int, galleryID int, page int, imagesPerPage int) ([]Image, error) {
 	query:= w.Client.GraphQL().Get().
 		WithClassName("Image").
 		WithFields(
@@ -526,7 +530,8 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID int, galler
 
 	query = query.
 		WithWhere(filter).
-		WithLimit(100_000)
+		WithLimit(imagesPerPage).
+		WithOffset(page * imagesPerPage)
 
 	result, err := query.Do(ctx)
 	if err != nil { return nil, err }
@@ -642,7 +647,7 @@ func (w *WeaviateClient) RemoveImages(ctx context.Context, images []Image) error
 	return g.Wait()
 }
 
-func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string) ([]Image, error) {
+func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]Image, error) {
 	query:= w.Client.GraphQL().Get().
 		WithClassName("Image").
 		WithFields(
@@ -668,7 +673,11 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
 			WithValueInt(int64(galleryID))).
-		WithLimit(100_000)
+		WithLimit(imagesPerPage)
+
+	if page >= 0 {
+		query = query.WithOffset(page * imagesPerPage)
+	}
 
 	var order graphql.SortOrder
 	

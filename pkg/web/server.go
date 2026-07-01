@@ -149,7 +149,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if delete {
-		files, err := s.Service.GetGalleryFiles(ctx, name, "", "")
+		files, err := s.Service.GetGalleryFiles(ctx, name, "", "", -1, 100_000)
 		if err != nil {
 			message := "Failed to get Files in Gallery"
 			slog.Error(message, slog.Any("error", err))
@@ -177,6 +177,8 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := r.PathValue("name")
+	page := query.Int(r, "page", 0)
+
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
@@ -185,7 +187,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.FindDublicates(ctx, imageID, galleryID)
+	images, err := s.Service.FindDublicates(ctx, imageID, galleryID, page-1, s.Config.ImagesPerPage)
 	if err != nil {
 		message := "Failed to find duplicate Images"
 		slog.Error(message, slog.Any("error", err))
@@ -248,9 +250,9 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 
 	// NOTE: strconv.ParseInt für mehr als base 10
 	name := r.PathValue("name")
-	sortBy := query.String(r, "sortBy", "name")
-	sortOrder := query.String(r, "sortOrder", "asc")
-
+	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
+	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
+	page := query.Int(r, "page", 0)
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
@@ -260,7 +262,7 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder)
+	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
 	if err != nil {
 		message := "Images not found"
 		slog.Error(message, slog.Any("error", err))
@@ -355,9 +357,9 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	search := query.String(r, "q", "")
-	limit := query.Int(r, "limit", 100)
-	sortBy := query.String(r, "sortBy", "name")
-	sortOrder := query.String(r, "sortOrder", "asc")
+	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
+	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
+	page := query.Int(r, "page", 0)
 	//options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
@@ -369,7 +371,7 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.SearchImages(ctx, search, limit, galleryID, sortBy, sortOrder)
+	images, err := s.Service.SearchImages(ctx, search, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -388,9 +390,9 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	limit := query.Int(r, "limit", 100)
-	sortBy := query.String(r, "sortBy", "name")
-	sortOrder := query.String(r, "sortOrder", "asc")
+	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
+	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
+	page := query.Int(r, "page", 0)
 	//options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
@@ -447,7 +449,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.SearchImages64(ctx, file64, limit, galleryID, sortBy, sortOrder)
+	images, err := s.Service.SearchImages64(ctx, file64, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
