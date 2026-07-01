@@ -77,7 +77,7 @@ make up
 ## TODO
 
 - [x] Getting info for one image
-- [ ] Paging
+- [x] Paging
 - [x] Batch-Delete for selected images
 - [x] Count the amount of images in a gallery
 - [x] Copy to gallery, currently only move
@@ -85,4 +85,4 @@ make up
 - [ ] Image carousel
 - [x] Sort Search/Gallery by Date/Extension
 - [ ] Keybindings
-- [ ] Settings
+- [x] Settings
