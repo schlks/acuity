@@ -1,10 +1,8 @@
-# Acuity 
-
---- 
-
 <p align="center">
-	<img src="logo.svg" alt="Acuity Logo" width="300"/>
+	<img src="assets/logo.svg" alt="Acuity Logo" width="300"/>
 </p>
+
+---
 
 > acuity  
 > /ə-kyoo͞′ĭ-tē/  
