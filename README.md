@@ -2,8 +2,6 @@
 	<img src="assets/logo.svg" alt="Acuity Logo" width="300"/>
 </p>
 
----
-
 > acuity  
 > /ə-kyoo͞′ĭ-tē/  
 > noun  
