@@ -69,7 +69,7 @@ make up
 - find images by text/image
 - move/copy images between galleries
 - gallery culling (tbd)
-- image rating (tbd)
+- image rating
 - get image info
 
 ---
