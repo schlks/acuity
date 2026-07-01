@@ -1,13 +1,10 @@
-<div style="display: inline-block; text-align: center;">
-  <img src="logo.svg" alt="Logo" width="150" style="display: block;" />
-  <span style="display: block; width: 0; min-width: 100%; margin-top: 5px; font-family: 'Jetbrains Mono', sans-serif;">
-    Acuity
-  </span>
-</div>
+# Acuity 
 
----
+--- 
 
-## About
+<p align="center">
+	<img src="logo.svg" alt="Acuity Logo" width="300"/>
+</p>
 
 > acuity  
 > /ə-kyoo͞′ĭ-tē/  
