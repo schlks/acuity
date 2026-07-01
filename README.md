@@ -1,5 +1,9 @@
 # Acuity
 
+<div style="display: flex; flex-direction: column; align-items: center; margin: 20px 0;">
+  <img src="logo.svg" alt="Logo" width="150" />
+  <span style="margin-top: 10px; font-weight: bold;">Acuity</span>
+</div>   
 ---
 
 ## About
