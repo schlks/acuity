@@ -1,9 +1,10 @@
-# Acuity
+<div style="display: inline-block; text-align: center;">
+  <img src="logo.svg" alt="Logo" width="150" style="display: block;" />
+  <span style="display: block; width: 0; min-width: 100%; margin-top: 5px; font-family: 'Jetbrains Mono', sans-serif;">
+    Acuity
+  </span>
+</div>
 
-<div style="display: flex; flex-direction: column; align-items: center; margin: 20px 0;">
-  <img src="logo.svg" alt="Logo" width="150" />
-  <span style="margin-top: 10px; font-weight: bold;">Acuity</span>
-</div>   
 ---
 
 ## About
