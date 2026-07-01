@@ -12,6 +12,9 @@ dev:
 test:
 	go test ./...
 
+generate:
+	go generate ./...
+
 docker:
 	docker build -t acuity:latest .
 
