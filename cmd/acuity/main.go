@@ -39,7 +39,7 @@ func main() {
 
 	templates := template.Must(template.ParseGlob("src/web/templates/*.html"))
 
-	webServer := web.NewServer(sClient, wClient, templates)
+	webServer := web.NewServer(sClient, wClient, Config,  templates)
 
 	mux := http.NewServeMux()
 	webServer.RegisterRoutes(mux)

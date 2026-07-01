@@ -4,6 +4,7 @@ package web
 
 import (
 	"acuity/internal/gallery"
+	"acuity/internal/config"
 	"acuity/pkg/db"
 	"html/template"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 type Server struct {
 	Service		*gallery.GalleryService
 	Template 	*template.Template
+	Config 		*config.Config
 }
 
 type SearchResult struct {
@@ -28,17 +30,20 @@ type SearchResult struct {
 }
 
 // NewServer creates a new server
-func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, tmpl *template.Template) *Server {
+func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config *config.Config, tmpl *template.Template) *Server {
 	service := gallery.NewService(sdatabase, wdatabase)
 	return &Server{
 		Service:	service,
 		Template:	tmpl,
+		Config:		config,
 	}
 }
 
 // RegisterRoutes regusteres all the routes used by the webui
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", s.handleRoot)										// INFO: GET
+	mux.HandleFunc("/settings", s.getSettings)								// INFO: GET
+	mux.HandleFunc("/settings", s.setSettings)								// INFO: POST
 	mux.HandleFunc("/image", s.handleImage)								// INFO: GET
 	mux.HandleFunc("/image", s.deleteFile)								// INFO: DELETE
 	mux.HandleFunc("/image/{id}", s.getInfo)								// INFO: GET
@@ -63,6 +68,29 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
+	err := s.Template.ExecuteTemplate(w, "settings.html", s.Config)
+	if err != nil {
+		message := "Index cannot be loaded"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
+	var err error
+	s.Config.ImagesPerPage, err = strconv.Atoi(r.FormValue("per_page"))
+	if err != nil {
+		message := "Failed to get the number for images per page"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+	s.Config.DefaultSortBy = r.FormValue("sort_by")
+	s.Config.DefaultSortOrder = r.FormValue("sort_order")
 }
 
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
