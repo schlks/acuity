@@ -10,9 +10,13 @@ import (
 	"net/http"
 	"strings"
 	"io"
+	"os"
+	"io/fs"
 	"log/slog"
 	"strconv"
 	"fmt"
+	"acuity"
+	"path/filepath"
 
 	"github.com/mallardduck/go-http-helpers/pkg/query"
 	_ "github.com/weaviate/weaviate/entities/models"
@@ -41,35 +45,87 @@ func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config 
 
 // RegisterRoutes regusteres all the routes used by the webui
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	staticFS, _ := fs.Sub(acuity.WebFS, "web/static")
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
 	mux.HandleFunc("/", s.handleRoot)
-	mux.HandleFunc("GET /settings", s.getSettings)
-	mux.HandleFunc("POST /settings", s.setSettings)
-	mux.HandleFunc("GET /image", s.handleImage)
+	mux.HandleFunc("GET	/settings", s.getSettings)
+	mux.HandleFunc("POST	/settings", s.setSettings)
+	mux.HandleFunc("GET	/image", s.handleImage)
 	mux.HandleFunc("DELETE /image/{id}", s.deleteFile)
-	mux.HandleFunc("GET /image/{id}", s.getInfo)
-	mux.HandleFunc("POST /image/{id}", s.setRating)
+	mux.HandleFunc("GET	/image/{id}", s.getInfo)
+	mux.HandleFunc("POST	/image/{id}", s.setRating)
 // TODO: Delete multiple images from selection
-// TODO: Copy images to another Gallery
-	mux.HandleFunc("GET /gallery/{name}/duplicates", s.handleDuplicates)
-	mux.HandleFunc("GET /gallery/{name}/search", s.handleTextSearch)
-	mux.HandleFunc("POST /gallery/{name}/search/image", s.handleImageSearch)
-	mux.HandleFunc("GET /gallery/{name}", s.getGallery)
-	mux.HandleFunc("POST /gallery", s.createGallery)
+	mux.HandleFunc("GET	/gallery/{name}/duplicates", s.handleDuplicates)
+	mux.HandleFunc("GET	/gallery/{name}/search", s.handleTextSearch)
+	mux.HandleFunc("POST	/gallery/{name}/search/image", s.handleImageSearch)
+	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
+	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
+	mux.HandleFunc("POST	/gallery", s.createGallery)
 	mux.HandleFunc("DELETE /gallery/{name}", s.deleteGallery)
-	mux.HandleFunc("POST /gallery/move", s.changeGallery)
-	mux.HandleFunc("POST /gallery/copy", s.copyToGallery)
+	mux.HandleFunc("POST	/gallery/move", s.changeGallery)
+	mux.HandleFunc("POST	/gallery/copy", s.copyToGallery)
+	mux.HandleFunc("GET	/api/browse", s.browseFiles)
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
-	err := s.Template.ExecuteTemplate(w, "index.html", nil)
+	galleries, err := s.Service.GetAllGalleries()
+	if err != nil {
+		slog.Error("Failed to load galleries", slog.Any("error", err))
+	}
+
+	data := struct {
+		Galleries []db.Gallery
+	}{
+		Galleries: galleries,
+	}
+
+	err = s.Template.ExecuteTemplate(w, "index.html", data)
 	if err != nil {
 		message := "Index cannot be loaded"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
+	dir := query.String(r, "dir", "")
+	if dir == "" {
+		dir = "/"
+	}
+
+	dir = filepath.Clean(dir)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		http.Error(w, "Kein Zugriff", http.StatusForbidden)
+		return
+	}
+
+	var folders []string
+	for _, e := range entries {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			folders = append(folders, e.Name())
+		}
+	}
+
+	parentDir := filepath.Dir(dir)
+	if dir == "/" {
+		parentDir = ""
+	}
+
+	data := struct {
+		CurrentDir	string
+		ParentDir	string
+		Folders		[]string
+	}{
+		CurrentDir: dir,
+		ParentDir: parentDir,
+		Folders: folders,
+	}
+
+	s.Template.ExecuteTemplate(w, "file-browser", data)
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +166,10 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("name")
 	path := r.FormValue("path")
 
+	/*if !strings.HasPrefix(path, "/images/") {
+		path = filepath.Join("/images", path)
+	}*/
+
 	if err := s.Service.CreateGallery(ctx, name, path); err != nil {
 		message := "Failed to create Gallery"
 		slog.Error(message, slog.Any("error", err))
@@ -123,8 +183,30 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	if err = s.Template.ExecuteTemplate(w, "gallery.html", id); err != nil {
+	images, err := s.Service.GetAllImages(ctx, id, s.Config.DefaultSortBy, s.Config.DefaultSortOrder, 0, s.Config.ImagesPerPage)
+	if err != nil {
+		message := "Failed to fetch images for new gallery"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+	count, _ := s.Service.GetGalleryCount(ctx, id)
+
+	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{images, count, name}); err != nil {
 		message := "Internal server error during rendering"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) scanGallery(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	name := r.PathValue("name")
+
+	if err := s.Service.UpdateFolder(ctx, name); err != nil {
+		message := "Failed to update gallery"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -151,7 +233,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if delete {
-		files, err := s.Service.GetGalleryFiles(ctx, name, "", "", -1, 100_000)
+		files, err := s.Service.GetGalleryFiles(ctx, name, "", "", -1, 10_000)
 		if err != nil {
 			message := "Failed to get Files in Gallery"
 			slog.Error(message, slog.Any("error", err))
@@ -279,7 +361,7 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{images, count}); err != nil {
+	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{images, count, name}); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)

@@ -1,27 +1,57 @@
 {{define "next-button"}}
-<button hx-get="/carousel?imageID={{.NextID}}" hx-trigger="click, keyup[key=='ArrowRight'] from:body">
-	Next
+<button class="btn-icon" hx-get="/carousel?imageID={{.NextID}}" hx-trigger="click, keyup[key=='ArrowRight'] from:body">
+	<span class="material-symbols-outlined">arrow_forward_ios</span>
 </button>
 {{end}}
 
 {{define "rating-button"}}
-<button hx-post="/rate?imageID={{.ID}}&rating={{.Rating}}">
+<button class="btn-icon" hx-post="/rate?imageID={{.ID}}&rating={{.Rating}}">
 	{{.Rating}}
 </button>
 {{end}}
 
 {{define "search-bar"}}
-<input type="text"
-	class="search-input"
-	name="q"
-	placeholder="Search in Gallery"
-	hx-get="/gallery/{{.Gallery}}/search"
-	hx-trigger="keyup=[key=='Enter']"
-	hx-target="#gallery">
+<div x-data="{
+    text: '',
+    placeholders: ['Search for a sunset...', 'Mountains in winter...', 'Portrait of a dog...', 'A red car on the street...'],
+    index: 0,
+    charIndex: 0,
+    isDeleting: false,
+    type() {
+        let current = this.placeholders[this.index];
+        if (this.isDeleting) {
+            this.charIndex--;
+        } else {
+            this.charIndex++;
+        }
+        this.text = current.substring(0, this.charIndex);
+
+        let typeSpeed = this.isDeleting ? 30 : 80;
+
+        if (!this.isDeleting && this.charIndex === current.length) {
+            typeSpeed = 2000;
+            this.isDeleting = true;
+        } else if (this.isDeleting && this.charIndex === 0) {
+            this.isDeleting = false;
+            this.index = (this.index + 1) % this.placeholders.length;
+            typeSpeed = 500;
+        }
+
+        setTimeout(() => this.type(), typeSpeed);
+    }
+}" x-init="type()">
+	<input type="text"
+		class="input-clean"
+		name="q"
+		:placeholder="text"
+		hx-get="/gallery/{{.}}/search"
+		hx-trigger="keyup[key=='Enter']"
+		hx-target="#gallery">
+</div>
 {{end}}
 
 {{define "delete-button"}}
-<button hx-delete="/image/{{.ID}}">
+<button class="btn-icon" hx-delete="/image/{{.ID}}">
 	<span class="material-symbols-outlined">delete</span>
 </button>
 {{end}}
@@ -44,31 +74,77 @@
 {{end}}
 
 {{define "info-sidebar"}}
+<div style="display: flex; flex-direction: column; gap: 16px;">
+	<img src="/image?path={{.Path}}" alt="Image" loading="lazy" style="width: 100%; border-radius: 4px; border: 1px solid var(--border);">
+	
+	<div>
+		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">ID</div>
+		<div>{{.ID}}</div>
+	</div>
+	<div>
+		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Name</div>
+		<div style="word-break: break-all;">{{.Name}}</div>
+	</div>
+	<div>
+		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Path</div>
+		<div style="word-break: break-all; font-family: monospace; font-size: 0.9rem;">{{.Path}}</div>
+	</div>
+	
+	<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
+		<div class="meta-tag">
+			<span class="material-symbols-outlined">calendar_month</span>
+			{{.Date}}
+		</div>
+		<div class="meta-tag">
+			<span class="material-symbols-outlined">photo_camera</span>
+			{{.Taken}}
+		</div>
+		<div class="meta-tag">
+			<span class="material-symbols-outlined">hd</span>
+			{{.Resolution}}
+		</div>
+		<div class="meta-tag">
+			<span class="material-symbols-outlined">description</span>
+			{{.Extension}}
+		</div>
+		<div class="meta-tag">
+			<span class="material-symbols-outlined">folder</span>
+			{{.Gallery}}
+		</div>
+	</div>
+
+	<button class="btn-primary" style="margin-top: 20px;" hx-get="/gallery/main/duplicates?imageID={{.ID}}" hx-target="#main-content">
+		<span class="material-symbols-outlined">search</span> Ähnliche Bilder finden
+	</button>
+</div>
+{{end}}
+
+{{define "file-browser"}}
 <div>
-	<img src="/image?path={{.Path}}" alt="Image" loading="lazy">
-	<hr>
-	<p>ID: {{.ID}}</p>
-	<p>Name: {{.Name}}</p>
-	<p>Path: {{.Path}}</p>
-	<p>Gallery: {{.Gallery}}</p>
-	<hr>
-	<md-chip-set>
-		<md-suggestion-chip label="{{.Rating}}">
-			<md-icon slot="icon">calendar</md-icon>
-		</md-suggestion-chip>
-		<md-suggestion-chip label="{{.Extension}}">
-			<md-icon slot="icon"></md-icon>
-		</md-suggestion-chip>
-		<md-suggestion-chip label="{{.Date}}">
-			<md-icon slot="icon">today</md-icon>
-		</md-suggestion-chip>
-		<md-suggestion-chip label="{{.Taken}}">
-			<md-icon slot="icon">photo_camera</md-icon>
-		</md-suggestion-chip>
-		<md-suggestion-chip label="{{.Size}}"></md-suggestion-chip>
-		<md-suggestion-chip label="{{.Resolution}}">
-			<md-icon slot="icon">hd</md-icon>
-		</md-suggestion-chip>
-	</md-chip-set>
+    <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 8px;">
+        Aktueller Pfad: <strong style="color: var(--text);">{{.CurrentDir}}</strong>
+    </div>
+    
+    <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-dark); display: flex; flex-direction: column;">
+        
+        <!-- Zurück-Button (nur wenn es ein Parent gibt) -->
+        {{if .ParentDir}}
+        <button type="button" class="nav-item" hx-get="/api/browse?dir={{.ParentDir}}" hx-target="#file-browser-container">
+            <span class="material-symbols-outlined">arrow_upward</span> .. (up)
+        </button>
+        {{end}}
+
+        <!-- Ordner Liste -->
+        {{range .Folders}}
+        <button type="button" class="nav-item" hx-get="/api/browse?dir={{$.CurrentDir}}/{{.}}" hx-target="#file-browser-container">
+            <span class="material-symbols-outlined">folder</span> {{.}}
+        </button>
+        {{end}}
+    </div>
+
+    <!-- Wählt den Ordner aus und schließt den Browser -->
+    <button type="button" @click="path = '{{.CurrentDir}}'; showBrowser = false" class="nav-item" style="margin-top: 12px; width: 100%; justify-content: center; background: var(--primary); color: white;">
+        Choose this Folder
+    </button>
 </div>
 {{end}}

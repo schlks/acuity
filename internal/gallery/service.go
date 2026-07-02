@@ -23,6 +23,7 @@ type sService interface {
 	RemoveGallery(id int) error
 	GetGalleryByName(name string) (db.Gallery, error)
 	GetGalleryByID(id int) (db.Gallery, error)
+	GetAllGalleries() ([]db.Gallery, error)
 }
 
 type wService interface {
@@ -54,6 +55,10 @@ func NewService(sDB *db.SQLiteClient, wDB *db.WeaviateClient) *GalleryService {
 		sDB: sDB,
 		wDB: wDB,
 	}
+}
+
+func (g *GalleryService) GetAllGalleries() ([]db.Gallery, error) {
+	return g.sDB.GetAllGalleries()
 }
 
 func (g *GalleryService) getKnownFilePaths(known map[string]struct{}, folderPath string) ([]string, error) {

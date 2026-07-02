@@ -549,7 +549,7 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID int, galler
 			graphql.Field{Name: "image"},
 		).
 		WithNearObject(imageObj).
-		WithLimit(100_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
+		WithLimit(10_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
 		Do(ctx)
 	if err != nil { return nil, err }
 
@@ -712,7 +712,7 @@ func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
 			WithValueInt(int64(galleryID))).
-		WithLimit(100_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
+		WithLimit(10_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
 		Do(ctx)
 	if err != nil { return nil, err }
 
@@ -770,9 +770,8 @@ func (w *WeaviateClient) GetGalleryCount(ctx context.Context, galleryID int) (in
 	result, err := w.Client.GraphQL().Aggregate().
 		WithClassName("Image").
 		WithFields(
-				graphql.Field{Name: "gallery_id"},
 			graphql.Field{
-				Name: "mata", Fields: []graphql.Field{
+				Name: "meta", Fields: []graphql.Field{
 					{Name: "count"},
 				},
 			},

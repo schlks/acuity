@@ -86,3 +86,22 @@ func (s *SQLiteClient) GetGalleryByID(id int) (Gallery, error) {
 
 	return gallery, nil
 }
+
+func (s *SQLiteClient) GetAllGalleries() ([]Gallery, error) {
+	query := "SELECT id, name, path FROM galleries;"
+	rows, err := s.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var galleries []Gallery
+	for rows.Next() {
+		var g Gallery
+		if err := rows.Scan(&g.ID, &g.Name, &g.Path); err != nil {
+			return nil, err
+		}
+		galleries = append(galleries, g)
+	}
+	return galleries, nil
+}

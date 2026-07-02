@@ -1,7 +1,8 @@
 .PHONY: build run dev docker up down clean
 
 build:
-	go build -ldflags="-s -w" -o bin/acuity ./cmd/acuity
+	mkdir -p ./bin
+	go build -ldflags="-s -w" -o ./bin/acuity ./cmd/acuity
 
 run: build
 	./bin/acuity
@@ -18,8 +19,11 @@ generate:
 docker:
 	docker build -t acuity:latest .
 
-debug:
-	docker compose up --build
+weaviate:
+	docker compose up weaviate multi2vec-clip -d
+
+debug: build
+	docker compose up
 
 up:
 	docker compose up

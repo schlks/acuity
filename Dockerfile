@@ -9,7 +9,8 @@ RUN go install go.uber.org/mock/mockgen@latest
 
 COPY . .
 RUN go generate ./...
-RUN go build -ldflags="-s -w" -o acuity ./cmd/acuity
+RUN mkdir -p ./bin
+RUN go build -ldflags="-s -w" -o ./bin/acuity ./cmd/acuity
 
 FROM build-stage AS test-stage
 RUN go test -v ./...
@@ -19,8 +20,7 @@ FROM alpine:latest AS production
 RUN apk add --no-cache vips
 
 WORKDIR /app
-COPY --from=build-stage /app/acuity .
-COPY --from=build-stage /app/web ./web
+COPY --from=build-stage /app/bin/acuity .
 
 EXPOSE 3000
 ENTRYPOINT ["./acuity"]

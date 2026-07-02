@@ -1,16 +1,31 @@
-<div style="grid-column: 1 / -1; margin-bottom: 10px;">
-	<h2 style="margin: 0; color: var(--text);">Übersicht</h2>
+<div style="display: flex; justify-content: center; margin-bottom: 40px;">
+	<div style="width: 100%; max-width: 600px;">
+		{{template "search-bar" (index . 2)}}
+	</div>
+</div>
+
+<div style="margin-bottom: 32px; display: flex; flex-direction: column; gap: 4px;">
+	<div style="display: flex; align-items: center; gap: 12px;">
+		<h2 style="margin: 0; color: var(--text); font-size: 1.8rem;">{{index . 2}}</h2>
+		<button class="btn-icon" hx-post="/gallery/{{index . 2}}/scan" title="Rescan Gallery">
+			<span class="material-symbols-outlined">refresh</span>
+		</button>
+	</div>
+	
 	<span style="color: var(--text-muted); font-size: 0.9rem;">
-		{{index .1}} Images
+		{{index . 1}} Images
 	</span>
 </div>
 
-{{if not (index .0)}}
-	<div style="color: var(--text-muted); grid-column: 1 / -1;">
-		This Gallery is empty
-	</div>
-{{else}}
-	{{range (index .0)}}
-		{{template "image-card" .}}
+
+<div id="gallery" class="gallery-grid">
+	{{if not (index .0)}}
+		<div style="color: var(--text-muted); grid-column: 1 / -1; padding: 40px">
+			This Gallery is empty
+		</div>
+	{{else}}
+		{{range (index .0)}}
+			{{template "image-card" .}}
+		{{end}}
 	{{end}}
-{{end}}
+</div>

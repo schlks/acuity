@@ -9,6 +9,7 @@ services:
     - --scheme
     - http
     image: cr.weaviate.io/semitechnologies/weaviate:1.37.0
+    container_name: weaviate
     ports:
     - 50050:50050
     - 50051:50051
@@ -25,11 +26,14 @@ services:
 
   multi2vec-clip:
     image: cr.weaviate.io/semitechnologies/multi2vec-clip:sentence-transformers-clip-ViT-B-32-multilingual-v1
+    container_name: clip
     environment:
       ENABLE_CUDA: '0'
 
   acuity:
+    #image: codeberg.org/shlks/acuity:latest
     build: .
+    container_name: acuity
     ports:
       - "3000:3000"
     volumes:

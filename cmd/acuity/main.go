@@ -7,7 +7,7 @@ import (
 	//"context"
 	//"io/fs"
 	//"path/filepath"
-
+	"acuity"
 	"acuity/pkg/db"
 	"acuity/pkg/web"
 	"acuity/internal/config"
@@ -37,7 +37,7 @@ func main() {
 		log.Fatalf("Error during schema initialization: %v", err)
 	}
 
-	templates := template.Must(template.ParseGlob("web/templates/*.html"))
+	templates := template.Must(template.ParseFS(acuity.WebFS, "web/templates/*.html"))
 
 	webServer := web.NewServer(sClient, wClient, Config,  templates)
 
