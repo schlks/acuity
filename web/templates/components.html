@@ -1,0 +1,74 @@
+{{define "next-button"}}
+<button hx-get="/carousel?imageID={{.NextID}}" hx-trigger="click, keyup[key=='ArrowRight'] from:body">
+	Next
+</button>
+{{end}}
+
+{{define "rating-button"}}
+<button hx-post="/rate?imageID={{.ID}}&rating={{.Rating}}">
+	{{.Rating}}
+</button>
+{{end}}
+
+{{define "search-bar"}}
+<input type="text"
+	class="search-input"
+	name="q"
+	placeholder="Search in Gallery"
+	hx-get="/gallery/{{.Gallery}}/search"
+	hx-trigger="keyup=[key=='Enter']"
+	hx-target="#gallery">
+{{end}}
+
+{{define "delete-button"}}
+<button hx-delete="/image/{{.ID}}">
+	<span class="material-symbols-outlined">delete</span>
+</button>
+{{end}}
+
+{{define "image-card"}}
+<div class="image-card"
+	@click="showDetailPanel = true"
+	hx-get="/image/{{.ID}}"
+	hx-target="#info-container">
+
+	<img src="/image?path={{.Path}}" alt="Gallery Image" loading="lazy">
+
+	{{if gt .Rating 0}}
+	<div class="rating-badge">
+		<span class="material-symbols-outlined icon-filled">star</span>
+		<span>{{.Rating}}</span>
+	</div>
+	{{end}}
+</div>
+{{end}}
+
+{{define "info-sidebar"}}
+<div>
+	<img src="/image?path={{.Path}}" alt="Image" loading="lazy">
+	<hr>
+	<p>ID: {{.ID}}</p>
+	<p>Name: {{.Name}}</p>
+	<p>Path: {{.Path}}</p>
+	<p>Gallery: {{.Gallery}}</p>
+	<hr>
+	<md-chip-set>
+		<md-suggestion-chip label="{{.Rating}}">
+			<md-icon slot="icon">calendar</md-icon>
+		</md-suggestion-chip>
+		<md-suggestion-chip label="{{.Extension}}">
+			<md-icon slot="icon"></md-icon>
+		</md-suggestion-chip>
+		<md-suggestion-chip label="{{.Date}}">
+			<md-icon slot="icon">today</md-icon>
+		</md-suggestion-chip>
+		<md-suggestion-chip label="{{.Taken}}">
+			<md-icon slot="icon">photo_camera</md-icon>
+		</md-suggestion-chip>
+		<md-suggestion-chip label="{{.Size}}"></md-suggestion-chip>
+		<md-suggestion-chip label="{{.Resolution}}">
+			<md-icon slot="icon">hd</md-icon>
+		</md-suggestion-chip>
+	</md-chip-set>
+</div>
+{{end}}

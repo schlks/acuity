@@ -18,8 +18,11 @@ generate:
 docker:
 	docker build -t acuity:latest .
 
+debug:
+	docker compose up --build
+
 up:
-	docker compose up -d
+	docker compose up
 
 down:
 	docker compose down

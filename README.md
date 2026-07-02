@@ -34,6 +34,14 @@ volumes:
  - /your/folder/2:/images/2:ro
 ```
 
+While you're at it enable CUDA, if you have a Nvidia card
+
+```yaml
+environment:
+	ENABLE_CUDA: '1'
+
+```
+
 ### Step 2 (Linux)
 
 Install `make` and `docker`, with your package manager, then run
@@ -86,3 +94,4 @@ make up
 - [x] Sort Search/Gallery by Date/Extension
 - [ ] Keybindings
 - [x] Settings
+- [ ] In general the frontend

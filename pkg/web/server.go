@@ -41,27 +41,29 @@ func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config 
 
 // RegisterRoutes regusteres all the routes used by the webui
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/", s.handleRoot)										// INFO: GET
-	mux.HandleFunc("/settings", s.getSettings)								// INFO: GET
-	mux.HandleFunc("/settings", s.setSettings)								// INFO: POST
-	mux.HandleFunc("/image", s.handleImage)								// INFO: GET
-	mux.HandleFunc("/image", s.deleteFile)								// INFO: DELETE
-	mux.HandleFunc("/image/{id}", s.getInfo)								// INFO: GET
-	mux.HandleFunc("/image/{id}", s.setRating)							// INFO: POST
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+
+	mux.HandleFunc("/", s.handleRoot)
+	mux.HandleFunc("GET /settings", s.getSettings)
+	mux.HandleFunc("POST /settings", s.setSettings)
+	mux.HandleFunc("GET /image", s.handleImage)
+	mux.HandleFunc("DELETE /image/{id}", s.deleteFile)
+	mux.HandleFunc("GET /image/{id}", s.getInfo)
+	mux.HandleFunc("POST /image/{id}", s.setRating)
 // TODO: Delete multiple images from selection
 // TODO: Copy images to another Gallery
-	mux.HandleFunc("/gallery/{name}/duplicates", s.handleDuplicates)		// INFO: GET
-	mux.HandleFunc("/gallery/{name}/search", s.handleTextSearch)			// INFO: GET
-	mux.HandleFunc("/gallery/{name}/search/image", s.handleImageSearch)	// INFO: POST
-	mux.HandleFunc("/gallery/{name}", s.getGallery)						// INFO: GET
-	mux.HandleFunc("/gallery/{name}", s.createGallery)					// INFO: POST
-	mux.HandleFunc("/gallery/{name}", s.deleteGallery)					// INFO: DELETE
-	mux.HandleFunc("/gallery/move", s.changeGallery)						// INFO: POST
-	mux.HandleFunc("/gallery/copy", s.copyToGallery)						// INFO: POST
+	mux.HandleFunc("GET /gallery/{name}/duplicates", s.handleDuplicates)
+	mux.HandleFunc("GET /gallery/{name}/search", s.handleTextSearch)
+	mux.HandleFunc("POST /gallery/{name}/search/image", s.handleImageSearch)
+	mux.HandleFunc("GET /gallery/{name}", s.getGallery)
+	mux.HandleFunc("POST /gallery", s.createGallery)
+	mux.HandleFunc("DELETE /gallery/{name}", s.deleteGallery)
+	mux.HandleFunc("POST /gallery/move", s.changeGallery)
+	mux.HandleFunc("POST /gallery/copy", s.copyToGallery)
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
-	err := s.Template.ExecuteTemplate(w, "landing.html", nil)
+	err := s.Template.ExecuteTemplate(w, "index.html", nil)
 	if err != nil {
 		message := "Index cannot be loaded"
 		slog.Error(message, slog.Any("error", err))
@@ -105,7 +107,7 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	name := r.PathValue("name")
+	name := r.FormValue("name")
 	path := r.FormValue("path")
 
 	if err := s.Service.CreateGallery(ctx, name, path); err != nil {
@@ -476,7 +478,7 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	if err := s.Template.ExecuteTemplate(w, "info.html", imageInfo); err != nil {
+	if err := s.Template.ExecuteTemplate(w, "info-sidebar", imageInfo); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)

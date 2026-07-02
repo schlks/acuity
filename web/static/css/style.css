@@ -1,0 +1,125 @@
+@font-face {
+	font-family: 'Elms Sans';
+	src: url('/static/fonts/Elms_Sans/ElmsSans-VariableFont_wght.ttf') format('truetype');
+	font-weight: 100 900;
+	font-style: normal;
+}
+
+:root {
+	--bg-dark: #000000;
+	--bg: #090909;
+	--bg-light: #1c1c1c;
+	--text: #eeeeee;
+	--text-muted: #d1d1d1;
+	--primary: #407cf5;
+	--secondary: #0039ae;
+	--danger: #c01c28;
+	--warning: #ea892f;
+	--success: #02c45d;
+	--info: #9589f3;
+}
+
+body {
+	background-color: var(--bg-dark);
+	color: var(--text);
+	margin: 0;
+	font-family: 'Elms Sans', system-ui, sans-serif;
+	font-weight: 400;
+}
+
+h1, h2, strong {
+	font-weight: 750;
+}
+
+.layout-wrapper {
+	display: flex;
+	height: 100vh;
+	overflow: hidden;
+}
+
+.sidebar-left {
+	width: 250px;
+	background-color: var(--bg);
+	padding: 20px;
+	display: flex;
+	flex-direction: column;
+}
+
+.sidebar-right {
+	width: 350px;
+	background-color: var(--bg-light);
+	padding: 20px;
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	right: 0;
+	top: 0;
+	height: 100vh;
+	box-sizing: border-box;
+	transform: translateX(100%);
+	transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+	z-index: 100;
+	box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+}
+
+.sidebar-right.is-open {
+	transform: translateX(0);
+}
+
+.main-area {
+	flex-grow: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+}
+
+.center-search-container {
+	width: 100%;
+	max-width: 600px;
+	text-align: center;
+}
+
+.material-symbols-outlined {
+	font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+	vertical-align: middle;
+	font-size: 1.2rem;
+}
+.material-symbols-outlined.icon-filled {
+	font-variation-settings: 'FILL' 1;
+	color: var(--primary);
+}
+
+/* Material 3 Expressive Card */
+.image-card {
+	position: relative;
+	border-radius: 24px;
+	background-color: var(--bg-light, #1c1c1c);
+	overflow: hidden;
+	aspect-ratio: 1 / 1;
+	cursor: pointer;
+	transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1),
+				box-shadow 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.image-card:hover {
+	transform: translateY(-4px) scale(1.02);
+	
+	box-shadow: 0 12px 24px -8px rgba(0,0,0, 0.8), 
+				0 0 0 2px var(--primary);
+}
+
+.rating-badge {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	background: rgba(28, 28, 28, 0.85);
+	backdrop-filter: blur(8px);
+	color: var(--text);
+	padding: 6px 10px;
+	border-radius: 100px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-weight: 600;
+}

@@ -9,7 +9,10 @@
 - text-muted: `#d1d1d1`
 - primary: `#407cf5`
 - secondary: `#0039ae`
+- tertiary: `#ade1b5`
 - danger: `#c01c28`
-- warning: `#ea892f`
+- warning: `#e4c447`
 - success: `#02c45d`
 - info: `#9589f3`
+
+font: Elms Sans

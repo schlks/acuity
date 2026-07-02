@@ -1,14 +1,5 @@
 ---
 services:
-  acuity:
-    build: .
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./testdata:/images:ro
-    depends_on:
-      - weaviate
-
   weaviate:
     command:
     - --host
@@ -36,6 +27,18 @@ services:
     image: cr.weaviate.io/semitechnologies/multi2vec-clip:sentence-transformers-clip-ViT-B-32-multilingual-v1
     environment:
       ENABLE_CUDA: '0'
+
+  acuity:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./testdata:/images/testdata:ro
+    environment:
+      - WEAVIATE_HOST=weaviate:50050
+    restart: on-failure
+    depends_on:
+      - multi2vec-clip
 
 volumes:
   weaviate_data:

@@ -27,8 +27,16 @@ func Load() (*Config, error) {
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
 
+	viper.SetConfigType("json")
 	if err := viper.ReadInConfig(); err != nil {
-		return nil, err
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// Datei existiert nicht, wir legen eine neue an
+			if writeErr := viper.SafeWriteConfigAs("config.json"); writeErr != nil {
+				return nil, writeErr
+			}
+		} else {
+			return nil, err
+		}
 	}
 
 	var cfg Config

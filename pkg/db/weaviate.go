@@ -716,9 +716,14 @@ func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[
 		Do(ctx)
 	if err != nil { return nil, err }
 
-	data := result.Data["Get"].(map[string]any)
-	images := data["Image"].([]any)
-
+	data, ok := result.Data["Get"].(map[string]any)
+	if !ok || data["Image"] == nil {
+		return knownPaths, nil
+	}
+	images, ok := data["Image"].([]any)
+	if !ok {
+		return knownPaths, nil
+	}
 	for _, imgObj := range images {
 		img := imgObj.(map[string]any)
 		path := img["filepath"].(string)

@@ -20,11 +20,10 @@ type Gallery struct {
 }
 
 func NewSqliteDB(path string) (*SQLiteClient, error) {
-	db, err := sql.Open("sqlite", "acuity.db")
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
 
 	return &SQLiteClient{DB: db}, nil
 }

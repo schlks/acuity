@@ -1,0 +1,16 @@
+<div style="grid-column: 1 / -1; margin-bottom: 10px;">
+	<h2 style="margin: 0; color: var(--text);">Übersicht</h2>
+	<span style="color: var(--text-muted); font-size: 0.9rem;">
+		{{index .1}} Images
+	</span>
+</div>
+
+{{if not (index .0)}}
+	<div style="color: var(--text-muted); grid-column: 1 / -1;">
+		This Gallery is empty
+	</div>
+{{else}}
+	{{range (index .0)}}
+		{{template "image-card" .}}
+	{{end}}
+{{end}}

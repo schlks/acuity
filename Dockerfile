@@ -20,6 +20,7 @@ RUN apk add --no-cache vips
 
 WORKDIR /app
 COPY --from=build-stage /app/acuity .
+COPY --from=build-stage /app/web ./web
 
 EXPOSE 3000
 ENTRYPOINT ["./acuity"]

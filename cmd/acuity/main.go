@@ -37,7 +37,7 @@ func main() {
 		log.Fatalf("Error during schema initialization: %v", err)
 	}
 
-	templates := template.Must(template.ParseGlob("src/web/templates/*.html"))
+	templates := template.Must(template.ParseGlob("web/templates/*.html"))
 
 	webServer := web.NewServer(sClient, wClient, Config,  templates)
 
@@ -45,7 +45,7 @@ func main() {
 	webServer.RegisterRoutes(mux)
 
 	log.Printf("acuity Web-Interface listening on http://localhost:%s\n", Config.Port)
-	err = http.ListenAndServe(Config.Port, mux)
+	err = http.ListenAndServe(":"+Config.Port, mux)
 	if err != nil {
 		log.Fatalf("Server crashed: %v", err)
 	}
