@@ -1,9 +1,31 @@
-{{if not .}}
-	<div style="color: var(--text-muted); grid-column: 1 / -1; padding: 40px">
+{{if not .Images}}
+	<div style="color: var(--text-muted); text-align: center; padding: 40px">
 		This Gallery is empty
 	</div>
 {{else}}
-	{{range .}}
-		{{template "image-card" .}}
-	{{end}}
+	<div class="gallery-grid">
+		{{range .Images}}
+			{{template "image-card" .}}
+		{{end}}
+	</div>
 {{end}}
+
+<div style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 40px; margin-bottom: 40px;">
+	{{if gt .PrevPage 0}}
+		<button class="btn-primary" style="padding: 8px 16px;" 
+			hx-get="/gallery/{{.GalleryName}}/images?page={{.PrevPage}}" 
+			hx-target="#gallery-container">
+			<span class="material-symbols-outlined">chevron_left</span> Zurück
+		</button>
+	{{end}}
+	
+	<span style="color: var(--text-muted);">Seite {{.CurrentPage}}</span>
+
+	{{if .HasNext}}
+		<button class="btn-primary" style="padding: 8px 16px;" 
+			hx-get="/gallery/{{.GalleryName}}/images?page={{.NextPage}}" 
+			hx-target="#gallery-container">
+			Weiter <span class="material-symbols-outlined">chevron_right</span>
+		</button>
+	{{end}}
+</div>

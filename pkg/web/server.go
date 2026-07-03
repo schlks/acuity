@@ -283,7 +283,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, message, http.StatusInternalServerError)
 			return
 		}
-		if err := s.Service.DeleteImages(ctx, files); err != nil {
+		if err := s.Service.DeleteImages(ctx, files, false); err != nil {
 			message := "Failed to delete Gallery"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -347,10 +347,16 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var image db.Image
-	image.ID = r.FormValue("id")
+	image.ID = r.PathValue("id")
+	if image.ID == "" {
+		image.ID = r.FormValue("id")
+	}
 	image.Path = r.FormValue("path")
 
-	if err := s.Service.DeleteImage(ctx, image); err != nil {
+	deleteDiskStr := r.FormValue("delete_disk")
+	deleteDisk := (deleteDiskStr == "true")
+
+	if err := s.Service.DeleteImage(ctx, image, deleteDisk); err != nil {
 		message := "Failed to delete File"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -369,14 +375,24 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	imageIDs := r.Form["image_id"]
+	imageIDsStr := r.FormValue("image_id")
+	var imageIDs []string
+	if imageIDsStr != "" {
+		imageIDs = strings.Split(imageIDsStr, ",")
+	}
+
+	deleteDiskStr := r.FormValue("delete_disk")
+	deleteDisk := (deleteDiskStr == "true")
 
 	var images []db.Image
 	for _, id := range imageIDs {
-		images = append(images, db.Image{ID: id})
+		id = strings.TrimSpace(id)
+		if id != "" {
+			images = append(images, db.Image{ID: id})
+		}
 	}
 
-	if err := s.Service.DeleteImages(ctx, images); err != nil {
+	if err := s.Service.DeleteImages(ctx, images, deleteDisk); err != nil {
 		message := "Failed to delete Image"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -428,14 +444,38 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
+	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page, s.Config.ImagesPerPage)
 	if err != nil {
 		http.Error(w, "Images not found", http.StatusNotFound)
 		return
 	}
 
+	nextPage := -1
+	if len(images) == s.Config.ImagesPerPage {
+		nextPage = page + 1
+	}
+
+	data := struct {
+		GalleryName string
+		Images      []db.Image
+		CurrentPage int
+		PrevPage    int
+		NextPage    int
+		HasNext     bool
+	}{
+		GalleryName: name,
+		Images:      images,
+		CurrentPage: page,
+		PrevPage:    page - 1,
+		NextPage:    nextPage,
+		HasNext:     nextPage != -1,
+	}
+
 	// Rendert nur die Bilder-Kacheln aus dem neuen Template
-	s.Template.ExecuteTemplate(w, "gallery-images.html", images)
+	if err := s.Template.ExecuteTemplate(w, "gallery-images.html", data); err != nil {
+		slog.Error("Failed to render gallery images", slog.Any("error", err))
+		http.Error(w, "Failed to render", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
@@ -666,5 +706,21 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
+	}
+
+	data := struct {
+		ID     string
+		Rating int
+	}{
+		ID:     imageID,
+		Rating: rating,
+	}
+
+	w.Header().Set("HX-Trigger", "rating-updated")
+
+	if err := s.Template.ExecuteTemplate(w, "rating-stars", data); err != nil {
+		message := "Failed to render rating"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
 	}
 }

@@ -9,7 +9,6 @@ services:
     - --scheme
     - http
     image: cr.weaviate.io/semitechnologies/weaviate:1.37.0
-    pull_policy: always
     container_name: weaviate
     ports:
     - 50050:50050
@@ -27,7 +26,6 @@ services:
 
   multi2vec-clip:
     image: cr.weaviate.io/semitechnologies/multi2vec-clip:sentence-transformers-clip-ViT-B-32-multilingual-v1
-    pull_policy: always
     container_name: clip
     environment:
       ENABLE_CUDA: '0'

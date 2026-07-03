@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/weaviate/weaviate/entities/models"
@@ -187,24 +188,46 @@ func (g *GalleryService) ConvertImage(file []byte) (string, error) {
 	return base64Image, nil
 }
 
-func (g *GalleryService) DeleteImage(ctx context.Context, file db.Image) error {
+func (g *GalleryService) DeleteImage(ctx context.Context, file db.Image, deleteDisk bool) error {
+	if deleteDisk && file.Path == "" {
+		info, err := g.wDB.GetInfo(ctx, file.ID)
+		if err == nil {
+			file.Path = info.Path
+		}
+	}
+
 	if err := g.wDB.RemoveImage(ctx, file); err != nil {
 		return err
 	}
-	if err := os.Remove(file.Path); err != nil {
-		return err
+
+	if deleteDisk && file.Path != "" {
+		os.Remove(file.Path)
 	}
 	return nil
 }
 
-func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image) error {
+func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image, deleteDisk bool) error {
+	var paths []string
+	if deleteDisk {
+		for _, img := range images {
+			if img.Path != "" {
+				paths = append(paths, img.Path)
+			} else {
+				info, err := g.wDB.GetInfo(ctx, img.ID)
+				if err == nil && info.Path != "" {
+					paths = append(paths, info.Path)
+				}
+			}
+		}
+	}
+
 	if err := g.wDB.RemoveImages(ctx, images); err != nil {
 		return err
 	}
 
-	for _, image := range images {
-		if err := os.Remove(image.Path); err != nil {
-			return err
+	if deleteDisk {
+		for _, path := range paths {
+			os.Remove(path)
 		}
 	}
 	return nil
@@ -275,7 +298,11 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[
 		"Date":        wInfo.Date,
 		"Gallery":     "",
 	}
-	gallery := imageInfo["GalleryID"].(int)
+	galleryStr := imageInfo["GalleryID"].(string)
+	gallery, err := strconv.Atoi(galleryStr)
+	if err != nil {
+		return nil, err
+	}
 	galleryName, err := g.sDB.GetGalleryByID(gallery)
 	if err != nil {
 		return nil, err

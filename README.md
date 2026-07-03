@@ -92,5 +92,7 @@ make up
 - [ ] Keybindings
 - [ ] Search sorting options
 - [ ] Edit Gallery
-- [ ] Multiple image selection
+- [x] Multiple image selection
 - [ ] Drop image in Searchbar
+- [x] Delete image/selection
+- [ ] Image rating

@@ -12,7 +12,7 @@
 		<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
 	</head>
 
-	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false }">
+	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
 				<div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px;">
@@ -48,13 +48,13 @@
 						</div>
 					</div>
 					<div style="position: relative; display: flex; align-items: center;" x-data="{ hovered: false }" @mouseenter="hovered = true" @mouseleave="hovered = false">
-						<button class="nav-item" hx-get="/gallery/global/duplicates" hx-target="#main-content" style="margin-top: auto;">
+						<button class="nav-item" hx-get="/gallery/global/duplicates" hx-target="#main-content">
 							<span class="material-symbols-outlined">search</span> Duplicates
 						</button>
 					</div>
-					<div id="sidebar-progress"></div>
+					<div id="sidebar-progress" style="margin-top: auto;"></div>
 
-					<button class="nav-item" hx-get="/settings" hx-target="#main-content" style="margin-top: auto;">
+					<button class="nav-item" hx-get="/settings" hx-target="#main-content">
 						<span class="material-symbols-outlined">settings</span> Settings
 					</button>
 				</nav>
@@ -77,12 +77,14 @@
 					<button class="btn-icon" @click="showDetailPanel = false" style="align-self: flex-end; margin-bottom: 20px;">
 						<span class="material-symbols-outlined">close</span>
 					</button>
-					<div id="info-container" style="overflow-y: auto;">
+					<div id="info-container" style="overflow-y: auto; flex-grow: 1; display: flex; flex-direction: column;">
 						<!-- Hier lädt HTMX die Infos rein -->
 					</div>
 				</aside>
 			</main>
 		</div>
+
+
 
 		<!-- Natives HTML Dialog -->
 		<dialog x-ref="addDialog" id="addDialog" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">

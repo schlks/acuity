@@ -278,7 +278,7 @@ func (w *WeaviateClient) RemoveGalleryImages(ctx context.Context, galleryID int)
 	filter := filters.Where().
 		WithPath([]string{"gallery_id"}).
 		WithOperator(filters.Equal).
-		WithValueNumber(float64(galleryID))
+		WithValueInt(int64(galleryID))
 
 	response, err := w.Client.Batch().ObjectsBatchDeleter().
 		WithClassName("Image").
@@ -439,7 +439,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 		filter := filters.Where().
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
-			WithValueNumber(float64(galleryID))
+			WithValueInt(int64(galleryID))
 
 		query = query.
 			WithWhere(filter).
@@ -508,7 +508,7 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 		filter := filters.Where().
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
-			WithValueNumber(float64(galleryID))
+			WithValueInt(int64(galleryID))
 
 		query = query.
 			WithWhere(filter).
@@ -574,7 +574,7 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, gal
 		filter := filters.Where().
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
-			WithValueNumber(float64(galleryID))
+			WithValueInt(int64(galleryID))
 		query = query.WithWhere(filter)
 	}
 
@@ -707,7 +707,7 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 			filters.Where().
 				WithPath([]string{"gallery_id"}).
 				WithOperator(filters.Equal).
-				WithValueNumber(float64(galleryID))).
+				WithValueInt(int64(galleryID))).
 		WithLimit(imagesPerPage)
 
 	if page >= 0 {
@@ -748,7 +748,7 @@ func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[
 					filters.Where().
 						WithPath([]string{"gallery_id"}).
 						WithOperator(filters.Equal).
-						WithValueNumber(float64(galleryID))).
+						WithValueInt(int64(galleryID))).
 		WithLimit(10_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
 		Do(ctx)
 	if err != nil {
@@ -821,7 +821,7 @@ func (w *WeaviateClient) GetGalleryCount(ctx context.Context, galleryID int) (in
 			filters.Where().
 				WithPath([]string{"gallery_id"}).
 				WithOperator(filters.Equal).
-				WithValueNumber(float64(galleryID))).
+				WithValueInt(int64(galleryID))).
 		Do(ctx)
 	if err != nil {
 		return 0, err

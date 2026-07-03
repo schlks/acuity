@@ -252,6 +252,56 @@ dialog.closing::backdrop {
 .image-card:hover img {
 	opacity: 0.9;
 }
+.image-card.selected {
+	outline: 3px solid var(--primary);
+	outline-offset: -3px;
+	border-color: transparent;
+	transform: scale(0.98);
+}
+.image-card .select-btn {
+	opacity: 0;
+	transition: opacity 0.2s;
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	background: rgba(0,0,0,0.5);
+	color: white;
+	border-radius: 50%;
+	padding: 4px;
+	z-index: 10;
+}
+.image-card:hover .select-btn,
+.image-card.selected .select-btn {
+	opacity: 1;
+}
+
+.selection-bar {
+	position: fixed;
+	bottom: 32px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: var(--bg-hover);
+	border: 1px solid var(--border);
+	padding: 12px 24px;
+	border-radius: 32px;
+	box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+	z-index: 100;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 16px;
+}
+
+.gallery-action-bar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
+	margin-left: 12px;
+	padding-left: 16px;
+	border-left: 1px solid var(--border);
+}
+
 .rating-badge {
 	position: absolute;
 	top: 8px;

@@ -4,13 +4,33 @@
 </button>
 {{end}}
 
-{{define "rating-button"}}
-<button class="btn-icon" hx-post="/rate?imageID={{.ID}}&rating={{.Rating}}">
-	{{.Rating}}
-</button>
+{{define "rating-stars"}}
+<div class="rating-stars" id="rating-container-{{.ID}}" style="display: flex; gap: 2px;">
+	<button class="btn-icon" style="padding: 2px; color: {{if ge .Rating 1}}var(--primary){{else}}var(--text-muted){{end}};" hx-post="/image/{{.ID}}" hx-vals='{"rating": "1"}' hx-target="#rating-container-{{.ID}}" hx-swap="outerHTML">
+		<span class="material-symbols-outlined {{if ge .Rating 1}}icon-filled{{end}}">star</span>
+	</button>
+	<button class="btn-icon" style="padding: 2px; color: {{if ge .Rating 2}}var(--primary){{else}}var(--text-muted){{end}};" hx-post="/image/{{.ID}}" hx-vals='{"rating": "2"}' hx-target="#rating-container-{{.ID}}" hx-swap="outerHTML">
+		<span class="material-symbols-outlined {{if ge .Rating 2}}icon-filled{{end}}">star</span>
+	</button>
+	<button class="btn-icon" style="padding: 2px; color: {{if ge .Rating 3}}var(--primary){{else}}var(--text-muted){{end}};" hx-post="/image/{{.ID}}" hx-vals='{"rating": "3"}' hx-target="#rating-container-{{.ID}}" hx-swap="outerHTML">
+		<span class="material-symbols-outlined {{if ge .Rating 3}}icon-filled{{end}}">star</span>
+	</button>
+	<button class="btn-icon" style="padding: 2px; color: {{if ge .Rating 4}}var(--primary){{else}}var(--text-muted){{end}};" hx-post="/image/{{.ID}}" hx-vals='{"rating": "4"}' hx-target="#rating-container-{{.ID}}" hx-swap="outerHTML">
+		<span class="material-symbols-outlined {{if ge .Rating 4}}icon-filled{{end}}">star</span>
+	</button>
+	<button class="btn-icon" style="padding: 2px; color: {{if ge .Rating 5}}var(--primary){{else}}var(--text-muted){{end}};" hx-post="/image/{{.ID}}" hx-vals='{"rating": "5"}' hx-target="#rating-container-{{.ID}}" hx-swap="outerHTML">
+		<span class="material-symbols-outlined {{if ge .Rating 5}}icon-filled{{end}}">star</span>
+	</button>
+	{{if gt .Rating 0}}
+	<button class="btn-icon" style="padding: 2px; color: var(--text-muted); margin-left: 8px;" hx-post="/image/{{.ID}}" hx-vals='{"rating": "0"}' hx-target="#rating-container-{{.ID}}" hx-swap="outerHTML" title="Bewertung zurücksetzen">
+		<span class="material-symbols-outlined" style="font-size: 1.1rem;">close</span>
+	</button>
+	{{end}}
+</div>
 {{end}}
 
 {{define "search-bar"}}
+<div style="display: flex; gap: 8px; align-items: center; width: 100%;">
 <div x-data="{
     text: '',
     placeholders: ['Search for a sunset...', 'Mountains in winter...', 'Portrait of a dog...', 'A red car on the street...'],
@@ -48,9 +68,10 @@
 		x-model="query"
 		:placeholder="text"
 		hx-get="/gallery/{{.}}/search"
+		hx-include="#search-options-form"
 		hx-trigger="keyup[key=='Enter']"
 		hx-target="#main-content"
-		style="padding-left: 40px; padding-right: 40px; border-radius: 24px; padding-top: 16px; padding-bottom: 16px; font-size: 1.1rem;">
+		style="padding-left: 40px; padding-right: 40px; border-radius: 24px; padding-top: 16px; padding-bottom: 16px; font-size: 1.1rem; flex-grow: 1;">
 	<span class="material-symbols-outlined" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted);">search</span>
 	
 	<button type="button" class="btn-icon" x-show="query.length > 0" x-transition 
@@ -58,6 +79,34 @@
 		style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); background: var(--bg); border-radius: 50%;">
 		<span class="material-symbols-outlined">close</span>
 	</button>
+</div>
+
+	<!-- Options Dropdown -->
+	<div x-data="{ open: false }" style="position: relative;">
+		<button type="button" class="btn-icon" @click="open = !open" :class="open ? 'active' : ''" style="border-radius: 12px; padding: 12px;" title="Suchoptionen">
+			<span class="material-symbols-outlined">tune</span>
+		</button>
+
+		<div x-show="open" @click.outside="open = false" class="dropdown-menu" style="position: absolute; top: 100%; right: 0; background: var(--bg-surface); padding: 16px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 10px 20px rgba(0,0,0,0.2); width: 200px; z-index: 100; margin-top: 8px;">
+			<form id="search-options-form" @change="htmx.trigger(document.querySelector('input[name=\'q\']'), 'keyup', {key: 'Enter'})">
+				<div style="margin-bottom: 12px;">
+					<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Sortieren nach</div>
+					<select name="sortBy" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
+						<option value="date">Datum</option>
+						<option value="size">Größe</option>
+						<option value="rating">Rating</option>
+					</select>
+				</div>
+				<div>
+					<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Reihenfolge</div>
+					<select name="sortOrder" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
+						<option value="desc">Absteigend</option>
+						<option value="asc">Aufsteigend</option>
+					</select>
+				</div>
+			</form>
+		</div>
+	</div>
 </div>
 {{end}}
 
@@ -71,9 +120,17 @@
 <div class="image-card"
 	@click.stop="showDetailPanel = true"
 	hx-get="/image/{{.ID}}"
-	hx-target="#info-container">
+	hx-target="#info-container"
+	:class="selectedImages.includes('{{.ID}}') ? 'selected' : ''"
+	>
 
 	<img src="/image?path={{.Path}}" alt="Gallery Image" loading="lazy">
+	
+	<!-- Selection Toggle -->
+	<button class="btn-icon select-btn" 
+		@click.stop="if(selectedImages.includes('{{.ID}}')) { selectedImages = selectedImages.filter(id => id !== '{{.ID}}') } else { selectedImages.push('{{.ID}}') }">
+		<span class="material-symbols-outlined" x-text="selectedImages.includes('{{.ID}}') ? 'check_circle' : 'radio_button_unchecked'"></span>
+	</button>
 
 	{{if gt .Rating 0}}
 	<div class="rating-badge">
@@ -85,7 +142,7 @@
 {{end}}
 
 {{define "info-sidebar"}}
-<div style="display: flex; flex-direction: column; gap: 16px;">
+<div style="display: flex; flex-direction: column; gap: 16px; flex-grow: 1;">
 	<img src="/image?path={{.Path}}" alt="Image" loading="lazy" style="width: 100%; border-radius: 4px; border: 1px solid var(--border);">
 	<hr>
 	<div>
@@ -103,6 +160,11 @@
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Size</div>
 		<div style="word-break: break-all;">{{formatSize .Size}}</div>
+	</div>
+	
+	<div>
+		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Rating</div>
+		{{template "rating-stars" .}}
 	</div>
 	<hr>
 	<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
@@ -129,10 +191,27 @@
 			{{.Gallery}}
 		</div>
 	</div>
-	<hr>
-	<button class="btn-primary" style="margin-top: 20px;" hx-get="/gallery/global/duplicates?imageID={{.ID}}" hx-target="#main-content">
-		<span class="material-symbols-outlined">search</span> Search for similar images
-	</button>
+	<div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;">
+		<button class="btn-primary" hx-get="/gallery/global/duplicates?imageID={{.ID}}" hx-target="#main-content">
+			<span class="material-symbols-outlined">search</span> Search for similar images
+		</button>
+		
+		<div style="display: flex; gap: 8px;">
+			<button class="btn-primary" style="background: #e74c3c; border-color: #c0392b; flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 6px;"
+				hx-delete="/images"
+				hx-vals='js:{"image_id": "{{.ID}}", "delete_disk": deleteFromDisk}'
+				hx-confirm="Bild wirklich löschen?">
+				<span class="material-symbols-outlined">delete</span> Löschen
+			</button>
+			<button class="btn-icon" 
+				:style="deleteFromDisk ? 'background: var(--danger); color: white; border: 1px solid var(--danger);' : 'background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-muted);'" 
+				@click="deleteFromDisk = !deleteFromDisk" 
+				title="Auch Datei von der Festplatte entfernen"
+				style="display: flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 6px;">
+				<span class="material-symbols-outlined" style="font-size: 1.2rem;">hard_drive</span>
+			</button>
+		</div>
+	</div>
 </div>
 {{end}}
 
