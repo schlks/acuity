@@ -1,0 +1,9 @@
+{{if not .}}
+	<div style="color: var(--text-muted); grid-column: 1 / -1; padding: 40px">
+		This Gallery is empty
+	</div>
+{{else}}
+	{{range .}}
+		{{template "image-card" .}}
+	{{end}}
+{{end}}

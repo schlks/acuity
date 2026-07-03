@@ -1,0 +1,58 @@
+<div style="margin-bottom: 32px; display: flex; align-items: center; justify-content: space-between;">
+	<div style="display: flex; align-items: center; gap: 16px;">
+		<button class="btn-icon" 
+			hx-get="{{if eq .GalleryName "global"}}/{{else}}/gallery/{{.GalleryName}}{{end}}" 
+			hx-target="{{if eq .GalleryName "global"}}body{{else}}#main-content{{end}}" 
+			title="Zurück">
+			<span class="material-symbols-outlined">arrow_back</span>
+		</button>
+		<h2 style="margin: 0; color: var(--text); font-size: 1.8rem;">
+			{{if eq .SearchType "text"}}
+				Suchergebnisse für "{{.Query}}"
+			{{else}}
+				Ähnliche Bilder
+			{{end}}
+		</h2>
+	</div>
+</div>
+
+{{if not .Images}}
+	<div style="color: var(--text-muted); padding: 80px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px;">
+		<span class="material-symbols-outlined" style="font-size: 48px; opacity: 0.5;">search_off</span>
+		<span style="font-size: 1.2rem;">Keine Ergebnisse gefunden.</span>
+	</div>
+{{else}}
+	<div class="gallery-grid">
+		{{range .Images}}
+			{{template "image-card" .}}
+		{{end}}
+	</div>
+{{end}}
+
+<div style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 40px; margin-bottom: 40px;">
+	{{if gt .Page 1}}
+		<button class="btn-primary" style="padding: 8px 16px;" 
+			{{if eq .SearchType "text"}}
+				hx-get="/gallery/{{.GalleryName}}/search?q={{.Query}}&page={{.PrevPage}}"
+			{{else}}
+				hx-get="/gallery/{{.GalleryName}}/duplicates?imageID={{.Query}}&page={{.PrevPage}}"
+			{{end}}
+			hx-target="#main-content">
+			<span class="material-symbols-outlined">chevron_left</span> Zurück
+		</button>
+	{{end}}
+	
+	<span style="color: var(--text-muted);">Seite {{.Page}}</span>
+
+	{{if .HasNext}}
+		<button class="btn-primary" style="padding: 8px 16px;" 
+			{{if eq .SearchType "text"}}
+				hx-get="/gallery/{{.GalleryName}}/search?q={{.Query}}&page={{.NextPage}}"
+			{{else}}
+				hx-get="/gallery/{{.GalleryName}}/duplicates?imageID={{.Query}}&page={{.NextPage}}"
+			{{end}}
+			hx-target="#main-content">
+			Weiter <span class="material-symbols-outlined">chevron_right</span>
+		</button>
+	{{end}}
+</div>
