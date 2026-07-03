@@ -5,21 +5,23 @@ package config
 import "github.com/spf13/viper"
 
 type Config struct {
-	Port 			string 		`mapstructure:"port"`
-	WeaviateHost 	string 		`mapstructure:"weaviate_host"`
-	Folders 		[]string 	`mapstructure:"default_folders"`
-	DBPath			string 		`mapstructure:"db_path"`
+	Port         string   `mapstructure:"port"`
+	WeaviateHost string   `mapstructure:"weaviate_host"`
+	WeaviatePort string   `mapstructure:"weaviate_port"`
+	Folders      []string `mapstructure:"default_folders"`
+	DBPath       string   `mapstructure:"db_path"`
 
-	ImagesPerPage	int 		`mapstructure:"images_per_page"`
-	DefaultSortBy	string		`mapstructure:"default_sort_by"`
-	DefaultSortOrder string 	`mapstructure:"default_sort_order"`
+	ImagesPerPage    int    `mapstructure:"images_per_page"`
+	DefaultSortBy    string `mapstructure:"default_sort_by"`
+	DefaultSortOrder string `mapstructure:"default_sort_order"`
 }
 
 func Load() (*Config, error) {
 	viper.SetDefault("port", "3000")
-	viper.SetDefault("weaviate_host", "localhost:50050")
+	viper.SetDefault("weaviate_host", "localhost")
+	viper.SetDefault("weaviate_port", ":50050")
 	viper.SetDefault("db_path", "./acuity.db")
-	viper.SetDefault("images_per_page", 100)
+	viper.SetDefault("images_per_page", 500)
 	viper.SetDefault("default_sort_by", "name")
 	viper.SetDefault("default_sort_order", "desc")
 
@@ -47,7 +49,7 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-func Save(cfg *Config) error {
+func save(cfg *Config) error {
 	viper.Set("images_per_page", cfg.ImagesPerPage)
 	viper.Set("default_sort_by", cfg.DefaultSortBy)
 	viper.Set("default_sort_order", cfg.DefaultSortOrder)

@@ -9,6 +9,7 @@ services:
     - --scheme
     - http
     image: cr.weaviate.io/semitechnologies/weaviate:1.37.0
+    pull_policy: always
     container_name: weaviate
     ports:
     - 50050:50050
@@ -26,20 +27,27 @@ services:
 
   multi2vec-clip:
     image: cr.weaviate.io/semitechnologies/multi2vec-clip:sentence-transformers-clip-ViT-B-32-multilingual-v1
+    pull_policy: always
     container_name: clip
     environment:
       ENABLE_CUDA: '0'
 
   acuity:
     #image: codeberg.org/shlks/acuity:latest
-    build: .
+    #pull_policy: always
+    build:
+      context: .
+      pull: true
     container_name: acuity
     ports:
       - "3000:3000"
     volumes:
-      - ./testdata:/images/testdata:ro
+      - ./acuity.db:/app/acuity.db
+      - ./config.json:/app/config.json
+      - ./testdata:/data/testdata:rw
     environment:
-      - WEAVIATE_HOST=weaviate:50050
+      - WEAVIATE_HOST=weaviate
+      - WEAVIATE_PORT=:50050
     restart: on-failure
     depends_on:
       - multi2vec-clip

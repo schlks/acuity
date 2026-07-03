@@ -17,7 +17,7 @@ generate:
 	go generate ./...
 
 docker:
-	docker build -t acuity:latest .
+	docker build --network host -t acuity:latest .
 
 weaviate:
 	docker compose up weaviate multi2vec-clip -d
@@ -26,6 +26,7 @@ debug: build
 	docker compose up
 
 up:
+	docker compose pull
 	docker compose up
 
 down:

@@ -10,7 +10,8 @@ RUN go install go.uber.org/mock/mockgen@latest
 COPY . .
 RUN go generate ./...
 RUN mkdir -p ./bin
-RUN go build -ldflags="-s -w" -o ./bin/acuity ./cmd/acuity
+# RUN go build -ldflags="-s -w" -o ./bin/acuity ./cmd/acuity
+RUN go build -o ./bin/acuity ./cmd/acuity
 
 FROM build-stage AS test-stage
 RUN go test -v ./...

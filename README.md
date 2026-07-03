@@ -23,15 +23,14 @@ while running entirely on your own infrastructure.
 
 Edit the volume in the [docker-compose](docker-compose.yml) to where
 your images are.
-Change `:ro` to `:rw` if you want to move/copy/delete files.
 Since you can create separate galleries for your folders, I
 recommend setting the volume to the most root folder you can, or
 do something like this:
 
 ```yaml
 volumes:
- - /your/folder/1:/images/1:ro
- - /your/folder/2:/images/2:ro
+ - /your/folder/1:/images/1:rw
+ - /your/folder/2:/images/2:rw
 ```
 
 While you're at it enable CUDA, if you have a Nvidia card:
@@ -83,14 +82,15 @@ make up
 
 ## TODO
 
-- [x] Getting info for one image
-- [x] Paging
-- [x] Batch-Delete for selected images
-- [x] Count the amount of images in a gallery
-- [x] Copy to gallery, currently only move
-- [x] Add rating system
+### Backend
+
+---
+
+### Frontend
+
 - [ ] Image carousel
-- [x] Sort Search/Gallery by Date/Extension
 - [ ] Keybindings
-- [x] Settings
-- [ ] In general the frontend
+- [ ] Search sorting options
+- [ ] Edit Gallery
+- [ ] Multiple image selection
+- [ ] Drop image in Searchbar

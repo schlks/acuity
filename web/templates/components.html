@@ -17,6 +17,7 @@
     index: 0,
     charIndex: 0,
     isDeleting: false,
+    query: '',
     type() {
         let current = this.placeholders[this.index];
         if (this.isDeleting) {
@@ -39,14 +40,24 @@
 
         setTimeout(() => this.type(), typeSpeed);
     }
-}" x-init="type()">
+}" x-init="type()" style="position: relative; width: 100%;">
 	<input type="text"
 		class="input-clean"
 		name="q"
+		x-ref="searchInput"
+		x-model="query"
 		:placeholder="text"
 		hx-get="/gallery/{{.}}/search"
 		hx-trigger="keyup[key=='Enter']"
-		hx-target="#gallery">
+		hx-target="#main-content"
+		style="padding-left: 40px; padding-right: 40px; border-radius: 24px; padding-top: 16px; padding-bottom: 16px; font-size: 1.1rem;">
+	<span class="material-symbols-outlined" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted);">search</span>
+	
+	<button type="button" class="btn-icon" x-show="query.length > 0" x-transition 
+		@click="query = ''; $nextTick(() => htmx.trigger($refs.searchInput, 'keyup', {key: 'Enter'}))" 
+		style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); background: var(--bg); border-radius: 50%;">
+		<span class="material-symbols-outlined">close</span>
+	</button>
 </div>
 {{end}}
 
@@ -58,7 +69,7 @@
 
 {{define "image-card"}}
 <div class="image-card"
-	@click="showDetailPanel = true"
+	@click.stop="showDetailPanel = true"
 	hx-get="/image/{{.ID}}"
 	hx-target="#info-container">
 
@@ -76,10 +87,10 @@
 {{define "info-sidebar"}}
 <div style="display: flex; flex-direction: column; gap: 16px;">
 	<img src="/image?path={{.Path}}" alt="Image" loading="lazy" style="width: 100%; border-radius: 4px; border: 1px solid var(--border);">
-	
+	<hr>
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">ID</div>
-		<div>{{.ID}}</div>
+		<div style="word-break: break-all;">{{.ID}}</div>
 	</div>
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Name</div>
@@ -89,19 +100,25 @@
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Path</div>
 		<div style="word-break: break-all; font-family: monospace; font-size: 0.9rem;">{{.Path}}</div>
 	</div>
-	
+	<div>
+		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Size</div>
+		<div style="word-break: break-all;">{{formatSize .Size}}</div>
+	</div>
+	<hr>
 	<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
 		<div class="meta-tag">
 			<span class="material-symbols-outlined">calendar_month</span>
-			{{.Date}}
+			{{formatDate .Date}}
 		</div>
+		{{if .Taken}}
 		<div class="meta-tag">
 			<span class="material-symbols-outlined">photo_camera</span>
 			{{.Taken}}
 		</div>
+		{{end}}
 		<div class="meta-tag">
 			<span class="material-symbols-outlined">hd</span>
-			{{.Resolution}}
+			{{formatRes .Resolution .AspectRatio}}
 		</div>
 		<div class="meta-tag">
 			<span class="material-symbols-outlined">description</span>
@@ -112,9 +129,9 @@
 			{{.Gallery}}
 		</div>
 	</div>
-
-	<button class="btn-primary" style="margin-top: 20px;" hx-get="/gallery/main/duplicates?imageID={{.ID}}" hx-target="#main-content">
-		<span class="material-symbols-outlined">search</span> Ähnliche Bilder finden
+	<hr>
+	<button class="btn-primary" style="margin-top: 20px;" hx-get="/gallery/global/duplicates?imageID={{.ID}}" hx-target="#main-content">
+		<span class="material-symbols-outlined">search</span> Search for similar images
 	</button>
 </div>
 {{end}}

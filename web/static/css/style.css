@@ -23,6 +23,10 @@
 	--info: #9589f3;
 }
 
+* {
+	box-sizing: border-box;
+}
+
 body {
 	background-color: var(--bg-dark);
 	color: var(--text);
@@ -36,6 +40,75 @@ h1, h2, h3, strong {
 	margin: 0;
 }
 
+hr {
+	border: none;
+	border-top: 1px solid var(--border);
+	width: 100%;
+	margin: 16px 0;
+}
+
+/* Dialog */
+dialog {
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 24px;
+	color: var(--text);
+	width: 100%;
+	max-width: 400px;
+	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+
+	opacity: 0;
+	transform: translateY(20px) scale(0.95);
+	transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+				transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+				display 0.4s allow-discrete,
+				overlay 0.4s allow-discrete;
+}
+
+dialog[open] {
+	opacity: 1;
+	transform: translateY(0) scale(1);
+}
+
+@starting-style {
+	dialog[open] {
+		opacity: 0;
+		transform: translateY(20px) scale(0.95);
+	}
+}
+
+dialog::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+	transition: background 0.4s ease,
+				 backdrop-filter 0.4s ease,
+				 display 0.4s allow-discrete,
+				 overlay 0.4s allow-discrete;
+}
+
+dialog[open]::backdrop {
+	background: rgba(0, 0, 0, 0.7);
+	backdrop-filter: blur(4px);
+}
+
+@starting-style {
+	dialog[open]::backdrop {
+		background: rgba(0, 0, 0, 0);
+		backdrop-filter: blur(0px);
+	}
+}
+
+dialog.closing {
+    opacity: 0 !important;
+    transform: translateY(20px) scale(0.95) !important;
+}
+
+dialog.closing::backdrop {
+    background: rgba(0,0,0,0) !important;
+    backdrop-filter: blur(0px) !important;
+}
+
 /* Layout */
 .layout-wrapper {
 	display: flex;
@@ -45,6 +118,7 @@ h1, h2, h3, strong {
 
 .sidebar-left {
 	width: 250px;
+	flex-shrink: 0;
 	background-color: var(--bg);
 	border-right: 1px solid var(--border);
 	padding: 24px;
@@ -162,14 +236,14 @@ h1, h2, h3, strong {
 	background-color: var(--bg-light);
 	border: 1px solid var(--border);
 	overflow: hidden;
-	aspect-ratio: 1 / 1;
 	cursor: pointer;
 	transition: border-color 0.2s;
+	break-inside: avoid;
+	margin-bottom: 16px;
 }
 .image-card img {
 	width: 100%;
-	height: 100%;
-	object-fit: cover;
+	height: auto;
 	display: block;
 }
 .image-card:hover {
@@ -218,9 +292,8 @@ h1, h2, h3, strong {
 }
 
 .gallery-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-	gap: 16px;
+	column-width: 250px;
+	column-gap: 16px;
 }
 
 /* Meta Tags / Chips */
@@ -239,18 +312,17 @@ h1, h2, h3, strong {
 	font-size: 1rem;
 }
 
-/* Dialog */
-dialog {
-	background: var(--bg);
-	border: 1px solid var(--border);
-	border-radius: 8px;
-	padding: 24px;
-	color: var(--text);
-	width: 100%;
-	max-width: 400px;
-	box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
-dialog::backdrop {
-	background: rgba(0,0,0,0.7);
-	backdrop-filter: blur(4px);
+
+@keyframes pulse-skeleton {
+    0% { background-color: var(--bg-light); }
+    50% { background-color: var(--border); }
+    100% { background-color: var(--bg-light); }
+}
+
+.skeleton {
+    animation: pulse-skeleton 1.5s infinite ease-in-out;
 }

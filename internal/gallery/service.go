@@ -6,11 +6,12 @@ package gallery
 import (
 	"acuity/pkg/db"
 	"context"
+	"encoding/base64"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"encoding/base64"
 	"strings"
+
 	"github.com/weaviate/weaviate/entities/models"
 
 	"github.com/h2non/bimg"
@@ -31,9 +32,9 @@ type wService interface {
 	RemoveGalleryImages(ctx context.Context, galleryID int) error
 	RemoveImage(ctx context.Context, image db.Image) error
 	WriteBatchDB(ctx context.Context, batch []*models.Object)
-	SearchImage(ctx context.Context, search string,  galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error)
+	SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error)
 	SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error)
-	FindDublicates(ctx context.Context, imageID int, galleryID int, page int, imagesPerPage int) ([]db.Image, error)
+	FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int) ([]db.Image, error)
 	ChangeGallery(ctx context.Context, newID int, images []db.Image) error
 	CopyToGallery(ctx context.Context, newGalleryID int, images []db.Image) error
 	RemoveImages(ctx context.Context, images []db.Image) error
@@ -46,14 +47,16 @@ type wService interface {
 }
 
 type GalleryService struct {
-	sDB sService
-	wDB wService
+	sDB           sService
+	wDB           wService
+	ExpectedCount map[int]int
 }
 
 func NewService(sDB *db.SQLiteClient, wDB *db.WeaviateClient) *GalleryService {
 	return &GalleryService{
-		sDB: sDB,
-		wDB: wDB,
+		sDB:           sDB,
+		wDB:           wDB,
+		ExpectedCount: make(map[int]int),
 	}
 }
 
@@ -64,11 +67,15 @@ func (g *GalleryService) GetAllGalleries() ([]db.Gallery, error) {
 func (g *GalleryService) getKnownFilePaths(known map[string]struct{}, folderPath string) ([]string, error) {
 	var filePaths []string
 	err := filepath.WalkDir(folderPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 
 		absPath, err := filepath.Abs(path)
-		if err != nil { return err }
-		
+		if err != nil {
+			return err
+		}
+
 		if !d.IsDir() {
 			if _, exists := known[absPath]; !exists {
 				filePaths = append(filePaths, absPath)
@@ -76,56 +83,82 @@ func (g *GalleryService) getKnownFilePaths(known map[string]struct{}, folderPath
 		}
 		return nil
 	})
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	return filePaths, nil
 }
 
 func (g *GalleryService) CreateGallery(ctx context.Context, name string, folderPath string) error {
-	if err := g.sDB.InsertGallery(folderPath, name); err != nil { return err }
-	if err := g.UpdateFolder(ctx, name); err != nil { return err }
+	if err := g.sDB.InsertGallery(folderPath, name); err != nil {
+		return err
+	}
+	if err := g.UpdateFolder(ctx, name); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (g *GalleryService) DeleteGallery(ctx context.Context, id int) error {
-	if err := g.sDB.RemoveGallery(id); err != nil { return err }
-    if err := g.wDB.RemoveGalleryImages(ctx, id); err != nil { return err }
+	if err := g.sDB.RemoveGallery(id); err != nil {
+		return err
+	}
+	if err := g.wDB.RemoveGalleryImages(ctx, id); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 	gallery, err := g.sDB.GetGalleryByName(name)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	known, err := g.wDB.GetKnownPaths(ctx, gallery.ID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
 	filePaths, err := g.getKnownFilePaths(known, gallery.Path)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
+
+	currentCount, _ := g.wDB.GetGalleryCount(ctx, gallery.ID)
+	g.ExpectedCount[gallery.ID] = currentCount + len(filePaths)
 
 	go func() {
-		ctx = context.Background()
-		g.wDB.ImportImages(ctx, filePaths, gallery.ID)
+		g.wDB.ImportImages(context.Background(), filePaths, gallery.ID)
 	}()
 	return nil
 }
 
 func (g *GalleryService) GetGalleryID(name string) (int, error, bool) {
-	if name == "global" { return -1, nil, true }
+	if name == "global" {
+		return -1, nil, true
+	}
 
 	gallery, err := g.sDB.GetGalleryByName(name)
-	if err != nil { return 0, err, false }
+	if err != nil {
+		return 0, err, false
+	}
 
 	return gallery.ID, nil, true
 }
 
 func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error) {
 	gallery, err := g.sDB.GetGalleryByName(name)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	files, err := g.wDB.GetAll(ctx, gallery.ID, sortBy, sortOrder, page, imagesPerPage)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	return files, nil
 }
@@ -145,7 +178,9 @@ func (g *GalleryService) GetAllImages(ctx context.Context, galleryID int, sortBy
 func (g *GalleryService) ConvertImage(file []byte) (string, error) {
 	bimgImg := bimg.NewImage(file)
 	jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 
 	base64Image := base64.StdEncoding.EncodeToString(jpegBuffer)
 
@@ -153,60 +188,76 @@ func (g *GalleryService) ConvertImage(file []byte) (string, error) {
 }
 
 func (g *GalleryService) DeleteImage(ctx context.Context, file db.Image) error {
-	if err := g.wDB.RemoveImage(ctx, file); err != nil { return err }
-	if err := os.Remove(file.Path); err != nil { return err }
-	return nil
-}
-
-func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image) error {
-	if err := g.wDB.RemoveImages(ctx, images); err != nil { return err }
-
-	for _, image := range images {
-		if err := os.Remove(image.Path); err != nil { return err }
+	if err := g.wDB.RemoveImage(ctx, file); err != nil {
+		return err
+	}
+	if err := os.Remove(file.Path); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (g *GalleryService) FindDublicates(ctx context.Context, imageID int, galleryID int, page int, imagesPerPage int) ([]db.Image, error) {
+func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image) error {
+	if err := g.wDB.RemoveImages(ctx, images); err != nil {
+		return err
+	}
+
+	for _, image := range images {
+		if err := os.Remove(image.Path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (g *GalleryService) FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int) ([]db.Image, error) {
 	images, err := g.wDB.FindDublicates(ctx, imageID, galleryID, page, imagesPerPage)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	return images, nil
 }
 
 func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []db.Image) error {
-	if err := g.wDB.ChangeGallery(ctx, newID, images); err != nil { return err }
+	if err := g.wDB.ChangeGallery(ctx, newID, images); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, images []db.Image) error {
-	if err := g.wDB.CopyToGallery(ctx, newID, images); err != nil { return err }
+	if err := g.wDB.CopyToGallery(ctx, newID, images); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[string]any, error) {
 	wInfo, err := g.wDB.GetInfo(ctx, imageID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	/*
-	f, err := os.Open(wInfo.Path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = f.Close()
-	}()
+		f, err := os.Open(wInfo.Path)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			_ = f.Close()
+		}()
 
-	exif.RegisterParsers(mknote.All...)
+		exif.RegisterParsers(mknote.All...)
 
-	x, err := exif.Decode(f)
-	if err != nil {
-		return nil, err
-	}
+		x, err := exif.Decode(f)
+		if err != nil {
+			return nil, err
+		}
 
-	camera, _ := x.Get(exif.Model)
+		camera, _ := x.Get(exif.Model)
 	*/ // INFO: Maybe later
 
 	baseName := filepath.Base(wInfo.Path)
@@ -214,7 +265,7 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[
 		"ID":          wInfo.ID,
 		"Name":        strings.TrimSuffix(baseName, filepath.Ext(baseName)),
 		"Path":        wInfo.Path,
-		"GalleryID":   wInfo.Gallery,
+		"GalleryID":   wInfo.GalleryID,
 		"Rating":      wInfo.Rating,
 		"Time":        wInfo.Taken, // Genutzt von Weaviate
 		"Size":        wInfo.Size,
@@ -222,7 +273,15 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[
 		"AspectRatio": wInfo.AspectRatio,
 		"Extension":   wInfo.Extension,
 		"Date":        wInfo.Date,
+		"Gallery":     "",
 	}
+	gallery := imageInfo["GalleryID"].(int)
+	galleryName, err := g.sDB.GetGalleryByID(gallery)
+	if err != nil {
+		return nil, err
+	}
+	imageInfo["Gallery"] = galleryName.Name
+
 	return imageInfo, nil
 }
 

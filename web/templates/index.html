@@ -15,7 +15,7 @@
 	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false }">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
-				<div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 40px;">
+				<div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px;">
 					<img src="/static/logo.svg" alt="Acuity Logo" style="width: 32px; height: 32px;">
 					<h1 style="color: var(--primary);">Acuity</h1>
 				</div>
@@ -34,23 +34,26 @@
 								</button>
 								<button class="btn-icon" x-show="hovered" x-transition style="position: absolute; right: 8px; color: var(--danger); z-index: 10;"
 										hx-delete="/gallery/{{.Name}}" 
-										hx-confirm="Willst du die Galerie '{{.Name}}' wirklich löschen?"
+										hx-confirm="Do you really want to delete '{{.Name}}'?"
 										hx-target="closest div" 
 										hx-swap="outerHTML">
 									<span class="material-symbols-outlined" style="font-size: 1rem;">delete</span>
 								</button>
 							</div>
 							{{end}}
-							
+
 							<button class="nav-item" @click="$refs.addDialog.showModal()" style="padding: 6px 12px; font-size: 0.9rem; color: var(--primary);">
 								<span class="material-symbols-outlined" style="font-size: 1rem;">add</span> Add Gallery
 							</button>
 						</div>
 					</div>
+					<div style="position: relative; display: flex; align-items: center;" x-data="{ hovered: false }" @mouseenter="hovered = true" @mouseleave="hovered = false">
+						<button class="nav-item" hx-get="/gallery/global/duplicates" hx-target="#main-content" style="margin-top: auto;">
+							<span class="material-symbols-outlined">search</span> Duplicates
+						</button>
+					</div>
+					<div id="sidebar-progress"></div>
 
-					<button class="nav-item" hx-get="/gallery/-1/duplicates" hx-target="gallery" style="margin-top: auto;">
-					</button>
-					<hr>
 					<button class="nav-item" hx-get="/settings" hx-target="#main-content" style="margin-top: auto;">
 						<span class="material-symbols-outlined">settings</span> Settings
 					</button>
@@ -58,16 +61,19 @@
 			</aside>
 
 			<main class="main-area" style="padding: 32px; overflow-y: auto;">
-				<div id="main-content" style="height: 100%;">
-					<div style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+				<div id="main-content" style="min-height: 100%;">
+					<div style="min-height: 100%; display: flex; flex-direction: column; align-items: center; padding-top: 20vh;">
 						<h2 style="font-weight: normal; margin-bottom: 30px; color: var(--text-muted);">Search in your Images</h2>
 						<div style="width: 100%; max-width: 600px;">
-							{{template "search-bar" ""}}
+							{{template "search-bar" "global"}}
 						</div>
+						
+						<!-- Hier landen die Suchergebnisse der Startseite -->
+						<div id="gallery" class="gallery-grid" style="width: 100%; padding-top: 40px; align-self: flex-start;"></div>
 					</div>
 				</div>
 
-				<aside class="sidebar-right" :class="{ 'is-open': showDetailPanel }">
+				<aside class="sidebar-right" :class="{ 'is-open': showDetailPanel }" @click.outside="showDetailPanel = false">
 					<button class="btn-icon" @click="showDetailPanel = false" style="align-self: flex-end; margin-bottom: 20px;">
 						<span class="material-symbols-outlined">close</span>
 					</button>
@@ -79,20 +85,20 @@
 		</div>
 
 		<!-- Natives HTML Dialog -->
-		<dialog x-ref="addDialog" id="addDialog">
+		<dialog x-ref="addDialog" id="addDialog" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">
 			<h3 style="margin-bottom: 20px;">Add a new Gallery</h3>
-			<form id="form-id" method="dialog" hx-post="/gallery" hx-target="#main-content">
+			<form id="form-id" hx-post="/gallery" hx-target="#main-content">
 				<div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
 					<div>
 						<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Gallery Name</label>
-						<input class="input-clean" type="text" name="name" required placeholder="My Gallery">
+						<input class="input-clean" type="text" name="name" required placeholder="Wallpaper">
 					</div>
 					<div class="form-group">
 						<label>Absolute Gallery Path</label>
 
 						<!-- Alpine x-model bindet die Eingabe an unsere Variable 'path' -->
 						<div style="display: flex; gap: 8px;">
-							<input class="input-clean" type="text" name="path" x-model="path" required style="flex-grow: 1;">
+							<input class="input-clean" type="text" name="path" x-model="path" required style="flex-grow: 1;" placeholder="/data/wallpaper">
 
 							<!-- Klick öffnet den Browser und lädt das Root-Verzeichnis via HTMX -->
 							<button type="button" class="btn-icon" @click="showBrowser = true" hx-get="/api/browse?dir=/" hx-target="#file-browser-container">
@@ -101,13 +107,13 @@
 						</div>
 
 						<!-- Hier wird das "file-browser" Template reingeladen, wenn showBrowser = true ist -->
-						<div x-show="showBrowser" id="file-browser-container" style="margin-top: 16px;">
+						<div x-show="showBrowser" id="file-browser-container" style="margin-top: 16px;" @click.outside="showBrowser = false">
 						</div>
 					</div>
 				</div>
 				<div style="display: flex; justify-content: flex-end; gap: 12px;">
-					<button type="button" class="nav-item" style="width: auto;" @click="$refs.addDialog.close()">Cancel</button>
-					<button type="submit" class="btn-primary" @click="$refs.addDialog.close()">Save</button>
+					<button type="button" class="nav-item" style="width: auto;" @click="$refs.addDialog.classList.add('closing'); setTimeout(() => { $refs.addDialog.close(); $refs.addDialog.classList.remove('closing'); }, 300)">Cancel</button>
+					<button type="submit" class="btn-primary" @click="$refs.addDialog.classList.add('closing'); setTimeout(() => { $refs.addDialog.close(); $refs.addDialog.classList.remove('closing'); }, 300)">Save</button>
 				</div>
 			</form>
 		</dialog>

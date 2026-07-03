@@ -3,29 +3,29 @@
 package web
 
 import (
-	"acuity/internal/gallery"
+	"acuity"
 	"acuity/internal/config"
+	"acuity/internal/gallery"
 	"acuity/pkg/db"
+	"fmt"
 	"html/template"
-	"net/http"
-	"strings"
 	"io"
-	"os"
 	"io/fs"
 	"log/slog"
-	"strconv"
-	"fmt"
-	"acuity"
+	"net/http"
+	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/mallardduck/go-http-helpers/pkg/query"
 	_ "github.com/weaviate/weaviate/entities/models"
 )
 
 type Server struct {
-	Service		*gallery.GalleryService
-	Template 	*template.Template
-	Config 		*config.Config
+	Service  *gallery.GalleryService
+	Template *template.Template
+	Config   *config.Config
 }
 
 type SearchResult struct {
@@ -37,9 +37,9 @@ type SearchResult struct {
 func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config *config.Config, tmpl *template.Template) *Server {
 	service := gallery.NewService(sdatabase, wdatabase)
 	return &Server{
-		Service:	service,
-		Template:	tmpl,
-		Config:		config,
+		Service:  service,
+		Template: tmpl,
+		Config:   config,
 	}
 }
 
@@ -55,12 +55,14 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /image/{id}", s.deleteFile)
 	mux.HandleFunc("GET	/image/{id}", s.getInfo)
 	mux.HandleFunc("POST	/image/{id}", s.setRating)
-// TODO: Delete multiple images from selection
+	// TODO: Delete multiple images from selection
 	mux.HandleFunc("GET	/gallery/{name}/duplicates", s.handleDuplicates)
 	mux.HandleFunc("GET	/gallery/{name}/search", s.handleTextSearch)
 	mux.HandleFunc("POST	/gallery/{name}/search/image", s.handleImageSearch)
 	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
 	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
+	mux.HandleFunc("GET	/gallery/{name}/images", s.getGalleryImages)
+	mux.HandleFunc("GET /gallery/{name}/progress", s.getProgress)
 	mux.HandleFunc("POST	/gallery", s.createGallery)
 	mux.HandleFunc("DELETE /gallery/{name}", s.deleteGallery)
 	mux.HandleFunc("POST	/gallery/move", s.changeGallery)
@@ -90,7 +92,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
-	dir := query.String(r, "dir", "")
+	dir := query.String(r, "dir", "/dir")
 	if dir == "" {
 		dir = "/"
 	}
@@ -116,13 +118,13 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		CurrentDir	string
-		ParentDir	string
-		Folders		[]string
+		CurrentDir string
+		ParentDir  string
+		Folders    []string
 	}{
 		CurrentDir: dir,
-		ParentDir: parentDir,
-		Folders: folders,
+		ParentDir:  parentDir,
+		Folders:    folders,
 	}
 
 	s.Template.ExecuteTemplate(w, "file-browser", data)
@@ -192,11 +194,52 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 	}
 	count, _ := s.Service.GetGalleryCount(ctx, id)
 
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusOK)
+
 	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{images, count, name}); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
+	}
+	return
+}
+
+func (s *Server) getProgress(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	name := r.PathValue("name")
+	galleryID, err, ok := s.Service.GetGalleryID(name)
+	if err != nil && !ok {
+		message := "Failed to get Gallery ID"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+
+	expected := s.Service.ExpectedCount[galleryID]
+	current, _ := s.Service.GetGalleryCount(ctx, galleryID)
+
+	if expected > 0 && current < expected {
+		data := struct {
+			GalleryName string
+			Current     int
+			Expected    int
+			Percent     int
+		}{
+			GalleryName: name,
+			Current:     current,
+			Expected:    expected,
+			Percent:     int(float64(current) / float64(expected) * 100),
+		}
+		if current > 0 {
+			w.Header().Set("HX-Trigger", "refresh-images")
+		}
+		s.Template.ExecuteTemplate(w, "progress.html", data)
+	} else {
+		w.Header().Set("HX-Trigger", "refresh-images")
+		w.Write([]byte(``))
 	}
 }
 
@@ -217,7 +260,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	name := r.PathValue("name")
-	delete := query.Bool(r, "deleteGallery", false)
+	deleteGallery := query.Bool(r, "deleteGallery", false)
 
 	id, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
@@ -232,7 +275,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	if delete {
+	if deleteGallery {
 		files, err := s.Service.GetGalleryFiles(ctx, name, "", "", -1, 10_000)
 		if err != nil {
 			message := "Failed to get Files in Gallery"
@@ -247,21 +290,22 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	w.Header().Set("HX-Redirect", "/")
 }
 
 func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	imageID, err := strconv.Atoi(r.FormValue("imageID"))
-	if err != nil {
+	imageID := r.FormValue("imageID")
+	if imageID == "" {
 		message := "Failed to get Image ID"
-		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusBadRequest)
 		return
 	}
 
 	name := r.PathValue("name")
-	page := query.Int(r, "page", 0)
+	page := query.Int(r, "page", 1)
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
@@ -278,8 +322,19 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	
-	err = s.Template.ExecuteTemplate(w, "result.html", images)
+
+	data := map[string]any{
+		"Images":      images,
+		"Query":       imageID,
+		"Page":        page,
+		"PrevPage":    page - 1,
+		"NextPage":    page + 1,
+		"HasNext":     len(images) == s.Config.ImagesPerPage,
+		"GalleryName": name,
+		"SearchType":  "duplicate",
+	}
+
+	err = s.Template.ExecuteTemplate(w, "search-results.html", data)
 	if err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
@@ -332,11 +387,7 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// NOTE: strconv.ParseInt für mehr als base 10
 	name := r.PathValue("name")
-	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
-	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
-	page := query.Int(r, "page", 0)
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
@@ -346,13 +397,6 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
-	if err != nil {
-		message := "Images not found"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusNotFound)
-		return
-	}
 	count, err := s.Service.GetGalleryCount(ctx, galleryID)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get count of images in Gallery: %d", galleryID)
@@ -361,12 +405,37 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{images, count, name}); err != nil {
+	// Bilder werden auf "nil" gesetzt, da sie erst später lazy geladen werden!
+	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{nil, count, name}); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+
+	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
+	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
+	page := query.Int(r, "page", 0)
+
+	galleryID, err, ok := s.Service.GetGalleryID(name)
+	if err != nil && !ok {
+		http.Error(w, "Failed to get Gallery ID", http.StatusInternalServerError)
+		return
+	}
+
+	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
+	if err != nil {
+		http.Error(w, "Images not found", http.StatusNotFound)
+		return
+	}
+
+	// Rendert nur die Bilder-Kacheln aus dem neuen Template
+	s.Template.ExecuteTemplate(w, "gallery-images.html", images)
 }
 
 func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
@@ -443,8 +512,8 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 	search := query.String(r, "q", "")
 	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
 	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
-	page := query.Int(r, "page", 0)
-	//options := query.Strings(r, "op")
+	page := query.Int(r, "page", 1)
+	// options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
 	galleryID, err, ok := s.Service.GetGalleryID(name)
@@ -463,7 +532,18 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Template.ExecuteTemplate(w, "result.html", images); err != nil {
+	data := map[string]any{
+		"Images":      images,
+		"Query":       search,
+		"Page":        page,
+		"PrevPage":    page - 1,
+		"NextPage":    page + 1,
+		"HasNext":     len(images) == s.Config.ImagesPerPage,
+		"GalleryName": name,
+		"SearchType":  "text",
+	}
+
+	if err := s.Template.ExecuteTemplate(w, "search-results.html", data); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -477,7 +557,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
 	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
 	page := query.Int(r, "page", 0)
-	//options := query.Strings(r, "op")
+	// options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
 	galleryID, err, ok := s.Service.GetGalleryID(name)
@@ -487,7 +567,7 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -570,9 +650,9 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	imageID := r.FormValue("id");
+	imageID := r.PathValue("id")
 
-	ratingString := r.FormValue("rating");
+	ratingString := r.FormValue("rating")
 	rating, err := strconv.Atoi(ratingString)
 	if err != nil {
 		message := "Failed to get Image rating"

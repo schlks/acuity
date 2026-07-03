@@ -4,5 +4,6 @@
   "default_sort_order": "desc",
   "images_per_page": 100,
   "port": "3000",
-  "weaviate_host": "localhost:50050"
+  "weaviate_host": "localhost",
+  "weaviate_port": "50050"
 }
