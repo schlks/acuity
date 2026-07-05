@@ -70,7 +70,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET	/api/browse", s.browseFiles)
 }
 
-func (s *Server) handleRoot(w http.ResponseWriter) {
+func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	galleries, err := s.Service.GetAllGalleries()
 	if err != nil {
 		slog.Error("Failed to load galleries", slog.Any("error", err))
@@ -135,7 +135,7 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) getSettings(w http.ResponseWriter) {
+func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
 	err := s.Template.ExecuteTemplate(w, "settings.html", s.Config)
 	if err != nil {
 		message := "Index cannot be loaded"
