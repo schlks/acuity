@@ -70,7 +70,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET	/api/browse", s.browseFiles)
 }
 
-func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRoot(w http.ResponseWriter) {
 	galleries, err := s.Service.GetAllGalleries()
 	if err != nil {
 		slog.Error("Failed to load galleries", slog.Any("error", err))
@@ -135,7 +135,7 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getSettings(w http.ResponseWriter) {
 	err := s.Template.ExecuteTemplate(w, "settings.html", s.Config)
 	if err != nil {
 		message := "Index cannot be loaded"
@@ -366,7 +366,7 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	image.Path = r.FormValue("path")
 
 	deleteDiskStr := r.FormValue("delete_disk")
-	deleteDisk := (deleteDiskStr == "true")
+	deleteDisk := deleteDiskStr == "true"
 
 	if err := s.Service.DeleteImage(ctx, image, deleteDisk); err != nil {
 		message := "Failed to delete File"
@@ -394,7 +394,7 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deleteDiskStr := r.FormValue("delete_disk")
-	deleteDisk := (deleteDiskStr == "true")
+	deleteDisk := deleteDiskStr == "true"
 
 	var images []db.Image
 	for _, id := range imageIDs {
