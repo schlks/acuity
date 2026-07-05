@@ -334,7 +334,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 					gallery = fmt.Sprintf("%.0f", val)
 				}
 				if val, ok := imgProps["image"].(string); ok {
-					image = val
+					_ = val
 				}
 
 				var distance float64
@@ -382,7 +382,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 				images = append(images, Image{
 					ID:          id,
 					Path:        filePath,
-					Base64:      base64,
+					Base64:      image,
 					GalleryID:   gallery,
 					Distance:    distance,
 					Rating:      rating,
