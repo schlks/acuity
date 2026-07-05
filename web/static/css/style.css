@@ -33,6 +33,7 @@ body {
 	margin: 0;
 	font-family: 'Elms Sans', system-ui, sans-serif;
 	font-weight: 400;
+	overflow-x: hidden;
 }
 
 h1, h2, h3, strong {
@@ -114,6 +115,7 @@ dialog.closing::backdrop {
 	display: flex;
 	height: 100vh;
 	overflow: hidden;
+	position: relative;
 }
 
 .sidebar-left {
@@ -169,24 +171,24 @@ dialog.closing::backdrop {
 	transition: background-color 0.2s, color 0.2s;
 }
 .nav-item:hover {
-	background-color: var(--bg-hover);
 	color: var(--text);
+    box-shadow: 0 0 15px rgba(64, 124, 245, 0.3);
 }
 .nav-item.active {
-	background-color: color-mix(in srgb, var(--primary) 15%, transparent);
+	background-color: color-mix(in srgb, var(--primary-hover) 20%, transparent);
 	color: var(--text);
 }
 
 .btn-primary {
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    transition: all 0.2s;
 	background: var(--primary);
-	color: white;
-	border-radius: 6px;
-	padding: 10px 16px;
-	border: none;
 	font-family: inherit;
 	font-weight: 600;
-	cursor: pointer;
-	transition: all 0.2s;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -198,17 +200,17 @@ dialog.closing::backdrop {
 }
 
 .btn-icon {
-	background: transparent;
 	border: none;
 	color: var(--text-muted);
 	cursor: pointer;
 	padding: 6px;
 	border-radius: 6px;
 	transition: all 0.2s;
+    background: transparent;
 }
 .btn-icon:hover {
 	color: var(--text);
-	background: var(--bg-light);
+    box-shadow: 0 0 15px rgba(64, 124, 245, 0.3);
 }
 
 /* Inputs */
@@ -234,7 +236,7 @@ dialog.closing::backdrop {
 	position: relative;
 	border-radius: 6px;
 	background-color: var(--bg-light);
-	border: 1px solid var(--border);
+	border: 3px solid var(--border);
 	overflow: hidden;
 	cursor: pointer;
 	transition: border-color 0.2s;
@@ -247,16 +249,14 @@ dialog.closing::backdrop {
 	display: block;
 }
 .image-card:hover {
-	border-color: var(--border-hover);
+	border-color: var(--primary-hover);
+    box-shadow: 0 0 30px rgba(64, 124, 245, 0.3);
 }
 .image-card:hover img {
 	opacity: 0.9;
 }
 .image-card.selected {
-	outline: 3px solid var(--primary);
-	outline-offset: -3px;
-	border-color: transparent;
-	transform: scale(0.98);
+    border-color: var(--primary-hover);
 }
 .image-card .select-btn {
 	opacity: 0;

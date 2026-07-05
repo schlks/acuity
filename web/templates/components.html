@@ -87,7 +87,7 @@
 			<span class="material-symbols-outlined">tune</span>
 		</button>
 
-		<div x-show="open" @click.outside="open = false" class="dropdown-menu" style="position: absolute; top: 100%; right: 0; background: var(--bg-surface); padding: 16px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 10px 20px rgba(0,0,0,0.2); width: 200px; z-index: 100; margin-top: 8px;">
+		<div x-show="open" @click.outside="open = false" class="dropdown-menu" style="position: absolute; top: 100%; right: 0; background: var(--bg-light); padding: 16px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 10px 20px rgba(0,0,0,0.2); width: 200px; z-index: 100; margin-top: 8px;">
 			<form id="search-options-form" @change="htmx.trigger(document.querySelector('input[name=\'q\']'), 'keyup', {key: 'Enter'})">
 				<div style="margin-bottom: 12px;">
 					<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Sortieren nach</div>
@@ -121,8 +121,7 @@
 	@click.stop="showDetailPanel = true"
 	hx-get="/image/{{.ID}}"
 	hx-target="#info-container"
-	:class="selectedImages.includes('{{.ID}}') ? 'selected' : ''"
-	>
+	:class="selectedImages.includes('{{.ID}}') ? 'selected' : ''">
 
 	<img src="/image?path={{.Path}}" alt="Gallery Image" loading="lazy">
 	

@@ -90,9 +90,9 @@ make up
 
 - [ ] Image carousel
 - [ ] Keybindings
-- [ ] Search sorting options
+- [x] Search sorting options
 - [ ] Edit Gallery
 - [x] Multiple image selection
 - [ ] Drop image in Searchbar
 - [x] Delete image/selection
-- [ ] Image rating
+- [x] Image rating

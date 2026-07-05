@@ -15,10 +15,10 @@
 	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
-				<div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px;">
+				<a href="/" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; text-decoration: none; cursor: pointer;">
 					<img src="/static/logo.svg" alt="Acuity Logo" style="width: 32px; height: 32px;">
 					<h1 style="color: var(--primary);">Acuity</h1>
-				</div>
+				</a>
 				<hr>
 				<nav style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1;">
 					<div x-data="{ open: true }">

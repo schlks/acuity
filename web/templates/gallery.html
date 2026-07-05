@@ -18,21 +18,21 @@
 			
 			<!-- Custom Toggle für Festplatten-Löschen -->
 			<button class="btn-icon" 
-				:style="deleteFromDisk ? 'background: var(--danger); color: white; border: 1px solid var(--danger);' : 'background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-muted);'" 
+				:style="deleteFromDisk ? 'background: var(--danger); color: white; border: 1px solid var(--danger);' : 'background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-muted);'"
 				@click="deleteFromDisk = !deleteFromDisk" 
 				style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px;
-				padding: 6px;
-				border-radius: 12px; font-size: 0.85rem; white-space: nowrap; width: 32px; height: 32px;"
+				padding: 6px; font-size: 0.85rem; white-space: nowrap; width: 32px; height: 32px;"
 				title="Also delete from disk">
-				<span class="material-symbols-outlined" style="font-size: 1.1rem;">hard_drive</span>
+				<span class="material-symbols-outlined" style="font-size: 1.2rem;">hard_drive</span>
 			</button>
 
-			<button class="btn-primary" style="background: var(--danger); border-color: #var(--danger); display: flex;
-			align-items:
-			center; justify-content: center; border-radius: 12px; padding: 6px; width: 32px; height: 32px;"
+			<button class="btn-primary" style="background: var(--danger); border: 1px solid var(--danger); display:
+			flex;
+			align-items: center; justify-content: center; font-size: 0.85rem; padding: 6px; width:
+			32px; height: 32px;"
 				hx-delete="/images"
 				hx-vals='js:{"image_id": selectedImages.join(","), "delete_disk": deleteFromDisk}'
-				hx-confirm="Wirklich löschen?"
+				hx-confirm="Are you sure you want to delete these images?"
 				@click="setTimeout(() => selectedImages = [], 100)"
 				title="Delete Selection">
 				<span class="material-symbols-outlined" style="font-size: 1.2rem; margin: 0;">delete</span>

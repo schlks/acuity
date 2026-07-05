@@ -31,8 +31,8 @@ services:
       ENABLE_CUDA: '0'
 
   acuity:
-    #image: codeberg.org/shlks/acuity:latest
-    #pull_policy: always
+    # image: codeberg.org/shlks/acuity:latest
+    # pull_policy: always
     build:
       context: .
       pull: true
