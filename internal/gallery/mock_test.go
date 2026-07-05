@@ -25,11 +25,6 @@ type MocksService struct {
 	isgomock struct{}
 }
 
-func (m *MocksService) GetAllGalleries() ([]db.Gallery, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
 // MocksServiceMockRecorder is the mock recorder for MocksService.
 type MocksServiceMockRecorder struct {
 	mock *MocksService
@@ -45,6 +40,21 @@ func NewMocksService(ctrl *gomock.Controller) *MocksService {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocksService) EXPECT() *MocksServiceMockRecorder {
 	return m.recorder
+}
+
+// GetAllGalleries mocks base method.
+func (m *MocksService) GetAllGalleries() ([]db.Gallery, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllGalleries")
+	ret0, _ := ret[0].([]db.Gallery)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllGalleries indicates an expected call of GetAllGalleries.
+func (mr *MocksServiceMockRecorder) GetAllGalleries() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllGalleries", reflect.TypeOf((*MocksService)(nil).GetAllGalleries))
 }
 
 // GetGalleryByID mocks base method.
@@ -172,7 +182,7 @@ func (mr *MockwServiceMockRecorder) CopyToGallery(ctx, newGalleryID, images any)
 }
 
 // FindDublicates mocks base method.
-func (m *MockwService) FindDublicates(ctx context.Context, imageID, galleryID, page, imagesPerPage int) ([]db.Image, error) {
+func (m *MockwService) FindDublicates(ctx context.Context, imageID string, galleryID, page, imagesPerPage int) ([]db.Image, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindDublicates", ctx, imageID, galleryID, page, imagesPerPage)
 	ret0, _ := ret[0].([]db.Image)
@@ -356,6 +366,12 @@ func (m *MockwService) SetRating(ctx context.Context, imageID string, rating int
 func (mr *MockwServiceMockRecorder) SetRating(ctx, imageID, rating any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRating", reflect.TypeOf((*MockwService)(nil).SetRating), ctx, imageID, rating)
+}
+
+// UpdateGallery indicates an expected call of UpdateGallery.
+func (mr *MockwServiceMockRecorder) UpdateGallery(ctx, gallerID, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGallery", reflect.TypeOf((*MockwService)(nil).UpdateGallery), ctx, gallerID, name)
 }
 
 // WriteBatchDB mocks base method.

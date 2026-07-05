@@ -63,6 +63,17 @@ func (s *SQLiteClient) RemoveGallery(id int) error {
 	return nil
 }
 
+func (s *SQLiteClient) UpdateGallery(id int, name string) error {
+	query := "UPDATE  galleries SET name = ? WHERE id = ?;"
+
+	_, err := s.DB.Exec(query, name, id)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *SQLiteClient) GetGalleryByName(name string) (Gallery, error) {
 	query := "SELECT id, name, path FROM galleries WHERE name = ?;"
 

@@ -7,8 +7,11 @@
 <div style="margin-bottom: 32px; display: flex; flex-direction: column; gap: 4px;">
 	<div style="display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; overflow-x: visible;">
 		<h2 style="margin: 0; color: var(--text); font-size: 1.8rem; white-space: nowrap;">{{index . 2}}</h2>
-		<button class="btn-icon" hx-post="/gallery/{{index . 2}}/scan" title="Rescan Gallery" style="flex-shrink: 0;">
-			<span class="material-symbols-outlined">refresh</span>
+		<button class="btn-icon" @click="$refs.editGalleryDialog.showModal()" title="Edit Gallery" style="flex-shrink: 0;">
+			<span class="material-symbols-outlined">edit</span>
+		</button>
+		<button class="btn-icon" hx-post="/gallery/{{index . 2}}/scan" hx-swap="none" title="Rescan Gallery" style="flex-shrink: 0;" x-data="{ spinning: false }" @click="spinning = true; setTimeout(() => spinning = false, 1500)">
+			<span class="material-symbols-outlined" :class="spinning ? 'spin' : ''">refresh</span>
 		</button>
 		
 		<!-- Selection Actions im Header -->
@@ -20,16 +23,13 @@
 			<button class="btn-icon" 
 				:style="deleteFromDisk ? 'background: var(--danger); color: white; border: 1px solid var(--danger);' : 'background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-muted);'"
 				@click="deleteFromDisk = !deleteFromDisk" 
-				style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px;
-				padding: 6px; font-size: 0.85rem; white-space: nowrap; width: 32px; height: 32px;"
+				style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box; padding: 0;"
 				title="Also delete from disk">
 				<span class="material-symbols-outlined" style="font-size: 1.2rem;">hard_drive</span>
 			</button>
 
-			<button class="btn-primary" style="background: var(--danger); border: 1px solid var(--danger); display:
-			flex;
-			align-items: center; justify-content: center; font-size: 0.85rem; padding: 6px; width:
-			32px; height: 32px;"
+			<button class="btn-primary" 
+				style="background: var(--danger); border: 1px solid var(--danger); display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box; padding: 0;"
 				hx-delete="/images"
 				hx-vals='js:{"image_id": selectedImages.join(","), "delete_disk": deleteFromDisk}'
 				hx-confirm="Are you sure you want to delete these images?"
@@ -38,7 +38,7 @@
 				<span class="material-symbols-outlined" style="font-size: 1.2rem; margin: 0;">delete</span>
 			</button>
 			
-			<button class="btn-icon" @click="selectedImages = []" title="Auswahl aufheben" style="background: var(--bg-hover); display: flex; align-items: center; justify-content: center; border-radius: 50%; padding: 4px;">
+			<button class="btn-icon" @click="selectedImages = []" title="Clear selection" style="background: var(--bg-hover); display: flex; align-items: center; justify-content: center; border-radius: 50%; padding: 4px;">
 				<span class="material-symbols-outlined">close</span>
 			</button>
 		</div>
@@ -50,17 +50,34 @@
 </div>
 
 
-<div id="gallery-container" hx-get="/gallery/{{index . 2}}/images?page=1" hx-trigger="load, refresh-images from:body">
-	<div class="gallery-grid">
-		<div class="image-card skeleton" style="height: 250px; border: none;"></div>
-		<div class="image-card skeleton" style="height: 320px; border: none;"></div>
-		<div class="image-card skeleton" style="height: 200px; border: none;"></div>
-		<div class="image-card skeleton" style="height: 400px; border: none;"></div>
-		<div class="image-card skeleton" style="height: 280px; border: none;"></div>
-		<div class="image-card skeleton" style="height: 220px; border: none;"></div>
-		<div class="image-card skeleton" style="height: 350px; border: none;"></div>
-		<div class="image-card skeleton" style="height: 290px; border: none;"></div>
+<div id="gallery-container" hx-get="/gallery/{{index . 2}}/images?page=1" hx-include="#search-options-form" hx-trigger="load, refresh-images from:body">
+	<div class="gallery-grid {{(getConfig).GridSize}}">
+		<div class="image-card skeleton" style="border: none; flex-grow: 1.5; flex-basis: calc(var(--grid-base, 250px) * 1.5);"></div>
+		<div class="image-card skeleton" style="border: none; flex-grow: 0.8; flex-basis: calc(var(--grid-base, 250px) * 0.8);"></div>
+		<div class="image-card skeleton" style="border: none; flex-grow: 1.2; flex-basis: calc(var(--grid-base, 250px) * 1.2);"></div>
+		<div class="image-card skeleton" style="border: none; flex-grow: 1.0; flex-basis: calc(var(--grid-base, 250px) * 1.0);"></div>
+		<div class="image-card skeleton" style="border: none; flex-grow: 0.6; flex-basis: calc(var(--grid-base, 250px) * 0.6);"></div>
+		<div class="image-card skeleton" style="border: none; flex-grow: 2.0; flex-basis: calc(var(--grid-base, 250px) * 2.0);"></div>
+		<div class="image-card skeleton" style="border: none; flex-grow: 1.1; flex-basis: calc(var(--grid-base, 250px) * 1.1);"></div>
+		<div class="image-card skeleton" style="border: none; flex-grow: 0.9; flex-basis: calc(var(--grid-base, 250px) * 0.9);"></div>
 	</div>
 </div>
 
-<span hx-get="/gallery/{{index . 2}}/progress" hx-trigger="load" hx-target="#sidebar-progress" hx-swap="innerHTML"></span>
+<span hx-get="/gallery/{{index . 2}}/progress" hx-trigger="load, check-progress from:body" hx-target="#sidebar-progress" hx-swap="innerHTML"></span>
+
+<!-- Edit Gallery Dialog -->
+<dialog x-ref="editGalleryDialog" id="editGalleryDialog" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">
+	<h3 style="margin-bottom: 20px;">Edit Gallery Name</h3>
+	<form hx-post="/gallery/{{index . 2}}/edit" hx-target="#main-content">
+		<div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+			<div>
+				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Gallery Name</label>
+				<input class="input-clean" type="text" name="name" required value="{{index . 2}}">
+			</div>
+		</div>
+		<div style="display: flex; justify-content: flex-end; gap: 12px;">
+			<button type="button" class="nav-item" style="width: auto;" @click="$refs.editGalleryDialog.classList.add('closing'); setTimeout(() => { $refs.editGalleryDialog.close(); $refs.editGalleryDialog.classList.remove('closing'); }, 300)">Cancel</button>
+			<button type="submit" class="btn-primary" @click="$refs.editGalleryDialog.classList.add('closing'); setTimeout(() => { $refs.editGalleryDialog.close(); $refs.editGalleryDialog.classList.remove('closing'); }, 300)">Save</button>
+		</div>
+	</form>
+</dialog>

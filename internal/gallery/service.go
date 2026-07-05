@@ -26,6 +26,7 @@ type sService interface {
 	GetGalleryByName(name string) (db.Gallery, error)
 	GetGalleryByID(id int) (db.Gallery, error)
 	GetAllGalleries() ([]db.Gallery, error)
+	UpdateGallery(id int, name string) error
 }
 
 type wService interface {
@@ -316,4 +317,8 @@ func (g *GalleryService) GetGalleryCount(ctx context.Context, galleryID int) (in
 
 func (g *GalleryService) SetRating(ctx context.Context, imageID string, rating int) error {
 	return g.wDB.SetRating(ctx, imageID, rating)
+}
+
+func (g *GalleryService) EditGalleryName(id int, newName string) error {
+	return g.sDB.UpdateGallery(id, newName)
 }

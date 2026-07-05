@@ -55,11 +55,12 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /image/{id}", s.deleteFile)
 	mux.HandleFunc("GET	/image/{id}", s.getInfo)
 	mux.HandleFunc("POST	/image/{id}", s.setRating)
-	// TODO: Delete multiple images from selection
+	mux.HandleFunc("DELETE /images", s.deleteFiles)
 	mux.HandleFunc("GET	/gallery/{name}/duplicates", s.handleDuplicates)
 	mux.HandleFunc("GET	/gallery/{name}/search", s.handleTextSearch)
 	mux.HandleFunc("POST	/gallery/{name}/search/image", s.handleImageSearch)
 	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
+	mux.HandleFunc("POST /gallery/{name}/edit", s.editGallery)
 	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
 	mux.HandleFunc("GET	/gallery/{name}/images", s.getGalleryImages)
 	mux.HandleFunc("GET /gallery/{name}/progress", s.getProgress)
@@ -78,8 +79,10 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 
 	data := struct {
 		Galleries []db.Gallery
+		Config    *config.Config
 	}{
 		Galleries: galleries,
+		Config:    s.Config,
 	}
 
 	err = s.Template.ExecuteTemplate(w, "index.html", data)
@@ -156,6 +159,38 @@ func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Config.DefaultSortBy = r.FormValue("sort_by")
 	s.Config.DefaultSortOrder = r.FormValue("sort_order")
+	s.Config.GridSize = r.FormValue("grid_size")
+
+	if err := config.Save(s.Config); err != nil {
+		slog.Error("Failed to save config", slog.Any("error", err))
+	}
+
+	w.Header().Set("HX-Trigger", "refresh-images")
+	w.WriteHeader(http.StatusOK)
+
+	// Return an Out-Of-Band update for the search-options-form so the UI reflects the new defaults without a full reload
+	formTmpl := `
+	<form id="search-options-form" hx-swap-oob="true" @change="let q = document.querySelector('input[name=\'q\']'); if(q && q.value.trim()){ htmx.trigger(q, 'keyup', {key: 'Enter'}); } else { htmx.trigger(document.body, 'refresh-images'); }">
+		<div style="margin-bottom: 12px;">
+			<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Sort by</div>
+			<select name="sortBy" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
+				<option value="name" {{if eq .DefaultSortBy "name"}}selected{{end}}>Name</option>
+				<option value="date" {{if eq .DefaultSortBy "date"}}selected{{end}}>Date</option>
+				<option value="size" {{if eq .DefaultSortBy "size"}}selected{{end}}>Size</option>
+				<option value="rating" {{if eq .DefaultSortBy "rating"}}selected{{end}}>Rating</option>
+			</select>
+		</div>
+		<div>
+			<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Order</div>
+			<select name="sortOrder" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
+				<option value="desc" {{if eq .DefaultSortOrder "desc"}}selected{{end}}>Descending</option>
+				<option value="asc" {{if eq .DefaultSortOrder "asc"}}selected{{end}}>Ascending</option>
+			</select>
+		</div>
+	</form>`
+
+	t := template.Must(template.New("form").Parse(formTmpl))
+	t.Execute(w, s.Config)
 }
 
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +244,29 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	return
+}
+
+func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
+	oldName := r.PathValue("name")
+	newName := r.FormValue("name")
+
+	id, err, ok := s.Service.GetGalleryID(oldName)
+	if err != nil && !ok {
+		message := "Failed to get Gallery ID"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+	if ok {
+		if err := s.Service.EditGalleryName(id, newName); err != nil {
+			message := "Failed to update Gallery"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("HX-Redirect", "/gallery/"+newName)
 }
 
 func (s *Server) getProgress(w http.ResponseWriter, r *http.Request) {
@@ -266,6 +324,9 @@ func (s *Server) scanGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("HX-Trigger", "check-progress")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
@@ -335,14 +396,19 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	queryImage, _ := s.Service.GetImageInfo(ctx, imageID)
+	returnTo := query.String(r, "returnTo", name)
+
 	data := map[string]any{
 		"Images":      images,
+		"QueryImage":  queryImage,
 		"Query":       imageID,
 		"Page":        page,
 		"PrevPage":    page - 1,
 		"NextPage":    page + 1,
 		"HasNext":     len(images) == s.Config.ImagesPerPage,
 		"GalleryName": name,
+		"ReturnTo":    returnTo,
 		"SearchType":  "duplicate",
 	}
 
@@ -446,9 +512,21 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
-	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
-	page := query.Int(r, "page", 0)
+	sortBy := r.URL.Query().Get("sortBy")
+	if sortBy == "" {
+		sortBy = s.Config.DefaultSortBy
+	}
+
+	sortOrder := r.URL.Query().Get("sortOrder")
+	if sortOrder == "" {
+		sortOrder = s.Config.DefaultSortOrder
+	}
+
+	pageStr := r.URL.Query().Get("page")
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
@@ -456,7 +534,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page, s.Config.ImagesPerPage)
+	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
 	if err != nil {
 		http.Error(w, "Images not found", http.StatusNotFound)
 		return
@@ -467,6 +545,15 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		nextPage = page + 1
 	}
 
+	count, _ := s.Service.GetGalleryCount(ctx, galleryID)
+	lastPage := count / s.Config.ImagesPerPage
+	if count%s.Config.ImagesPerPage != 0 {
+		lastPage++
+	}
+	if lastPage == 0 {
+		lastPage = 1
+	}
+
 	data := struct {
 		GalleryName string
 		Images      []db.Image
@@ -474,6 +561,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		PrevPage    int
 		NextPage    int
 		HasNext     bool
+		LastPage    int
 	}{
 		GalleryName: name,
 		Images:      images,
@@ -481,6 +569,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		PrevPage:    page - 1,
 		NextPage:    nextPage,
 		HasNext:     nextPage != -1,
+		LastPage:    lastPage,
 	}
 
 	// Rendert nur die Bilder-Kacheln aus dem neuen Template
@@ -584,6 +673,8 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	returnTo := query.String(r, "returnTo", name)
+
 	data := map[string]any{
 		"Images":      images,
 		"Query":       search,
@@ -592,6 +683,7 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 		"NextPage":    page + 1,
 		"HasNext":     len(images) == s.Config.ImagesPerPage,
 		"GalleryName": name,
+		"ReturnTo":    returnTo,
 		"SearchType":  "text",
 	}
 

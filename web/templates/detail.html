@@ -35,20 +35,20 @@
     }
 </style>
 
-<img src="/image?path={{ .Filepath }}" class="detail-image" alt="Detailansicht">
+<img src="/image?path={{ .Filepath }}" class="detail-image" alt="Detail view">
 
 <div class="meta-block">
-    <span class="meta-label">Absoluter Pfad</span>
+    <span class="meta-label">Absolute path</span>
     {{ .Filepath }}
 </div>
 
 <div class="meta-block">
-    <span class="meta-label">Vektor-Distanz zur Suche</span>
+    <span class="meta-label">Vector distance to search</span>
     {{ printf "%.4f" .Distance }}
 </div>
 
 <button class="action-btn" 
         hx-get="/search-similar?path={{ .Filepath }}" 
         hx-target="#gallery">
-    Ähnliche Bilder finden
+    Find similar images
 </button>

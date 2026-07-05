@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	//"context"
@@ -68,6 +69,11 @@ func formatDate(dateStr string) string {
 	return t.Format("02. Jan 2006, 15:04")
 }
 
+func formatExt(ext string) string {
+	cleanExt := strings.TrimPrefix(ext, ".")
+	return strings.ToUpper(cleanExt)
+}
+
 func main() {
 	Config, err := config.Load()
 	if err != nil {
@@ -102,6 +108,8 @@ func main() {
 		"formatSize": formatSize,
 		"formatRes":  formatResolution,
 		"formatDate": formatDate,
+		"formatExt":  formatExt,
+		"getConfig":  func() *config.Config { return Config },
 	}
 
 	templates := template.Must(template.New("").Funcs(funcMap).ParseFS(acuity.WebFS, "web/templates/*.html"))

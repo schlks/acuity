@@ -42,7 +42,7 @@
 							</div>
 							{{end}}
 
-							<button class="nav-item" @click="$refs.addDialog.showModal()" style="padding: 6px 12px; font-size: 0.9rem; color: var(--primary);">
+							<button class="nav-item" @click="document.getElementById('addDialog').showModal()" style="padding: 6px 12px; font-size: 0.9rem; color: var(--primary);">
 								<span class="material-symbols-outlined" style="font-size: 1rem;">add</span> Add Gallery
 							</button>
 						</div>
@@ -54,7 +54,7 @@
 					</div>
 					<div id="sidebar-progress" style="margin-top: auto;"></div>
 
-					<button class="nav-item" hx-get="/settings" hx-target="#main-content">
+					<button class="nav-item" hx-get="/settings" hx-target="body" hx-swap="beforeend">
 						<span class="material-symbols-outlined">settings</span> Settings
 					</button>
 				</nav>

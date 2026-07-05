@@ -18,6 +18,7 @@ type Config struct {
 	ImagesPerPage    int    `mapstructure:"images_per_page"`
 	DefaultSortBy    string `mapstructure:"default_sort_by"`
 	DefaultSortOrder string `mapstructure:"default_sort_order"`
+	GridSize         string `mapstructure:"grid_size"`
 }
 
 func Load() (*Config, error) {
@@ -28,6 +29,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("images_per_page", 500)
 	viper.SetDefault("default_sort_by", "name")
 	viper.SetDefault("default_sort_order", "desc")
+	viper.SetDefault("grid_size", "medium")
 
 	viper.SetConfigName("config")
 	viper.AddConfigPath(".")

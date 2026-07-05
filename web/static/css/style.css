@@ -240,12 +240,12 @@ dialog.closing::backdrop {
 	overflow: hidden;
 	cursor: pointer;
 	transition: border-color 0.2s;
-	break-inside: avoid;
-	margin-bottom: 16px;
+	height: var(--grid-base, 250px);
 }
 .image-card img {
 	width: 100%;
-	height: auto;
+	height: 100%;
+	object-fit: cover;
 	display: block;
 }
 .image-card:hover {
@@ -342,8 +342,22 @@ dialog.closing::backdrop {
 }
 
 .gallery-grid {
-	column-width: 250px;
-	column-gap: 16px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+}
+.gallery-grid.small {
+	--grid-base: 150px;
+}
+.gallery-grid.medium {
+	--grid-base: 250px;
+}
+.gallery-grid.large {
+	--grid-base: 400px;
+}
+.gallery-grid::after {
+	content: '';
+	flex-grow: 999;
 }
 
 /* Meta Tags / Chips */
@@ -360,6 +374,14 @@ dialog.closing::backdrop {
 }
 .meta-tag span.material-symbols-outlined {
 	font-size: 1rem;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+.htmx-request .spin-on-request {
+    animation: spin 1s linear infinite;
 }
 
 @keyframes spin {

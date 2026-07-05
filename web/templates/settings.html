@@ -1,0 +1,43 @@
+<dialog id="settingsDialog" style="padding: 24px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-dark); color: var(--text); box-shadow: 0 10px 30px rgba(0,0,0,0.5); min-width: 400px;" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.remove(); }, 300); }">
+    <h3 style="margin-bottom: 20px;">Settings</h3>
+    <form hx-post="/settings" hx-swap="none" @submit="$el.closest('dialog').classList.add('closing'); setTimeout(() => { $el.closest('dialog').close(); $el.closest('dialog').remove(); }, 300)">
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
+            <div>
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Images per page</label>
+                <input class="input-clean" type="number" name="per_page" value="{{.ImagesPerPage}}" style="width: 100%;">
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Default Sort By</label>
+                <select class="input-clean" name="sort_by" style="width: 100%;">
+                    <option value="name" {{if eq .DefaultSortBy "name"}}selected{{end}}>Name</option>
+                    <option value="date" {{if eq .DefaultSortBy "date"}}selected{{end}}>Date</option>
+                    <option value="size" {{if eq .DefaultSortBy "size"}}selected{{end}}>Size</option>
+                    <option value="rating" {{if eq .DefaultSortBy "rating"}}selected{{end}}>Rating</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Default Sort Order</label>
+                <select class="input-clean" name="sort_order" style="width: 100%;">
+                    <option value="asc" {{if eq .DefaultSortOrder "asc"}}selected{{end}}>Ascending</option>
+                    <option value="desc" {{if eq .DefaultSortOrder "desc"}}selected{{end}}>Descending</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Grid Size</label>
+                <select class="input-clean" name="grid_size" style="width: 100%;">
+                    <option value="small" {{if eq .GridSize "small"}}selected{{end}}>Small</option>
+                    <option value="medium" {{if eq .GridSize "medium"}}selected{{end}}>Medium</option>
+                    <option value="large" {{if eq .GridSize "large"}}selected{{end}}>Large</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 12px;">
+            <button type="button" class="nav-item" style="width: auto;" @click="$el.closest('dialog').classList.add('closing'); setTimeout(() => { $el.closest('dialog').close(); $el.closest('dialog').remove(); }, 300)">Cancel</button>
+            <button type="submit" class="btn-primary">Save Settings</button>
+        </div>
+    </form>
+</dialog>
+<script>
+    document.getElementById('settingsDialog').showModal();
+</script>

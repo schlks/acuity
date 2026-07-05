@@ -47,8 +47,6 @@ services:
       - WEAVIATE_HOST=weaviate
       - WEAVIATE_PORT=:50050
     restart: on-failure
-    depends_on:
-      - multi2vec-clip
 
 volumes:
   weaviate_data:

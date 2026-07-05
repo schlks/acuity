@@ -110,8 +110,9 @@ func (w *WeaviateClient) InitSchema() error {
 					DataType: []string{"int"},
 				},
 				{
-					Name:     "name",
-					DataType: []string{"text"},
+					Name:         "name",
+					DataType:     []string{"text"},
+					Tokenization: "field",
 				},
 				{
 					Name:     "rating",
@@ -158,12 +159,12 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 	threads := runtime.NumCPU()
 	maxWorkers := max(threads-2, threads/2)
 
-	resultChan := make(chan Image, 100)
+	resultChan := make(chan Image, 50)
 	done := make(chan struct{})
 
 	go func() {
 		var batch []*models.Object
-		batchSize := 100
+		batchSize := 50
 
 		for result := range resultChan {
 			id := uuid.NewMD5(uuid.NameSpaceURL, []byte(result.Path+strconv.Itoa(galleryID))).String()
@@ -727,6 +728,7 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 	case "asc":
 		order = graphql.Asc
 	}
+
 	sort := graphql.Sort{
 		Path:  []string{sortBy},
 		Order: order,

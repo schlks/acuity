@@ -40,34 +40,50 @@ environment:
 	ENABLE_CUDA: '1'
 ```
 
-### Step 2 (Linux)
+### Step 2
 
-Install `make` and `docker`, with your package manager, then run
-
-```bash
-make docker
-make up
-```
-
-### Step 2 (Windows)
-
-Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-and run [docker-run.bat](docker-run.bat).
-
-### Step 2 (MacOS)
-
-Install [Docker Desktop](https://www.docker.com/products/docker-desktop/),
-then run
-
-```bash
-make docker
-make up
-```
+Add your edited docker-compose in `Docker Desktop` or run with `docker compose`.
 
 > [!NOTE]
-> Weaviate will take some GB to download its model.
+> Weaviate will take some GB (~8.5 GB) to download its model.
 >
 > You can also install `Docker Desktop` on Linux if you want to.
+
+## Developing
+
+Replace the acuity container in the [docker-compose](./docker-compose.yml) with
+```yml
+acuity:
+    # image: codeberg.org/shlks/acuity:latest
+    # pull_policy: always
+    build: # needed for building the container before deploying
+        context: .
+        pull: true
+    container_name: acuity
+    ports:
+        - "3000:3000"
+    volumes:
+        - ./acuity.db:/app/acuity.db
+        - ./config.json:/app/config.json
+        - ./your/folder:/data/folder:rw
+    environment:
+        - WEAVIATE_HOST=weaviate
+        - WEAVIATE_PORT=:50050
+    restart: on-failure
+```
+
+### Linux/MacOS
+
+Install `make` with your package manager, then run:
+
+```bash
+make docker
+make up
+```
+
+### Windows
+
+Run [docker-run.bat](docker-run.bat).
 
 ## Features
 
@@ -91,8 +107,9 @@ make up
 - [ ] Image carousel
 - [ ] Keybindings
 - [x] Search sorting options
-- [ ] Edit Gallery
+- [x] Edit Gallery
 - [x] Multiple image selection
 - [ ] Drop image in Searchbar
 - [x] Delete image/selection
 - [x] Image rating
+- [x] Settings

@@ -22,9 +22,6 @@ docker:
 weaviate:
 	docker compose up weaviate multi2vec-clip -d
 
-debug: build
-	docker compose up
-
 up:
 	docker compose pull
 	docker compose up
