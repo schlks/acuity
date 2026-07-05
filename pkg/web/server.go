@@ -127,7 +127,12 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 		Folders:    folders,
 	}
 
-	s.Template.ExecuteTemplate(w, "file-browser", data)
+	if err := s.Template.ExecuteTemplate(w, "file-browser", data); err != nil {
+		message := "file browser cannot be loaded"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
@@ -236,10 +241,17 @@ func (s *Server) getProgress(w http.ResponseWriter, r *http.Request) {
 		if current > 0 {
 			w.Header().Set("HX-Trigger", "refresh-images")
 		}
-		s.Template.ExecuteTemplate(w, "progress.html", data)
+		if err := s.Template.ExecuteTemplate(w, "progress.html", data); err != nil {
+			message := "progress cannot be loaded"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+		}
 	} else {
 		w.Header().Set("HX-Trigger", "refresh-images")
-		w.Write([]byte(``))
+		_, err := w.Write([]byte(``))
+		if err != nil {
+			return
+		}
 	}
 }
 

@@ -9,7 +9,7 @@
 > 1. a quick and penetrating intelligence
 > 2. sharpness of vision; the visual ability to resolve fine detail
 
-Acuity is a self-hosted photomanagement service.
+Acuity is a self-hosted photo management service.
 It aims to help you find and organize your photos with precision and
 speed. Designed as a high-performance image management and labeling
 tool, it allows you to maintain complete control over your library
@@ -33,7 +33,7 @@ volumes:
  - /your/folder/2:/images/2:rw
 ```
 
-While you're at it enable CUDA, if you have a Nvidia card:
+While you're at it enable CUDA, if you have an Nvidia card:
 
 ```yaml
 environment:

@@ -25,6 +25,11 @@ type MocksService struct {
 	isgomock struct{}
 }
 
+func (m *MocksService) GetAllGalleries() ([]db.Gallery, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 // MocksServiceMockRecorder is the mock recorder for MocksService.
 type MocksServiceMockRecorder struct {
 	mock *MocksService

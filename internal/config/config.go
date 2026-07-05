@@ -2,7 +2,11 @@
 // settings from configuration files and environment variables.
 package config
 
-import "github.com/spf13/viper"
+import (
+	"errors"
+
+	"github.com/spf13/viper"
+)
 
 type Config struct {
 	Port         string   `mapstructure:"port"`
@@ -31,13 +35,11 @@ func Load() (*Config, error) {
 
 	viper.SetConfigType("json")
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
 			// Datei existiert nicht, wir legen eine neue an
 			if writeErr := viper.SafeWriteConfigAs("config.json"); writeErr != nil {
 				return nil, writeErr
 			}
-		} else {
-			return nil, err
 		}
 	}
 
@@ -49,7 +51,7 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-func save(cfg *Config) error {
+func Save(cfg *Config) error {
 	viper.Set("images_per_page", cfg.ImagesPerPage)
 	viper.Set("default_sort_by", cfg.DefaultSortBy)
 	viper.Set("default_sort_order", cfg.DefaultSortOrder)

@@ -241,7 +241,12 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			takenDate := fileDate
 			file, err := os.Open(path)
 			if err == nil {
-				defer file.Close()
+				defer func(file *os.File) {
+					err := file.Close()
+					if err != nil {
+						return
+					}
+				}(file)
 				x, err := exif.Decode(file)
 				if err == nil {
 					tm, err := x.DateTime()
@@ -320,16 +325,16 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 					continue
 				}
 
-				var filepath, gallery, base64 string
+				var filePath, gallery, image string
 
 				if val, ok := imgProps["filepath"].(string); ok {
-					filepath = val
+					filePath = val
 				}
 				if val, ok := imgProps["gallery_id"].(float64); ok {
 					gallery = fmt.Sprintf("%.0f", val)
 				}
 				if val, ok := imgProps["image"].(string); ok {
-					base64 = val
+					image = val
 				}
 
 				var distance float64
@@ -376,7 +381,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 
 				images = append(images, Image{
 					ID:          id,
-					Path:        filepath,
+					Path:        filePath,
 					Base64:      base64,
 					GalleryID:   gallery,
 					Distance:    distance,

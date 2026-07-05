@@ -39,11 +39,11 @@ func TestGetData(t *testing.T) {
 
 	assert.Equal(t, "uuid-1234", images[0].ID)
 	assert.Equal(t, "/images/test1.jpg", images[0].Path)
-	assert.Equal(t, "10", images[0].Gallery)
+	assert.Equal(t, "10", images[0].GalleryID)
 	assert.Equal(t, 4, images[0].Rating)
 	assert.Equal(t, int64(2048), images[0].Size)
 	assert.Equal(t, float64(0.123), images[0].Distance)
 
 	assert.Equal(t, "/images/test2.png", images[1].Path)
-	assert.Equal(t, "20", images[1].Gallery)
+	assert.Equal(t, "20", images[1].GalleryID)
 }

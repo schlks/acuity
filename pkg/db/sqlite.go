@@ -14,9 +14,9 @@ type SQLiteClient struct {
 }
 
 type Gallery struct {
-	ID		int
-	Name	string
-	Path	string
+	ID   int
+	Name string
+	Path string
 }
 
 func NewSqliteDB(path string) (*SQLiteClient, error) {
@@ -93,7 +93,12 @@ func (s *SQLiteClient) GetAllGalleries() ([]Gallery, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			return
+		}
+	}(rows)
 
 	var galleries []Gallery
 	for rows.Next() {

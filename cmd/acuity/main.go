@@ -20,7 +20,7 @@ import (
 func formatSize(b float64) string {
 	const unit = 1024.0
 	if b < unit {
-		return fmt.Sprintf("%d B", b)
+		return fmt.Sprintf("%f B", b)
 	}
 
 	div, exp := unit, 0

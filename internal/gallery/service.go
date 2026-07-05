@@ -201,7 +201,10 @@ func (g *GalleryService) DeleteImage(ctx context.Context, file db.Image, deleteD
 	}
 
 	if deleteDisk && file.Path != "" {
-		os.Remove(file.Path)
+		err := os.Remove(file.Path)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -227,7 +230,10 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image, de
 
 	if deleteDisk {
 		for _, path := range paths {
-			os.Remove(path)
+			err := os.Remove(path)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -243,19 +249,11 @@ func (g *GalleryService) FindDublicates(ctx context.Context, imageID string, gal
 }
 
 func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []db.Image) error {
-	if err := g.wDB.ChangeGallery(ctx, newID, images); err != nil {
-		return err
-	}
-
-	return nil
+	return g.wDB.ChangeGallery(ctx, newID, images)
 }
 
 func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, images []db.Image) error {
-	if err := g.wDB.CopyToGallery(ctx, newID, images); err != nil {
-		return err
-	}
-
-	return nil
+	return g.wDB.CopyToGallery(ctx, newID, images)
 }
 
 func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[string]any, error) {
