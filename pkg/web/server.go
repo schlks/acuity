@@ -64,7 +64,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /gallery/{name}/edit", s.editGallery)
 	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
 	mux.HandleFunc("GET	/gallery/{name}/images", s.getGalleryImages)
-	mux.HandleFunc("GET /gallery/{name}/progress", s.getProgress)
+	mux.HandleFunc("GET /api/progress", s.getGlobalProgress)
 	mux.HandleFunc("POST	/gallery", s.createGallery)
 	mux.HandleFunc("DELETE /gallery/{name}", s.deleteGallery)
 	mux.HandleFunc("POST	/gallery/transfer", s.transferGallery)
@@ -304,47 +304,52 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Redirect", "/gallery/"+newName)
 }
 
-func (s *Server) getProgress(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	name := r.PathValue("name")
-	galleryID, err, ok := s.Service.GetGalleryID(name)
-	if err != nil && !ok {
-		message := "Failed to get Gallery ID"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
+	galleries, err := s.Service.GetAllGalleries()
+	if err != nil {
+		http.Error(w, "Failed to get galleries", http.StatusInternalServerError)
 		return
 	}
 
-	expected := s.Service.ExpectedCount[galleryID]
-	current, _ := s.Service.GetGalleryCount(ctx, galleryID)
+	type Progress struct {
+		GalleryName string
+		Current     int
+		Expected    int
+		Percent     int
+	}
 
-	if expected > 0 && current < expected {
-		data := struct {
-			GalleryName string
-			Current     int
-			Expected    int
-			Percent     int
-		}{
-			GalleryName: name,
-			Current:     current,
-			Expected:    expected,
-			Percent:     int(float64(current) / float64(expected) * 100),
+	var progresses []Progress
+	refreshImages := false
+
+	for _, g := range galleries {
+		expected := s.Service.ExpectedCount[g.ID]
+		if expected > 0 {
+			current, _ := s.Service.GetGalleryCount(ctx, g.ID)
+			if current < expected {
+				progresses = append(progresses, Progress{
+					GalleryName: g.Name,
+					Current:     current,
+					Expected:    expected,
+					Percent:     int(float64(current) / float64(expected) * 100),
+				})
+				if current > 0 {
+					refreshImages = true
+				}
+			}
 		}
-		if current > 0 {
+	}
+
+	if len(progresses) > 0 {
+		if refreshImages {
 			w.Header().Set("HX-Trigger", "refresh-images")
 		}
-		if err := s.Template.ExecuteTemplate(w, "progress.html", data); err != nil {
-			message := "progress cannot be loaded"
-			slog.Error(message, slog.Any("error", err))
-			http.Error(w, message, http.StatusInternalServerError)
+		if err := s.Template.ExecuteTemplate(w, "progress.html", progresses); err != nil {
+			slog.Error("progress cannot be loaded", slog.Any("error", err))
 		}
 	} else {
-		w.Header().Set("HX-Trigger", "refresh-images")
-		_, err := w.Write([]byte(``))
-		if err != nil {
-			return
-		}
+		_, _ = w.Write([]byte(``))
 	}
 }
 

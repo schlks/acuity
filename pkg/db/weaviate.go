@@ -761,12 +761,20 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 	return images, nil
 }
 
-func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[string]struct{}, error) {
-	knownPaths := make(map[string]struct{})
+func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[string]string, error) {
+	knownPaths := make(map[string]string)
 
 	result, err := w.Client.GraphQL().Get().
 		WithClassName("Image").
-		WithFields(graphql.Field{Name: "filepath"}).
+		WithFields(
+			graphql.Field{Name: "filepath"},
+			graphql.Field{
+				Name: "_additional",
+				Fields: []graphql.Field{
+					{Name: "id"},
+				},
+			},
+		).
 		WithWhere(
 					filters.Where().
 						WithPath([]string{"gallery_id"}).
@@ -789,7 +797,9 @@ func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[
 	for _, imgObj := range images {
 		img := imgObj.(map[string]any)
 		path := img["filepath"].(string)
-		knownPaths[path] = struct{}{}
+		additional := img["_additional"].(map[string]any)
+		id := additional["id"].(string)
+		knownPaths[path] = id
 	}
 
 	return knownPaths, nil

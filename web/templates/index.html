@@ -5,7 +5,7 @@
 		<title>Acuity</title>
 		<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 		<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
-		<link rel="stylesheet" href="/static/css/style.css">
+		<link rel="stylesheet" href="/static/css/style.css?v=3">
 		
 		<!-- HTMX & Alpine.js -->
 		<script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -54,7 +54,7 @@
 							<span class="material-symbols-outlined">search</span> Duplicates
 						</button>
 					</div>
-					<div id="sidebar-progress" style="margin-top: auto;"></div>
+					<div id="sidebar-progress" hx-get="/api/progress" hx-trigger="every 1s" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;"></div>
 
 					<button class="nav-item" hx-get="/settings" hx-target="body" hx-swap="beforeend">
 						<span class="material-symbols-outlined">settings</span> Settings
@@ -122,5 +122,138 @@
 			</form>
 		</dialog>
 
+		<!-- Fullscreen Carousel -->
+		<dialog x-ref="carouselDialog" class="carousel-modal" x-data="{
+			images: [],
+			currentIndex: 0,
+			showInfo: false,
+			scale: 1,
+			panX: 0,
+			panY: 0,
+			isDragging: false,
+			startX: 0,
+			startY: 0,
+			
+			resetZoom() {
+				this.scale = 1;
+				this.panX = 0;
+				this.panY = 0;
+			},
+			
+			open(id) {
+				const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
+				this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, rating: parseInt(img.dataset.rating) || 0 }));
+				
+				const idx = this.images.findIndex(img => img.id === id);
+				this.currentIndex = idx !== -1 ? idx : 0;
+				
+				this.resetZoom();
+				this.showInfo = false;
+				this.$refs.carouselDialog.showModal();
+				document.body.style.overflow = 'hidden';
+			},
+			
+			close() {
+				this.$refs.carouselDialog.close();
+				document.body.style.overflow = '';
+			},
+			
+			next() {
+				if (this.currentIndex < this.images.length - 1) {
+					this.currentIndex++;
+					this.resetZoom();
+					if(this.showInfo) {
+						htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#carousel-info-container'});
+					}
+				}
+			},
+			
+			prev() {
+				if (this.currentIndex > 0) {
+					this.currentIndex--;
+					this.resetZoom();
+					if(this.showInfo) {
+						htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#carousel-info-container'});
+					}
+				}
+			},
+			
+			handleWheel(e) {
+				e.preventDefault();
+				const delta = e.deltaY > 0 ? -0.1 : 0.1;
+				this.scale = Math.max(0.5, Math.min(this.scale + delta * this.scale, 5));
+			},
+			
+			startDrag(e) {
+				if (this.scale <= 1) return;
+				e.preventDefault();
+				this.isDragging = true;
+				this.startX = e.clientX - this.panX;
+				this.startY = e.clientY - this.panY;
+			},
+			
+			doDrag(e) {
+				if (!this.isDragging) return;
+				this.panX = e.clientX - this.startX;
+				this.panY = e.clientY - this.startY;
+			},
+			
+			stopDrag() {
+				this.isDragging = false;
+			}
+		}"
+		@open-carousel.window="open($event.detail.id)"
+		@keydown.window.escape="if(showInfo) showInfo = false; else close()"
+		@keydown.window.arrow-right="if($refs.carouselDialog.open) next()"
+		@keydown.window.arrow-left="if($refs.carouselDialog.open) prev()"
+		@rating-updated.window="let img = images.find(i => i.id === $event.detail.id); if(img) img.rating = $event.detail.rating;">
+		
+			<!-- Toolbar -->
+			<div class="carousel-toolbar" x-show="images.length > 0">
+				<div class="carousel-action" x-show="images[currentIndex]?.rating > 0" style="padding: 0 12px; width: auto; gap: 4px; font-weight: bold;">
+					<span class="material-symbols-outlined icon-filled" style="color: var(--primary); font-size: 1.2rem;">star</span>
+					<span x-text="images[currentIndex]?.rating"></span>
+				</div>
+				<button class="carousel-action" title="Select image" @click="let id = images[currentIndex].id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) }" :style="selectedImages.includes(images[currentIndex].id) ? 'color: var(--primary);' : ''">
+					<span class="material-symbols-outlined" x-text="selectedImages.includes(images[currentIndex].id) ? 'check_circle' : 'radio_button_unchecked'"></span>
+				</button>
+				<button class="carousel-action" title="Details" @click="showInfo = !showInfo; if(showInfo) { htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'}) }">
+					<span class="material-symbols-outlined">info</span>
+				</button>
+				<button class="carousel-action" title="Close fullscreen" @click="close()">
+					<span class="material-symbols-outlined">close</span>
+				</button>
+			</div>
+			
+			<!-- Info Overlay -->
+			<div x-show="showInfo" style="position: absolute; right: 20px; top: 70px; width: 350px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 8px; padding: 16px; z-index: 10; max-height: calc(100vh - 100px); overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" x-transition>
+				<div id="carousel-info-container"></div>
+			</div>
+			
+			<div class="carousel-content" @click.self="if(showInfo) showInfo = false; else close()">
+				<button class="btn-icon carousel-nav prev" @click="prev()" x-show="currentIndex > 0">
+					<span class="material-symbols-outlined">chevron_left</span>
+				</button>
+				
+				<template x-if="images.length > 0">
+					<img :src="images[currentIndex].src" class="carousel-image" 
+						@click.stop=""
+						@dblclick.stop="resetZoom()"
+						@wheel="handleWheel"
+						@mousedown="startDrag"
+						@mousemove.window="doDrag"
+						@mouseup.window="stopDrag"
+						:style="`transform: translate(${panX}px, ${panY}px) scale(${scale}); cursor: ${scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'}; transition: ${isDragging ? 'none' : 'transform 0.1s ease-out'}`">
+				</template>
+				
+				<button class="btn-icon carousel-nav next" @click="next()" x-show="currentIndex < images.length - 1">
+					<span class="material-symbols-outlined">chevron_right</span>
+				</button>
+			</div>
+			
+			<div class="carousel-counter">
+				<span x-text="currentIndex + 1"></span> / <span x-text="images.length"></span>
+			</div>
+		</dialog>
 	</body>
 </html>

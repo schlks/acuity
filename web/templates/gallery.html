@@ -72,8 +72,6 @@
 	</div>
 </div>
 
-<span hx-get="/gallery/{{.Name}}/progress" hx-trigger="load, check-progress from:body" hx-target="#sidebar-progress" hx-swap="innerHTML"></span>
-
 <!-- Edit Gallery Dialog -->
 <dialog x-ref="editGalleryDialog" id="editGalleryDialog" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">
 	<h3 style="margin-bottom: 20px;">Edit Gallery Name</h3>

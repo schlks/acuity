@@ -29,7 +29,7 @@ and download the [acuity repo](https://codeberg.org/Shlks/acuity/archive/master.
 
 ### Step 2
 
-Edit the volume in the [docker-compose](docker-compose.yml) to where
+Edit the volume in the [docker-compose](docker-dev.yml) to where
 your images are. On Windows you need to replace the drive letter with `/mnt/` followed by the drive letter in lowercase,
 for example `C:` becomes `/mnt/c`. Also use `/` instead of `\`.
 Since you can create separate galleries for your folders, I
@@ -60,7 +60,7 @@ Open your preferred terminal in the acuity folder and run `docker compose up -d`
 
 ## Developing
 
-Replace the acuity container in the [docker-compose](./docker-compose.yml) with
+Replace the acuity container in the [docker-compose](docker-dev.yml) with
 ```yml
 acuity:
     # image: codeberg.org/shlks/acuity:latest

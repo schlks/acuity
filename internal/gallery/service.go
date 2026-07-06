@@ -43,7 +43,7 @@ type wService interface {
 	CopyToGallery(ctx context.Context, newGalleryID int, images []db.Image) error
 	RemoveImages(ctx context.Context, images []db.Image) error
 	GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error)
-	GetKnownPaths(ctx context.Context, galleryID int) (map[string]struct{}, error)
+	GetKnownPaths(ctx context.Context, galleryID int) (map[string]string, error)
 	GetInfo(ctx context.Context, imageID string) (db.Image, error)
 	GetGalleryCount(ctx context.Context, galleryID int) (int, error)
 	ResetDatabase(ctx context.Context) error
@@ -68,8 +68,15 @@ func (g *GalleryService) GetAllGalleries() ([]db.Gallery, error) {
 	return g.sDB.GetAllGalleries()
 }
 
-func (g *GalleryService) getKnownFilePaths(known map[string]struct{}, folderPath string) ([]string, error) {
+func (g *GalleryService) getKnownFilePaths(known map[string]string, folderPath string) ([]string, []string, error) {
 	var filePaths []string
+
+	// Create a copy of known to track which ones we've seen
+	seen := make(map[string]bool)
+	for path := range known {
+		seen[path] = false
+	}
+
 	err := filepath.WalkDir(folderPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -83,15 +90,24 @@ func (g *GalleryService) getKnownFilePaths(known map[string]struct{}, folderPath
 		if !d.IsDir() {
 			if _, exists := known[absPath]; !exists {
 				filePaths = append(filePaths, absPath)
+			} else {
+				seen[absPath] = true
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return filePaths, nil
+	var missingIds []string
+	for path, wasSeen := range seen {
+		if !wasSeen {
+			missingIds = append(missingIds, known[path])
+		}
+	}
+
+	return filePaths, missingIds, nil
 }
 
 func (g *GalleryService) CreateGallery(ctx context.Context, name string, folderPath string) error {
@@ -131,16 +147,29 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 		return err
 	}
 
-	filePaths, err := g.getKnownFilePaths(known, gallery.Path)
+	filePaths, missingIds, err := g.getKnownFilePaths(known, gallery.Path)
 	if err != nil {
 		return err
 	}
 
 	currentCount, _ := g.wDB.GetGalleryCount(ctx, gallery.ID)
-	g.ExpectedCount[gallery.ID] = currentCount + len(filePaths)
+	g.ExpectedCount[gallery.ID] = currentCount + len(filePaths) - len(missingIds)
 
 	go func() {
-		g.wDB.ImportImages(context.Background(), filePaths, gallery.ID)
+		defer func() {
+			g.ExpectedCount[gallery.ID] = 0 // Reset when done to prevent infinite UI polling
+		}()
+		if len(missingIds) > 0 {
+			var imagesToDelete []db.Image
+			for _, id := range missingIds {
+				imagesToDelete = append(imagesToDelete, db.Image{ID: id})
+			}
+			// Delete from DB without touching the disk (since they are already missing)
+			_ = g.DeleteImages(context.Background(), imagesToDelete, false)
+		}
+		if len(filePaths) > 0 {
+			g.wDB.ImportImages(context.Background(), filePaths, gallery.ID)
+		}
 	}()
 	return nil
 }
