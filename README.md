@@ -21,13 +21,17 @@ while running entirely on your own infrastructure.
 
 ### Step 1
 
-Follow this [guide](https://medium.com/@piyushkashyap045/comprehensive-guide-installing-docker-and-docker-compose-on-windows-linux-and-macos-a022cf82ac0b) for the installation
+(If you know what docker and git is and how to install skip to step 2)
+
+Follow this [guide](https://docs.docker.com/get-started/introduction/get-docker-desktop/) for the installation (you need WSL for windows)
+
 and download the [acuity repo](https://codeberg.org/Shlks/acuity/archive/master.zip) and extract it.
 
 ### Step 2
 
 Edit the volume in the [docker-compose](docker-compose.yml) to where
-your images are.
+your images are. On Windows you need to replace the drive letter with `/mnt/` followed by the drive letter in lowercase,
+for example `C:` becomes `/mnt/c`. Also use `/` instead of `\`.
 Since you can create separate galleries for your folders, I
 recommend setting the volume to the most root folder you can, or
 do something like this:
