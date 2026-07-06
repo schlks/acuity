@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -73,7 +73,7 @@ func (w *WeaviateClient) WaitForReady(timeout time.Duration) error {
 		case <-ctx.Done():
 			return fmt.Errorf("timout waiting for weaviate: %w", ctx.Err())
 		case <-time.After(10 * time.Second):
-			log.Println("Waiting for Weaviate server...")
+			slog.Info("Waiting for Weaviate server...")
 		}
 	}
 }
@@ -204,7 +204,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 		g.Go(func() error {
 			data, err := bimg.Read(path)
 			if err != nil {
-				log.Printf("Error decoding: %v", err)
+				slog.Error("Error decoding image", slog.String("path", path), slog.Any("error", err))
 				return err
 			}
 
@@ -223,7 +223,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 
 			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
 			if err != nil {
-				log.Printf("Error converting to JPEG: %v", err)
+				slog.Error("Error converting image to JPEG", slog.String("path", path), slog.Any("error", err))
 				return err
 			}
 
@@ -273,7 +273,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 	}
 
 	if err := g.Wait(); err != nil {
-		log.Printf("Errors occurred while importing images: %v", err)
+		slog.Error("Errors occurred while importing images", slog.Any("error", err))
 	}
 
 	close(resultChan)
@@ -328,6 +328,8 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 
 				var filePath, gallery, image string
 
+				var name string
+
 				if val, ok := imgProps["filepath"].(string); ok {
 					filePath = val
 				}
@@ -335,7 +337,10 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 					gallery = fmt.Sprintf("%.0f", val)
 				}
 				if val, ok := imgProps["image"].(string); ok {
-					_ = val
+					image = val
+				}
+				if val, ok := imgProps["name"].(string); ok {
+					name = val
 				}
 
 				var distance float64
@@ -384,6 +389,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 					ID:          id,
 					Path:        filePath,
 					Base64:      image,
+					Name:        name,
 					GalleryID:   gallery,
 					Distance:    distance,
 					Rating:      rating,
@@ -407,9 +413,9 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 		WithObjects(batch...).
 		Do(ctx)
 	if err != nil {
-		log.Printf("Error during batch write: %v", err)
+		slog.Error("Error during batch write to Weaviate", slog.Any("error", err))
 	} else {
-		log.Printf("Successfully wrote %d images to Weaviate", len(batch))
+		slog.Info("Successfully wrote images to Weaviate", slog.Int("count", len(batch)))
 	}
 }
 
@@ -615,11 +621,15 @@ func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []
 	g := new(errgroup.Group)
 	g.SetLimit(maxWorkers)
 
-	props := map[string]any{
-		"gallery_id": newID,
-	}
 	for _, img := range images {
+		img := img // Create local copy for closure
 		g.Go(func() error {
+			props := map[string]any{
+				"gallery_id": newID,
+			}
+			if img.Path != "" {
+				props["filepath"] = img.Path
+			}
 			return w.Client.Data().Updater().
 				WithMerge().
 				WithID(img.ID).
@@ -641,14 +651,20 @@ func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, im
 	g.SetLimit(maxWorkers)
 
 	for _, img := range images {
+		img := img // Copy for closure
 		g.Go(func() error {
-			newImageID := uuid.NewMD5(uuid.NameSpaceURL, []byte(img.Path+strconv.Itoa(newGalleryID))).String()
+			newPath := img.Path
 			info, err := w.GetInfo(ctx, img.ID)
 			if err != nil {
 				return err
 			}
+			if newPath == "" {
+				newPath = info.Path
+			}
+
+			newImageID := uuid.NewMD5(uuid.NameSpaceURL, []byte(newPath+strconv.Itoa(newGalleryID))).String()
 			props := map[string]any{
-				"filepath":     info.Path,
+				"filepath":     newPath,
 				"image":        info.Base64,
 				"gallery_id":   newGalleryID,
 				"name":         info.Name,
@@ -786,6 +802,7 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (Image, er
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "image"},
 			graphql.Field{Name: "gallery_id"},
+			graphql.Field{Name: "name"},
 			graphql.Field{Name: "rating"},
 			graphql.Field{Name: "extension"},
 			graphql.Field{Name: "date"},
@@ -871,7 +888,7 @@ func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {
 	}
 
 	if !exists {
-		log.Println("Database is already empty (class does not exist).")
+		slog.Info("Database is already empty (class does not exist)")
 		return nil
 	}
 
@@ -880,7 +897,7 @@ func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {
 		return err
 	}
 
-	log.Println("Weaviate database successfully and completely cleared.")
+	slog.Info("Weaviate database successfully and completely cleared")
 	return nil
 }
 

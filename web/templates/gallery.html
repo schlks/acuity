@@ -1,16 +1,16 @@
 <div style="display: flex; justify-content: center; margin-bottom: 40px;">
 	<div style="width: 100%; max-width: 600px;">
-		{{template "search-bar" (index . 2)}}
+		{{template "search-bar" .Name}}
 	</div>
 </div>
 
 <div style="margin-bottom: 32px; display: flex; flex-direction: column; gap: 4px;">
 	<div style="display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; overflow-x: visible;">
-		<h2 style="margin: 0; color: var(--text); font-size: 1.8rem; white-space: nowrap;">{{index . 2}}</h2>
+		<h2 style="margin: 0; color: var(--text); font-size: 1.8rem; white-space: nowrap;">{{.Name}}</h2>
 		<button class="btn-icon" @click="$refs.editGalleryDialog.showModal()" title="Edit Gallery" style="flex-shrink: 0;">
 			<span class="material-symbols-outlined">edit</span>
 		</button>
-		<button class="btn-icon" hx-post="/gallery/{{index . 2}}/scan" hx-swap="none" title="Rescan Gallery" style="flex-shrink: 0;" x-data="{ spinning: false }" @click="spinning = true; setTimeout(() => spinning = false, 1500)">
+		<button class="btn-icon" hx-post="/gallery/{{.Name}}/scan" hx-swap="none" title="Rescan Gallery" style="flex-shrink: 0;" x-data="{ spinning: false }" @click="spinning = true; setTimeout(() => spinning = false, 1500)">
 			<span class="material-symbols-outlined" :class="spinning ? 'spin' : ''">refresh</span>
 		</button>
 		
@@ -19,6 +19,15 @@
 			<span style="font-size: 0.95rem; color: var(--primary); font-weight: 500; white-space: nowrap;"><span
                     x-text="selectedImages.length"></span> marked</span>
 			
+			<button class="btn-icon" title="Move" 
+				@click="document.getElementById('transferAction').value = 'move'; document.getElementById('transferDialog').showModal()">
+				<span class="material-symbols-outlined">drive_file_move</span>
+			</button>
+			<button class="btn-icon" title="Copy" 
+				@click="document.getElementById('transferAction').value = 'copy'; document.getElementById('transferDialog').showModal()">
+				<span class="material-symbols-outlined">content_copy</span>
+			</button>
+
 			<!-- Custom Toggle für Festplatten-Löschen -->
 			<button class="btn-icon" 
 				:style="deleteFromDisk ? 'background: var(--danger); color: white; border: 1px solid var(--danger);' : 'background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-muted);'"
@@ -31,7 +40,7 @@
 			<button class="btn-primary" 
 				style="background: var(--danger); border: 1px solid var(--danger); display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box; padding: 0;"
 				hx-delete="/images"
-				hx-vals='js:{"image_id": selectedImages.join(","), "delete_disk": deleteFromDisk}'
+				hx-vals='js:{"image_id": selectedImages.join(","), "delete_disk": deleteFromDisk, "name": "{{.Name}}"}'
 				hx-confirm="Are you sure you want to delete these images?"
 				@click="setTimeout(() => selectedImages = [], 100)"
 				title="Delete Selection">
@@ -44,13 +53,13 @@
 		</div>
 	</div>
 	
-	<span style="color: var(--text-muted); font-size: 0.9rem;">
-		{{index . 1}} Images
+	<span id="gallery-image-count" style="color: var(--text-muted); font-size: 0.9rem;">
+		{{.Count}} Images
 	</span>
 </div>
 
 
-<div id="gallery-container" hx-get="/gallery/{{index . 2}}/images?page=1" hx-include="#search-options-form" hx-trigger="load, refresh-images from:body">
+<div id="gallery-container" hx-get="/gallery/{{.Name}}/images?page=1" hx-include="#search-options-form" hx-trigger="load, refresh-images from:body">
 	<div class="gallery-grid {{(getConfig).GridSize}}">
 		<div class="image-card skeleton" style="border: none; flex-grow: 1.5; flex-basis: calc(var(--grid-base, 250px) * 1.5);"></div>
 		<div class="image-card skeleton" style="border: none; flex-grow: 0.8; flex-basis: calc(var(--grid-base, 250px) * 0.8);"></div>
@@ -63,21 +72,69 @@
 	</div>
 </div>
 
-<span hx-get="/gallery/{{index . 2}}/progress" hx-trigger="load, check-progress from:body" hx-target="#sidebar-progress" hx-swap="innerHTML"></span>
+<span hx-get="/gallery/{{.Name}}/progress" hx-trigger="load, check-progress from:body" hx-target="#sidebar-progress" hx-swap="innerHTML"></span>
 
 <!-- Edit Gallery Dialog -->
 <dialog x-ref="editGalleryDialog" id="editGalleryDialog" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">
 	<h3 style="margin-bottom: 20px;">Edit Gallery Name</h3>
-	<form hx-post="/gallery/{{index . 2}}/edit" hx-target="#main-content">
+	<form hx-post="/gallery/{{.Name}}/edit" hx-target="#main-content">
 		<div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px;">
 			<div>
 				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Gallery Name</label>
-				<input class="input-clean" type="text" name="name" required value="{{index . 2}}">
+				<input class="input-clean" type="text" name="name" required value="{{.Name}}">
 			</div>
 		</div>
 		<div style="display: flex; justify-content: flex-end; gap: 12px;">
 			<button type="button" class="nav-item" style="width: auto;" @click="$refs.editGalleryDialog.classList.add('closing'); setTimeout(() => { $refs.editGalleryDialog.close(); $refs.editGalleryDialog.classList.remove('closing'); }, 300)">Cancel</button>
 			<button type="submit" class="btn-primary" @click="$refs.editGalleryDialog.classList.add('closing'); setTimeout(() => { $refs.editGalleryDialog.close(); $refs.editGalleryDialog.classList.remove('closing'); }, 300)">Save</button>
+		</div>
+	</form>
+</dialog>
+
+<!-- Transfer Dialog -->
+<dialog id="transferDialog" x-data="{ isNew: false }" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">
+	<h3 style="margin-bottom: 20px;">Move/Copy Images</h3>
+	<form id="transferForm" hx-post="/gallery/transfer" hx-target="#main-content" @submit="document.getElementById('transferDialog').close()">
+		<input type="hidden" name="transfer_action" id="transferAction" value="move">
+		<input type="hidden" name="image_id" x-bind:value="selectedImages.join(',')">
+		<input type="hidden" name="is_new" x-bind:value="isNew">
+
+		<div x-show="!isNew" style="margin-bottom: 20px;">
+			<select name="name" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;" @change="if($event.target.value === '__new__') { isNew = true; $event.target.value = ''; }">
+				<option value="" disabled selected>Select a target gallery...</option>
+				{{range .Galleries}}
+					{{if ne .Name $.Name}} 
+						<option value="{{.Name}}">{{.Name}}</option>
+					{{end}}
+				{{end}}
+				<option value="__new__" style="color: var(--primary); font-weight: bold;">+ Create new gallery...</option>
+			</select>
+		</div>
+
+		<div x-show="isNew" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+			<div>
+				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">New Gallery Name</label>
+				<input class="input-clean" type="text" name="new_name" placeholder="E.g. Wallpapers" x-bind:required="isNew">
+			</div>
+			<div class="form-group" x-data="{ transferPath: '', showTransferBrowser: false }">
+				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Absolute Path</label>
+				<div style="display: flex; gap: 8px;">
+					<input class="input-clean" type="text" name="path" x-model="transferPath" placeholder="/data/images/wallpapers" x-bind:required="isNew" style="flex-grow: 1;">
+					<button type="button" class="btn-icon" @click="showTransferBrowser = true" hx-get="/api/browse?dir=/&target=transferPath" hx-target="#transfer-browser-container">
+						<span class="material-symbols-outlined">folder_open</span>
+					</button>
+				</div>
+				<div x-show="showTransferBrowser" id="transfer-browser-container" style="margin-top: 16px;" @click.outside="showTransferBrowser = false">
+				</div>
+			</div>
+			<button type="button" class="nav-item" style="font-size: 0.8rem; padding: 4px; width: auto; align-self: flex-start;" @click="isNew = false">
+				<span class="material-symbols-outlined" style="font-size: 1rem;">arrow_back</span> Back to selection
+			</button>
+		</div>
+		
+		<div style="display: flex; justify-content: flex-end; gap: 12px;">
+			<button type="button" class="nav-item" style="width: auto;" @click="let d = document.getElementById('transferDialog'); d.classList.add('closing'); setTimeout(() => { d.close(); isNew = false; d.classList.remove('closing'); }, 300)">Cancel</button>
+			<button type="submit" class="btn-primary" @click="setTimeout(() => { selectedImages = []; isNew = false; }, 100); let d = document.getElementById('transferDialog'); d.classList.add('closing'); setTimeout(() => { d.close(); d.classList.remove('closing'); }, 300)">Confirm</button>
 		</div>
 	</form>
 </dialog>

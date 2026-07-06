@@ -66,9 +66,9 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /gallery/{name}/progress", s.getProgress)
 	mux.HandleFunc("POST	/gallery", s.createGallery)
 	mux.HandleFunc("DELETE /gallery/{name}", s.deleteGallery)
-	mux.HandleFunc("POST	/gallery/move", s.changeGallery)
-	mux.HandleFunc("POST	/gallery/copy", s.copyToGallery)
-	mux.HandleFunc("GET	/api/browse", s.browseFiles)
+	mux.HandleFunc("POST	/gallery/transfer", s.transferGallery)
+	mux.HandleFunc("GET /api/browse", s.browseFiles)
+	mux.HandleFunc("POST /api/browse/mkdir", s.mkdir)
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
@@ -120,14 +120,18 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 		parentDir = ""
 	}
 
+	target := query.String(r, "target", "")
+
 	data := struct {
 		CurrentDir string
 		ParentDir  string
 		Folders    []string
+		Target     string
 	}{
 		CurrentDir: dir,
 		ParentDir:  parentDir,
 		Folders:    folders,
+		Target:     target,
 	}
 
 	if err := s.Template.ExecuteTemplate(w, "file-browser", data); err != nil {
@@ -136,6 +140,28 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *Server) mkdir(w http.ResponseWriter, r *http.Request) {
+	dir := r.FormValue("dir")
+	newFolder := r.FormValue("new_folder")
+	target := r.FormValue("target")
+
+	if dir != "" && newFolder != "" {
+		newPath := filepath.Join(dir, newFolder)
+		err := os.MkdirAll(newPath, 0755)
+		if err != nil {
+			slog.Error("Failed to create folder", slog.String("path", newPath), slog.Any("error", err))
+		}
+	}
+
+	urlStr := fmt.Sprintf("/api/browse?dir=%s", url.QueryEscape(dir))
+	if target != "" {
+		urlStr += fmt.Sprintf("&target=%s", url.QueryEscape(target))
+	}
+
+	r.Method = "GET"
+	http.Redirect(w, r, urlStr, http.StatusSeeOther)
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
@@ -237,7 +263,15 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
 
-	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{images, count, name}); err != nil {
+	galleries, _ := s.Service.GetAllGalleries()
+	data := map[string]any{
+		"Images":    images,
+		"Count":     count,
+		"Name":      name,
+		"Galleries": galleries,
+	}
+
+	if err = s.Template.ExecuteTemplate(w, "gallery.html", data); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -440,6 +474,9 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, r.FormValue("name")))
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
@@ -476,6 +513,9 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, r.FormValue("name")))
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
@@ -499,8 +539,16 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	galleries, _ := s.Service.GetAllGalleries()
+	data := map[string]any{
+		"Images":    nil,
+		"Count":     count,
+		"Name":      name,
+		"Galleries": galleries,
+	}
+
 	// Bilder werden auf "nil" gesetzt, da sie erst später lazy geladen werden!
-	if err = s.Template.ExecuteTemplate(w, "gallery.html", []any{nil, count, name}); err != nil {
+	if err = s.Template.ExecuteTemplate(w, "gallery.html", data); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -579,6 +627,15 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) transferGallery(w http.ResponseWriter, r *http.Request) {
+	action := strings.TrimSpace(r.FormValue("transfer_action"))
+	if action == "copy" {
+		s.copyToGallery(w, r)
+	} else {
+		s.changeGallery(w, r)
+	}
+}
+
 func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -590,7 +647,23 @@ func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.FormValue("name")
+	isNew := r.FormValue("is_new") == "true"
+	var name string
+
+	if isNew {
+		name = r.FormValue("new_name")
+		path := r.FormValue("path")
+
+		if err := s.Service.CreateGallery(ctx, name, path); err != nil {
+			message := "Failed to create new Gallery"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
+	} else {
+		name = r.FormValue("name")
+	}
+
 	newID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
@@ -611,6 +684,9 @@ func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, name))
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) copyToGallery(w http.ResponseWriter, r *http.Request) {
@@ -624,7 +700,23 @@ func (s *Server) copyToGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.FormValue("name")
+	isNew := r.FormValue("is_new") == "true"
+	var name string
+
+	if isNew {
+		name = r.FormValue("new_name")
+		path := r.FormValue("path")
+
+		if err := s.Service.CreateGallery(ctx, name, path); err != nil {
+			message := "Failed to create new Gallery"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
+	} else {
+		name = r.FormValue("name")
+	}
+
 	newID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
@@ -640,11 +732,14 @@ func (s *Server) copyToGallery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.Service.CopyToGallery(ctx, newID, images); err != nil {
-		message := "Failed to change Gallery"
+		message := "Failed to copy to Gallery"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, name))
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {

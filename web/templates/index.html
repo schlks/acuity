@@ -12,7 +12,9 @@
 		<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
 	</head>
 
-	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }">
+	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }"
+		  x-init="let saved = localStorage.getItem('openGallery'); if (saved) { currentGallery = saved; localStorage.removeItem('openGallery'); setTimeout(() => { htmx.ajax('GET', '/gallery/' + saved, {target: '#main-content'}) }, 100); }"
+		  @load-gallery.window="localStorage.setItem('openGallery', $event.detail.value); window.location.reload()">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
 				<a href="/" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; text-decoration: none; cursor: pointer;">

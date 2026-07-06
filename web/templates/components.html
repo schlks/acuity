@@ -230,21 +230,31 @@
         
         <!-- Back button (only if parent exists) -->
         {{if .ParentDir}}
-        <button type="button" class="nav-item" hx-get="/api/browse?dir={{.ParentDir}}" hx-target="#file-browser-container">
+        <button type="button" class="nav-item" hx-get="/api/browse?dir={{.ParentDir}}{{if .Target}}&target={{.Target}}{{end}}" hx-target="#file-browser-container">
             <span class="material-symbols-outlined">arrow_upward</span> .. (up)
         </button>
         {{end}}
 
         <!-- Ordner Liste -->
         {{range .Folders}}
-        <button type="button" class="nav-item" hx-get="/api/browse?dir={{$.CurrentDir}}/{{.}}" hx-target="#file-browser-container">
+        <button type="button" class="nav-item" hx-get="/api/browse?dir={{$.CurrentDir}}/{{.}}{{if $.Target}}&target={{$.Target}}{{end}}" hx-target="#file-browser-container">
             <span class="material-symbols-outlined">folder</span> {{.}}
         </button>
         {{end}}
     </div>
 
+    <!-- Neuer Ordner Formular -->
+    <form hx-post="/api/browse/mkdir" hx-target="#file-browser-container" style="display: flex; gap: 8px; margin-top: 12px;">
+        <input type="hidden" name="dir" value="{{.CurrentDir}}">
+        {{if .Target}}<input type="hidden" name="target" value="{{.Target}}">{{end}}
+        <input type="text" name="new_folder" placeholder="New folder name" class="input-clean" required style="flex-grow: 1; padding: 6px 12px;">
+        <button type="submit" class="btn-icon" style="background: var(--bg-hover);" title="Create Folder">
+            <span class="material-symbols-outlined">create_new_folder</span>
+        </button>
+    </form>
+
     <!-- Wählt den Ordner aus und schließt den Browser -->
-    <button type="button" @click="path = '{{.CurrentDir}}'; showBrowser = false" class="nav-item" style="margin-top: 12px; width: 100%; justify-content: center; background: var(--primary); color: white;">
+    <button type="button" @click="{{if .Target}}{{.Target}}{{else}}path{{end}} = '{{.CurrentDir}}'; showBrowser = false; {{if .Target}}showTransferBrowser = false;{{end}}" class="nav-item" style="margin-top: 12px; width: 100%; justify-content: center; background: var(--primary); color: white;">
         Choose this Folder
     </button>
 </div>

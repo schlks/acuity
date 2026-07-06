@@ -7,7 +7,9 @@ import (
 	"acuity/pkg/db"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -93,6 +95,10 @@ func (g *GalleryService) getKnownFilePaths(known map[string]struct{}, folderPath
 }
 
 func (g *GalleryService) CreateGallery(ctx context.Context, name string, folderPath string) error {
+	if err := os.MkdirAll(folderPath, 0755); err != nil {
+		return err
+	}
+
 	if err := g.sDB.InsertGallery(folderPath, name); err != nil {
 		return err
 	}
@@ -204,7 +210,7 @@ func (g *GalleryService) DeleteImage(ctx context.Context, file db.Image, deleteD
 	if deleteDisk && file.Path != "" {
 		err := os.Remove(file.Path)
 		if err != nil {
-			return err
+			slog.Warn("Failed to delete physical file", slog.String("path", file.Path), slog.Any("error", err))
 		}
 	}
 	return nil
@@ -233,7 +239,7 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image, de
 		for _, path := range paths {
 			err := os.Remove(path)
 			if err != nil {
-				return err
+				slog.Warn("Failed to delete physical file", slog.String("path", path), slog.Any("error", err))
 			}
 		}
 	}
@@ -250,10 +256,68 @@ func (g *GalleryService) FindDublicates(ctx context.Context, imageID string, gal
 }
 
 func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []db.Image) error {
+	targetGallery, err := g.sDB.GetGalleryByID(newID)
+	if err != nil {
+		return err
+	}
+
+	for i, img := range images {
+		info, err := g.wDB.GetInfo(ctx, img.ID)
+		if err == nil && info.Path != "" {
+			fileName := filepath.Base(info.Path)
+			newPath := filepath.Join(targetGallery.Path, fileName)
+
+			os.MkdirAll(targetGallery.Path, 0755)
+
+			if err := os.Rename(info.Path, newPath); err == nil {
+				images[i].Path = newPath
+			} else {
+				// cross-device fallback
+				input, err := os.ReadFile(info.Path)
+				if err == nil {
+					if err := os.WriteFile(newPath, input, 0644); err == nil {
+						os.Remove(info.Path)
+						images[i].Path = newPath
+					} else {
+						return fmt.Errorf("failed to write file %s: %w", newPath, err)
+					}
+				} else {
+					return fmt.Errorf("failed to read file %s: %w", info.Path, err)
+				}
+			}
+		}
+	}
+
 	return g.wDB.ChangeGallery(ctx, newID, images)
 }
 
 func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, images []db.Image) error {
+	targetGallery, err := g.sDB.GetGalleryByID(newID)
+	if err != nil {
+		return err
+	}
+
+	for i, img := range images {
+		info, err := g.wDB.GetInfo(ctx, img.ID)
+		if err == nil && info.Path != "" {
+			fileName := filepath.Base(info.Path)
+			newPath := filepath.Join(targetGallery.Path, fileName)
+
+			os.MkdirAll(targetGallery.Path, 0755)
+
+			input, err := os.ReadFile(info.Path)
+			if err == nil {
+				if err := os.WriteFile(newPath, input, 0644); err == nil {
+					images[i].Path = newPath
+				} else {
+					return fmt.Errorf("failed to write copy %s: %w", newPath, err)
+				}
+			} else {
+				return fmt.Errorf("failed to read source %s: %w", info.Path, err)
+			}
+		}
+	}
+
 	return g.wDB.CopyToGallery(ctx, newID, images)
 }
 

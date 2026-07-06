@@ -21,7 +21,7 @@ while running entirely on your own infrastructure.
 
 ### Step 1
 
-Edit the volume in the [docker-compose](docker-compose.yml) to where
+Install [Docker Desktop](www.docker.com*/products/docker-desktop) (Windows/MacOS) or install the command line application (Linux). Edit the volume in the [docker-compose](docker-compose.yml) to where
 your images are.
 Since you can create separate galleries for your folders, I
 recommend setting the volume to the most root folder you can, or

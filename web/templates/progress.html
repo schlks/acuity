@@ -1,6 +1,6 @@
 <div hx-get="/gallery/{{.GalleryName}}/progress" hx-trigger="every 1s" hx-target="#sidebar-progress" hx-swap="innerHTML" style="padding: 16px; background: var(--bg-light); border-radius: 8px; border: 1px solid var(--border); margin: 16px 0;">
     <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-        <span class="material-symbols-outlined" style="font-size: 1.1rem; animation: spin 2s linear infinite; color: var(--primary);">sync</span>
+        <span class="material-symbols-outlined" style="font-size: 1.1rem; animation: spin 2s linear infinite; color: var(--primary); display: block; line-height: 1;">sync</span>
         Scanning {{.GalleryName}}
     </div>
     
@@ -13,3 +13,7 @@
         <div style="height: 100%; background: var(--primary); width: {{.Percent}}%; border-radius: 3px; transition: width 0.3s ease;"></div>
     </div>
 </div>
+
+<span id="gallery-image-count" hx-swap-oob="true" style="color: var(--text-muted); font-size: 0.9rem;">
+	{{.Current}} Images
+</span>

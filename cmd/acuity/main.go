@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -77,31 +78,37 @@ func formatExt(ext string) string {
 func main() {
 	Config, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		slog.Error("Failed to load config", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	wClient, err := db.NewWeaviateClient(Config.WeaviateHost + Config.WeaviatePort)
 	if err != nil {
-		log.Fatalf("Failed to create Weaviate client: %v", err)
+		slog.Error("Failed to create Weaviate client", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	if err := wClient.WaitForReady(120 * time.Second); err != nil {
-		log.Fatalf("Failed to wait for Weaviate server: %v", err)
+		slog.Error("Failed to wait for Weaviate server", slog.Any("error", err))
+		os.Exit(1)
 	}
 
-	fmt.Println("Connected to Weaviate server")
+	slog.Info("Connected to Weaviate server")
 
 	sClient, err := db.NewSqliteDB(Config.DBPath)
 	if err != nil {
-		log.Fatalf("Failed to open SQLite database")
+		slog.Error("Failed to open SQLite database", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	if err := sClient.InitTable(); err != nil {
-		log.Fatalf("Failed to initialize table")
+		slog.Error("Failed to initialize table", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	if err := wClient.InitSchema(); err != nil {
-		log.Fatalf("Error during schema initialization: %v", err)
+		slog.Error("Error during schema initialization", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	funcMap := template.FuncMap{
@@ -119,9 +126,10 @@ func main() {
 	mux := http.NewServeMux()
 	webServer.RegisterRoutes(mux)
 
-	log.Printf("acuity Web-Interface listening on http://localhost:%s\n", Config.Port)
+	slog.Info(fmt.Sprintf("Acuity Web-Interface listening on http://localhost:%s", Config.Port))
 	err = http.ListenAndServe(":"+Config.Port, mux)
 	if err != nil {
-		log.Fatalf("Server crashed: %v", err)
+		slog.Error("Server crashed", slog.Any("error", err))
+		os.Exit(1)
 	}
 }
