@@ -19,7 +19,7 @@
 {{if eq .SearchType "duplicate"}}
 	{{if .QueryImage}}
 	<div style="margin-bottom: 32px; display: flex; align-items: center; gap: 24px; padding: 16px; background: var(--bg-light); border-radius: 8px; border: 1px solid var(--border);">
-		<img src="/image?path={{.QueryImage.Path}}" alt="Reference Image" style="height: 120px; border-radius: 4px; object-fit: contain;">
+		<img src="/image?path={{urlquery .QueryImage.Path}}" alt="Reference Image" style="height: 120px; border-radius: 4px; object-fit: contain;">
 		<div>
 			<div style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Reference image</div>
 			<div style="font-weight: 500; color: var(--text); font-size: 1.1rem;">{{.QueryImage.Name}}</div>

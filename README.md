@@ -21,7 +21,12 @@ while running entirely on your own infrastructure.
 
 ### Step 1
 
-Install [Docker Desktop](www.docker.com*/products/docker-desktop) (Windows/MacOS) or install the command line application (Linux). Edit the volume in the [docker-compose](docker-compose.yml) to where
+Follow this [guide](https://medium.com/@piyushkashyap045/comprehensive-guide-installing-docker-and-docker-compose-on-windows-linux-and-macos-a022cf82ac0b) for the installation
+and download the [acuity repo](https://codeberg.org/Shlks/acuity/archive/master.zip) and extract it.
+
+### Step 2
+
+Edit the volume in the [docker-compose](docker-compose.yml) to where
 your images are.
 Since you can create separate galleries for your folders, I
 recommend setting the volume to the most root folder you can, or
@@ -40,9 +45,9 @@ environment:
 	ENABLE_CUDA: '1'
 ```
 
-### Step 2
+### Step 3
 
-Add your edited docker-compose in `Docker Desktop` or run with `docker compose`.
+Open your preferred terminal in the acuity folder and run `docker compose up -d`
 
 > [!NOTE]
 > Weaviate will take some GB (~8.5 GB) to download its model.
