@@ -31,11 +31,8 @@ services:
       ENABLE_CUDA: '0'
 
   acuity:
-    # image: codeberg.org/shlks/acuity:latest
-    # pull_policy: always
-    build:
-      context: .
-      pull: true
+    image: codeberg.org/shlks/acuity:latest
+    pull_policy: always
     container_name: acuity
     ports:
       - "3000:3000"
