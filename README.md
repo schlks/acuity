@@ -53,7 +53,8 @@ environment:
 Open your preferred terminal in the acuity folder and run `docker compose up -d`
 
 > [!NOTE]
-> Weaviate will take ~8.5 GB to download its model.
+> Weaviate will take ~15 GB to download its model. If you want a smaller mode head over to 
+> [the Weaviate docker install guide](https://docs.weaviate.io/deploy/installation-guides/docker-installation) and choose a model for your needs.
 >
 > You can also install `Docker Desktop` on Linux if you want to.
 
