@@ -58,9 +58,13 @@ func NewWeaviateClient(host string) (*WeaviateClient, error) {
 		return nil, err
 	}
 
-	channel := make(chan []*models.Object, 10)
+	channel := make(chan []*models.Object, runtime.NumCPU()*2)
 	w := &WeaviateClient{Client: client, Chan: channel}
-	go w.batchWriterLoop()
+
+	// Spawn one writer per core to saturate Weaviate parallelism
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go w.batchWriterLoop()
+	}
 
 	return w, nil
 }
@@ -172,7 +176,7 @@ func (w *WeaviateClient) batchWriterLoop() {
 func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, galleryID int) {
 	batchSize := 43
 	threads := runtime.NumCPU()
-	maxWorkers := max(threads-2, threads/2)
+	maxWorkers := threads
 
 	resultChan := make(chan Image, batchSize)
 	done := make(chan struct{})

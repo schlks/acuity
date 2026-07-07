@@ -816,6 +816,16 @@ func (s *Server) copyToGallery(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		if errors.Is(err, http.ErrNotMultipart) {
+			if err := r.ParseForm(); err != nil {
+				message := "Failed to parse form"
+				slog.Error(message, slog.Any("error", err))
+				http.Error(w, message, http.StatusBadRequest)
+				return
+			}
+			s.textSearch(w, r)
+			return
+		}
 		message := "Failed to parse form"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusBadRequest)
