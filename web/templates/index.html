@@ -181,7 +181,17 @@
 			handleWheel(e) {
 				e.preventDefault();
 				const delta = e.deltaY > 0 ? -0.1 : 0.1;
-				this.scale = Math.max(0.5, Math.min(this.scale + delta * this.scale, 5));
+				this.scale = Math.max(1, Math.min(this.scale + delta * this.scale, 5));
+				
+				const img = this.$el.querySelector('.carousel-image');
+				if (img) {
+					const scaledWidth = img.clientWidth * this.scale;
+					const scaledHeight = img.clientHeight * this.scale;
+					const maxPanX = Math.max(0, (scaledWidth - window.innerWidth) / 2);
+					const maxPanY = Math.max(0, (scaledHeight - window.innerHeight) / 2);
+					this.panX = Math.max(-maxPanX, Math.min(maxPanX, this.panX));
+					this.panY = Math.max(-maxPanY, Math.min(maxPanY, this.panY));
+				}
 			},
 			
 			startDrag(e) {
@@ -194,8 +204,24 @@
 			
 			doDrag(e) {
 				if (!this.isDragging) return;
-				this.panX = e.clientX - this.startX;
-				this.panY = e.clientY - this.startY;
+				
+				let newPanX = e.clientX - this.startX;
+				let newPanY = e.clientY - this.startY;
+				
+				const img = this.$el.querySelector('.carousel-image');
+				if (img) {
+					const scaledWidth = img.clientWidth * this.scale;
+					const scaledHeight = img.clientHeight * this.scale;
+					
+					const maxPanX = Math.max(0, (scaledWidth - window.innerWidth) / 2);
+					const maxPanY = Math.max(0, (scaledHeight - window.innerHeight) / 2);
+					
+					newPanX = Math.max(-maxPanX, Math.min(maxPanX, newPanX));
+					newPanY = Math.max(-maxPanY, Math.min(maxPanY, newPanY));
+				}
+				
+				this.panX = newPanX;
+				this.panY = newPanY;
 			},
 			
 			stopDrag() {
@@ -203,6 +229,7 @@
 			}
 		}"
 		@open-carousel.window="open($event.detail.id)"
+		@close-carousel.window="close()"
 		@keydown.window.escape="if(showInfo) showInfo = false; else close()"
 		@keydown.window.arrow-right="if($refs.carouselDialog.open) next()"
 		@keydown.window.arrow-left="if($refs.carouselDialog.open) prev()"

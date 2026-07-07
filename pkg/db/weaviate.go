@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -27,6 +28,7 @@ import (
 
 type WeaviateClient struct {
 	Client *weaviate.Client
+	Chan   chan []*models.Object
 }
 
 type Image struct {
@@ -56,7 +58,11 @@ func NewWeaviateClient(host string) (*WeaviateClient, error) {
 		return nil, err
 	}
 
-	return &WeaviateClient{Client: client}, nil
+	channel := make(chan []*models.Object, 10)
+	w := &WeaviateClient{Client: client, Chan: channel}
+	go w.batchWriterLoop()
+
+	return w, nil
 }
 
 func (w *WeaviateClient) WaitForReady(timeout time.Duration) error {
@@ -155,6 +161,13 @@ func (w *WeaviateClient) InitSchema() error {
 	return nil
 }
 
+func (w *WeaviateClient) batchWriterLoop() {
+	ctx := context.Background()
+	for batch := range w.Chan {
+		w.WriteBatchDB(ctx, batch)
+	}
+}
+
 // TODO: run both in parallel without stopping
 func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, galleryID int) {
 	batchSize := 20
@@ -188,15 +201,23 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			}
 			batch = append(batch, obj)
 			if len(batch) >= batchSize {
-				w.WriteBatchDB(ctx, batch)
-				batch = batch[:0]
+				w.Chan <- batch
+				batch = make([]*models.Object, 0, batchSize)
 			}
 		}
 		if len(batch) > 0 {
-			w.WriteBatchDB(ctx, batch)
+			w.Chan <- batch
 		}
 		close(done)
 	}()
+
+	isRawExt := func(ext string) bool {
+		rawExts := map[string]bool{
+			".nef": true, ".cr2": true, ".cr3": true, ".arw": true,
+			".dng": true, ".raf": true, ".orf": true, ".rw2": true, ".srw": true,
+		}
+		return rawExts[strings.ToLower(ext)]
+	}
 
 	g := new(errgroup.Group)
 	g.SetLimit(maxWorkers)
@@ -210,16 +231,37 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			}
 
 			bimgImg := bimg.NewImage(data)
-			bimgSize, err := bimgImg.Size()
+
+			var width, height int
+
+			if isRawExt(filepath.Ext(path)) {
+				cmd := exec.Command("exiftool", "-ImageWidth", "-ImageHeight", "-S", "-n", path)
+				if out, err := cmd.Output(); err == nil {
+					lines := strings.Split(string(out), "\n")
+					for _, line := range lines {
+						if strings.HasPrefix(line, "ImageWidth:") {
+							width, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "ImageWidth:")))
+						} else if strings.HasPrefix(line, "ImageHeight:") {
+							height, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "ImageHeight:")))
+						}
+					}
+				}
+			}
+
+			if width == 0 || height == 0 {
+				bimgSize, err := bimgImg.Size()
+				if err == nil {
+					width = bimgSize.Width
+					height = bimgSize.Height
+				}
+			}
 
 			var resolution int
 			var aspectRatio float64
 
-			if err == nil {
-				resolution = bimgSize.Width * bimgSize.Height
-				if bimgSize.Height > 0 {
-					aspectRatio = float64(bimgSize.Width) / float64(bimgSize.Height)
-				}
+			if width > 0 && height > 0 {
+				resolution = width * height
+				aspectRatio = float64(width) / float64(height)
 			}
 
 			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
@@ -420,10 +462,11 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 	}
 }
 
-func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]Image, error) {
+func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]Image, error) {
 	nearText := w.Client.GraphQL().
 		NearTextArgBuilder().
-		WithConcepts([]string{search})
+		WithConcepts([]string{search}).
+		WithDistance(threshold)
 
 	query := w.Client.GraphQL().Get().
 		WithClassName("Image").

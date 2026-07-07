@@ -401,8 +401,8 @@ dialog.closing::backdrop {
 
 /* Fullscreen Carousel */
 .carousel-modal {
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     max-width: none;
     max-height: none;
     margin: 0;
@@ -410,6 +410,7 @@ dialog.closing::backdrop {
     border: none;
     background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(5px);
+    overflow: hidden;
 }
 .carousel-modal::backdrop {
     background: transparent;

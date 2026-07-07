@@ -30,8 +30,7 @@ and download the [acuity repo](https://codeberg.org/Shlks/acuity/archive/master.
 ### Step 2
 
 Edit the volume in the [docker-compose](docker-dev.yml) to where
-your images are. On Windows you need to replace the drive letter with `/mnt/` followed by the drive letter in lowercase,
-for example `C:` becomes `/mnt/c`. Also use `/` instead of `\`.
+your images are. On Windows you need to use `/` instead of `\`.
 Since you can create separate galleries for your folders, I
 recommend setting the volume to the most root folder you can, or
 do something like this:
@@ -54,7 +53,7 @@ environment:
 Open your preferred terminal in the acuity folder and run `docker compose up -d`
 
 > [!NOTE]
-> Weaviate will take some GB (~8.5 GB) to download its model.
+> Weaviate will take ~8.5 GB to download its model.
 >
 > You can also install `Docker Desktop` on Linux if you want to.
 
@@ -117,9 +116,9 @@ Run [docker-run.bat](docker-run.bat).
 - [x] Search sorting options
 - [x] Edit Gallery
 - [x] Multiple image selection
-- [ ] Drop image in Searchbar
+- [x] Drop image in Searchbar
 - [x] Delete image/selection
 - [x] Image rating
 - [x] Settings
 - [ ] Search duplicates
-- [ ] Skip to beginning on new page
+- [x] Skip to beginning on new page

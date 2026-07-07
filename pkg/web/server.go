@@ -231,12 +231,25 @@ func isRawExtension(ext string) bool {
 }
 
 func extractRawPreview(path string) ([]byte, error) {
-	for _, tag := range []string{"-PreviewImage", "-JpgFromRaw", "-ThumbnailImage"} {
+	var bestPreview []byte
+
+	for _, tag := range []string{"-JpgFromRaw", "-PreviewImage", "-OtherImage", "-ThumbnailImage"} {
 		cmd := exec.Command("exiftool", "-b", tag, path)
 		out, err := cmd.Output()
 		if err == nil && len(out) > 0 {
-			return out, nil
+			// If we found a high-res preview (> 100KB), return it immediately to save time
+			if len(out) > 100000 {
+				return out, nil
+			}
+			// Otherwise, keep it if it's the largest we've seen so far, but keep searching
+			if len(out) > len(bestPreview) {
+				bestPreview = out
+			}
 		}
+	}
+
+	if len(bestPreview) > 0 {
+		return bestPreview, nil
 	}
 	return nil, fmt.Errorf("no preview found")
 }
@@ -500,6 +513,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		"GalleryName": name,
 		"ReturnTo":    returnTo,
 		"SearchType":  "duplicate",
+		"Threshold":   thresholdFloat,
 	}
 
 	err = s.Template.ExecuteTemplate(w, "search-results.html", data)
@@ -824,10 +838,19 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	search := query.String(r, "q", "")
-	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
-	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
-	page := query.Int(r, "page", 1)
+	search := r.FormValue("q")
+	sortBy := r.FormValue("sortBy")
+	if sortBy == "" {
+		sortBy = s.Config.DefaultSortBy
+	}
+	sortOrder := r.FormValue("sortOrder")
+	if sortOrder == "" {
+		sortOrder = s.Config.DefaultSortOrder
+	}
+	page, _ := strconv.Atoi(r.FormValue("page"))
+	if page < 1 {
+		page = 1
+	}
 	// options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
@@ -839,7 +862,14 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.SearchImages(ctx, search, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
+	thresholdStr := r.FormValue("threshold")
+	if thresholdStr == "" {
+		thresholdStr = "0.9"
+	}
+	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
+	threshold := float32(thresholdFloat)
+
+	images, err := s.Service.SearchImages(ctx, search, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -852,6 +882,7 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Images":      images,
 		"Query":       search,
+		"Threshold":   thresholdFloat,
 		"Page":        page,
 		"PrevPage":    page - 1,
 		"NextPage":    page + 1,
@@ -872,9 +903,18 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
-	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
-	page := query.Int(r, "page", 1)
+	sortBy := r.FormValue("sortBy")
+	if sortBy == "" {
+		sortBy = s.Config.DefaultSortBy
+	}
+	sortOrder := r.FormValue("sortOrder")
+	if sortOrder == "" {
+		sortOrder = s.Config.DefaultSortOrder
+	}
+	page, _ := strconv.Atoi(r.FormValue("page"))
+	if page < 1 {
+		page = 1
+	}
 	// options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
@@ -931,7 +971,10 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thresholdStr := query.String(r, "threshold", "0.9")
+	thresholdStr := r.FormValue("threshold")
+	if thresholdStr == "" {
+		thresholdStr = "0.9"
+	}
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
 
