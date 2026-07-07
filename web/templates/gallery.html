@@ -59,17 +59,25 @@
 </div>
 
 
-<div id="gallery-container" hx-get="/gallery/{{.Name}}/images?page=1" hx-include="#search-options-form" hx-trigger="load, refresh-images from:body">
-	<div class="gallery-grid {{(getConfig).GridSize}}">
-		<div class="image-card skeleton" style="border: none; flex-grow: 1.5; flex-basis: calc(var(--grid-base, 250px) * 1.5);"></div>
-		<div class="image-card skeleton" style="border: none; flex-grow: 0.8; flex-basis: calc(var(--grid-base, 250px) * 0.8);"></div>
-		<div class="image-card skeleton" style="border: none; flex-grow: 1.2; flex-basis: calc(var(--grid-base, 250px) * 1.2);"></div>
-		<div class="image-card skeleton" style="border: none; flex-grow: 1.0; flex-basis: calc(var(--grid-base, 250px) * 1.0);"></div>
-		<div class="image-card skeleton" style="border: none; flex-grow: 0.6; flex-basis: calc(var(--grid-base, 250px) * 0.6);"></div>
-		<div class="image-card skeleton" style="border: none; flex-grow: 2.0; flex-basis: calc(var(--grid-base, 250px) * 2.0);"></div>
-		<div class="image-card skeleton" style="border: none; flex-grow: 1.1; flex-basis: calc(var(--grid-base, 250px) * 1.1);"></div>
-		<div class="image-card skeleton" style="border: none; flex-grow: 0.9; flex-basis: calc(var(--grid-base, 250px) * 0.9);"></div>
-	</div>
+<div x-data="{ loading: true }" 
+     @htmx:before-request.window="if($event.detail.target.id === 'gallery-container') loading = true"
+     @htmx:after-request.window="if($event.detail.target.id === 'gallery-container') loading = false">
+    
+    <div id="gallery-skeleton" x-show="loading">
+        <div style="display: flex; justify-content: center; align-items: center; min-height: 400px; width: 100%;">
+            <svg class="md3-spinner" viewBox="0 0 48 48">
+                <circle class="md3-spinner-path" cx="24" cy="24" r="18" fill="none" stroke-width="5"></circle>
+            </svg>
+        </div>
+    </div>
+
+    <div id="gallery-container" 
+         x-show="!loading"
+         style="display: none;"
+         hx-get="/gallery/{{.Name}}/images?page=1" 
+         hx-include="#search-options-form" 
+         hx-trigger="load, refresh-images from:body">
+    </div>
 </div>
 
 <!-- Edit Gallery Dialog -->

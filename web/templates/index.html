@@ -34,7 +34,7 @@
 								<button class="nav-item" :class="{ 'active': currentGallery === '{{.Name}}' }" @click="currentGallery = '{{.Name}}'" hx-get="/gallery/{{.Name}}" hx-target="#main-content" style="padding-right: 40px; flex-grow: 1;">
 									<span class="material-symbols-outlined" style="font-size: 1rem;">folder</span> {{.Name}}
 								</button>
-								<button class="btn-icon" x-show="hovered" x-transition style="position: absolute; right: 8px; color: var(--danger); z-index: 10;"
+								<button class="btn-icon-danger" x-show="hovered" x-transition style="position: absolute; right: 8px; z-index: 10;"
 										hx-delete="/gallery/{{.Name}}" 
 										hx-confirm="Do you really want to delete '{{.Name}}'?"
 										hx-target="closest div" 
@@ -54,8 +54,26 @@
 							<span class="material-symbols-outlined">search</span> Duplicates
 						</button>
 					</div>
-					<div id="sidebar-progress" hx-get="/api/progress" hx-trigger="every 1s" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;"></div>
+					<div id="sidebar-progress-ui" x-data="{ imports: [] }" @update-imports.window="imports = $event.detail" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;">
+						<template x-for="imp in imports" :key="imp.name">
+                            <h3 style="color: var(--text-muted)">Imports</h3>
+                            <hr>
+							<div style="padding: 16px; background: var(--bg-light); border-radius: 8px; border: 1px solid var(--border); margin: 16px 0;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+									<div style="display: flex; align-items: center; gap: 8px;">
+										<!--<span class="material-symbols-outlined" style="font-size: 1.1rem; animation: spin 2s linear infinite; color: var(--primary); display: flex; align-items:
+										center; justify-content: center; width: 1.1rem; height: 1.1rem; transform-origin: center;">sync</span>-->
+										<span style="font-weight: 500; color: var(--text);" x-text="imp.name"></span>
+									</div>
+									<span style="color: var(--text-muted); font-size: 0.9rem;" x-text="imp.current + ' / ' + imp.expected"></span>
+								</div>
+								<div class="md3-linear-progress"></div>
+							</div>
+						</template>
+					</div>
+					<div id="sidebar-progress" hx-get="/api/progress" hx-trigger="every 7s" style="display: none;"></div>
 
+                    <hr>
 					<button class="nav-item" hx-get="/settings" hx-target="body" hx-swap="beforeend">
 						<span class="material-symbols-outlined">settings</span> Settings
 					</button>
@@ -187,8 +205,8 @@
 				if (img) {
 					const scaledWidth = img.clientWidth * this.scale;
 					const scaledHeight = img.clientHeight * this.scale;
-					const maxPanX = Math.max(0, (scaledWidth - window.innerWidth) / 2);
-					const maxPanY = Math.max(0, (scaledHeight - window.innerHeight) / 2);
+					const maxPanX = Math.max(0, (scaledWidth - img.clientWidth) / 2);
+					const maxPanY = Math.max(0, (scaledHeight - img.clientHeight) / 2);
 					this.panX = Math.max(-maxPanX, Math.min(maxPanX, this.panX));
 					this.panY = Math.max(-maxPanY, Math.min(maxPanY, this.panY));
 				}
@@ -213,8 +231,8 @@
 					const scaledWidth = img.clientWidth * this.scale;
 					const scaledHeight = img.clientHeight * this.scale;
 					
-					const maxPanX = Math.max(0, (scaledWidth - window.innerWidth) / 2);
-					const maxPanY = Math.max(0, (scaledHeight - window.innerHeight) / 2);
+					const maxPanX = Math.max(0, (scaledWidth - img.clientWidth) / 2);
+					const maxPanY = Math.max(0, (scaledHeight - img.clientHeight) / 2);
 					
 					newPanX = Math.max(-maxPanX, Math.min(maxPanX, newPanX));
 					newPanY = Math.max(-maxPanY, Math.min(maxPanY, newPanY));

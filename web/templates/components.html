@@ -165,13 +165,7 @@
 						<option value="asc" {{if eq (getConfig).DefaultSortOrder "asc"}}selected{{end}}>Ascending</option>
 					</select>
 				</div>
-				<div style="margin-top: 12px;" x-data="{ threshold: 0.9 }">
-					<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; display: flex; justify-content: space-between;">
-						<span>Similarity Threshold</span>
-						<span x-text="Number(threshold).toFixed(2)"></span>
-					</div>
-					<input type="range" name="threshold" x-model="threshold" min="0" max="2" step="0.05" style="width: 100%;">
-				</div>
+
 			</form>
 		</div>
 	</div>
@@ -317,7 +311,8 @@
     </form>
 
     <!-- Wählt den Ordner aus und schließt den Browser -->
-    <button type="button" @click="{{if .Target}}{{.Target}}{{else}}path{{end}} = '{{.CurrentDir}}'; showBrowser = false; {{if .Target}}showTransferBrowser = false;{{end}}" class="nav-item" style="margin-top: 12px; width: 100%; justify-content: center; background: var(--primary); color: white;">
+    <button type="button" @click="{{if .Target}}{{.Target}}{{else}}path{{end}} = '{{.CurrentDir}}'; showBrowser = false; {{if .Target}}showTransferBrowser = false;{{end}}" class="nav-item"
+            style="margin-top: 12px; width: 100%; justify-content: center; background: var(--secondary); color: white;">
         Choose this Folder
     </button>
 </div>

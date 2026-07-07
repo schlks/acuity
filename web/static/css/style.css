@@ -119,7 +119,7 @@ dialog.closing::backdrop {
 }
 
 .sidebar-left {
-	width: 250px;
+	width: 300px;
 	flex-shrink: 0;
 	background-color: var(--bg);
 	border-right: 1px solid var(--border);
@@ -211,6 +211,23 @@ dialog.closing::backdrop {
 .btn-icon:hover {
 	color: var(--text);
     box-shadow: 0 0 15px rgba(64, 124, 245, 0.3);
+}
+
+.btn-icon-danger {
+	border: none;
+	color: var(--danger);
+	cursor: pointer;
+	padding: 6px;
+	border-radius: 6px;
+	transition: all 0.2s;
+	background: transparent;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.btn-icon-danger:hover {
+	background: rgba(192, 28, 40, 0.1);
+	box-shadow: 0 0 15px rgba(192, 28, 40, 0.3);
 }
 
 /* Inputs */
@@ -519,4 +536,57 @@ dialog.closing::backdrop {
     border-radius: 20px;
     font-family: monospace;
     font-size: 1.1rem;
+}
+
+.md3-spinner {
+    animation: md3-rotate 2s linear infinite;
+    width: 48px;
+    height: 48px;
+}
+.md3-spinner-path {
+    stroke: var(--info);
+    stroke-linecap: round;
+    animation: md3-dash 1.5s ease-in-out infinite;
+}
+@keyframes md3-rotate {
+    100% { transform: rotate(360deg); }
+}
+@keyframes md3-dash {
+    0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
+    50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+    100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+}
+
+.md3-linear-progress {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    background: var(--bg-dark);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.md3-linear-progress::before,
+.md3-linear-progress::after {
+    content: '';
+    position: absolute;
+    height: 100%;
+    background: var(--info);
+    border-radius: 3px;
+}
+.md3-linear-progress::before {
+    animation: md3-linear-1 2.1s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+}
+.md3-linear-progress::after {
+    animation: md3-linear-2 2.1s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
+    animation-delay: 1.15s;
+}
+@keyframes md3-linear-1 {
+    0% { left: -35%; right: 100%; }
+    60% { left: 100%; right: -90%; }
+    100% { left: 100%; right: -90%; }
+}
+@keyframes md3-linear-2 {
+    0% { left: -200%; right: 100%; }
+    60% { left: 107%; right: -8%; }
+    100% { left: 107%; right: -8%; }
 }

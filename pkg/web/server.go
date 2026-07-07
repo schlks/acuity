@@ -680,6 +680,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		NextPage    int
 		HasNext     bool
 		LastPage    int
+		Count       int
 	}{
 		GalleryName: name,
 		Images:      images,
@@ -688,6 +689,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		NextPage:    nextPage,
 		HasNext:     nextPage != -1,
 		LastPage:    lastPage,
+		Count:       count,
 	}
 
 	// Rendert nur die Bilder-Kacheln aus dem neuen Template

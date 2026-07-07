@@ -170,7 +170,7 @@ func (w *WeaviateClient) batchWriterLoop() {
 
 // TODO: run both in parallel without stopping
 func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, galleryID int) {
-	batchSize := 20
+	batchSize := 43
 	threads := runtime.NumCPU()
 	maxWorkers := max(threads-2, threads/2)
 
@@ -235,7 +235,9 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			var width, height int
 
 			if isRawExt(filepath.Ext(path)) {
-				cmd := exec.Command("exiftool", "-ImageWidth", "-ImageHeight", "-S", "-n", path)
+				ctxCmd, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctxCmd, "exiftool", "-ImageWidth", "-ImageHeight", "-S", "-n", path)
 				if out, err := cmd.Output(); err == nil {
 					lines := strings.Split(string(out), "\n")
 					for _, line := range lines {
@@ -451,10 +453,12 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 }
 
 func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) {
+	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	_, err := w.Client.Batch().
 		ObjectsBatcher().
 		WithObjects(batch...).
-		Do(ctx)
+		Do(ctxTimeout)
 	if err != nil {
 		slog.Error("Error during batch write to Weaviate", slog.Any("error", err))
 	} else {
