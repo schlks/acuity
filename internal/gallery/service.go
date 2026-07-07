@@ -37,8 +37,8 @@ type wService interface {
 	RemoveImage(ctx context.Context, image db.Image) error
 	WriteBatchDB(ctx context.Context, batch []*models.Object)
 	SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error)
-	SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error)
-	FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int) ([]db.Image, error)
+	SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]db.Image, error)
+	FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.Image, error)
 	ChangeGallery(ctx context.Context, newID int, images []db.Image) error
 	CopyToGallery(ctx context.Context, newGalleryID int, images []db.Image) error
 	RemoveImages(ctx context.Context, images []db.Image) error
@@ -204,8 +204,8 @@ func (g *GalleryService) SearchImages(ctx context.Context, search string, galler
 	return g.wDB.SearchImage(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage)
 }
 
-func (g *GalleryService) SearchImages64(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error) {
-	return g.wDB.SearchImage64(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage)
+func (g *GalleryService) SearchImages64(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]db.Image, error) {
+	return g.wDB.SearchImage64(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold)
 }
 
 func (g *GalleryService) GetAllImages(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]db.Image, error) {
@@ -275,13 +275,8 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image, de
 	return nil
 }
 
-func (g *GalleryService) FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int) ([]db.Image, error) {
-	images, err := g.wDB.FindDublicates(ctx, imageID, galleryID, page, imagesPerPage)
-	if err != nil {
-		return nil, err
-	}
-
-	return images, nil
+func (g *GalleryService) FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.Image, error) {
+	return g.wDB.FindDublicates(ctx, imageID, galleryID, page, imagesPerPage, threshold)
 }
 
 func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []db.Image) error {

@@ -72,9 +72,8 @@ acuity:
     ports:
         - "3000:3000"
     volumes:
-        - ./acuity.db:/app/acuity.db
-        - ./config.json:/app/config.json
-        - ./your/folder:/data/folder:rw
+      - acuity_data:/app/data
+      - ./your/folder:/data/folder:rw
     environment:
         - WEAVIATE_HOST=weaviate
         - WEAVIATE_PORT=:50050
@@ -113,7 +112,7 @@ Run [docker-run.bat](docker-run.bat).
 
 ### Frontend
 
-- [ ] Image carousel
+- [x] Image carousel
 - [ ] Keybindings
 - [x] Search sorting options
 - [x] Edit Gallery
@@ -122,3 +121,5 @@ Run [docker-run.bat](docker-run.bat).
 - [x] Delete image/selection
 - [x] Image rating
 - [x] Settings
+- [ ] Search duplicates
+- [ ] Skip to beginning on new page

@@ -18,7 +18,7 @@ RUN go test -v ./...
 
 FROM alpine:latest AS production
 
-RUN apk add --no-cache vips
+RUN apk add --no-cache vips exiftool
 
 WORKDIR /app
 COPY --from=build-stage /app/bin/acuity .

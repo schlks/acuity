@@ -7,6 +7,7 @@ import (
 	"acuity/internal/config"
 	"acuity/internal/gallery"
 	"acuity/pkg/db"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -15,10 +16,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/h2non/bimg"
 	"github.com/mallardduck/go-http-helpers/pkg/query"
 	_ "github.com/weaviate/weaviate/entities/models"
 )
@@ -58,8 +61,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST	/image/{id}", s.setRating)
 	mux.HandleFunc("DELETE /images", s.deleteFiles)
 	mux.HandleFunc("GET	/gallery/{name}/duplicates", s.handleDuplicates)
-	mux.HandleFunc("GET	/gallery/{name}/search", s.handleTextSearch)
-	mux.HandleFunc("POST	/gallery/{name}/search/image", s.handleImageSearch)
+	mux.HandleFunc("POST	/gallery/{name}/search", s.handleSearch)
 	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
 	mux.HandleFunc("POST /gallery/{name}/edit", s.editGallery)
 	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
@@ -220,12 +222,56 @@ func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
 	t.Execute(w, s.Config)
 }
 
+func isRawExtension(ext string) bool {
+	rawExts := map[string]bool{
+		".nef": true, ".cr2": true, ".cr3": true, ".arw": true,
+		".dng": true, ".raf": true, ".orf": true, ".rw2": true, ".srw": true,
+	}
+	return rawExts[strings.ToLower(ext)]
+}
+
+func extractRawPreview(path string) ([]byte, error) {
+	for _, tag := range []string{"-PreviewImage", "-JpgFromRaw", "-ThumbnailImage"} {
+		cmd := exec.Command("exiftool", "-b", tag, path)
+		out, err := cmd.Output()
+		if err == nil && len(out) > 0 {
+			return out, nil
+		}
+	}
+	return nil, fmt.Errorf("no preview found")
+}
+
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	image := query.String(r, "path", "")
 	if image == "" {
 		http.Error(w, "Image not found", http.StatusNotFound)
 		return
 	}
+
+	if isRawExtension(filepath.Ext(image)) {
+		// First try extracting the embedded high-quality JPEG
+		if previewBytes, err := extractRawPreview(image); err == nil {
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write(previewBytes)
+			return
+		}
+
+		// Fallback to bimg if exiftool fails
+		buffer, err := os.ReadFile(image)
+		if err == nil {
+			options := bimg.Options{
+				Type:     bimg.PNG,
+				Quality:  100,
+				Lossless: true,
+			}
+			if newImage, err := bimg.NewImage(buffer).Process(options); err == nil {
+				w.Header().Set("Content-Type", "image/png")
+				w.Write(newImage)
+				return
+			}
+		}
+	}
+
 	http.ServeFile(w, r, image)
 }
 
@@ -428,7 +474,11 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.FindDublicates(ctx, imageID, galleryID, page-1, s.Config.ImagesPerPage)
+	thresholdStr := query.String(r, "threshold", "0.9")
+	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
+	threshold := float32(thresholdFloat)
+
+	images, err := s.Service.FindDublicates(ctx, imageID, galleryID, page-1, s.Config.ImagesPerPage, threshold)
 	if err != nil {
 		message := "Failed to find duplicate Images"
 		slog.Error(message, slog.Any("error", err))
@@ -748,7 +798,30 @@ func (s *Server) copyToGallery(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		message := "Failed to parse form"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
+
+	_, _, err := r.FormFile("file")
+
+	if err == nil {
+		s.imageSearch(w, r)
+		return
+	}
+
+	if errors.Is(err, http.ErrMissingFile) {
+		s.textSearch(w, r)
+		return
+	}
+
+	http.Error(w, "Failed to parse form", http.StatusBadRequest)
+}
+
+func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	search := query.String(r, "q", "")
@@ -796,12 +869,12 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
+func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	sortBy := query.String(r, "sortBy", s.Config.DefaultSortBy)
 	sortOrder := query.String(r, "sortOrder", s.Config.DefaultSortOrder)
-	page := query.Int(r, "page", 0)
+	page := query.Int(r, "page", 1)
 	// options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
@@ -858,7 +931,11 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := s.Service.SearchImages64(ctx, file64, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage)
+	thresholdStr := query.String(r, "threshold", "0.9")
+	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
+	threshold := float32(thresholdFloat)
+
+	images, err := s.Service.SearchImages64(ctx, file64, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -866,7 +943,19 @@ func (s *Server) handleImageSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.Template.ExecuteTemplate(w, "result.html", images)
+	returnTo := query.String(r, "returnTo", name)
+	data := map[string]any{
+		"Images":      images,
+		"Page":        page,
+		"PrevPage":    page - 1,
+		"NextPage":    page + 1,
+		"HasNext":     len(images) == s.Config.ImagesPerPage,
+		"GalleryName": name,
+		"ReturnTo":    returnTo,
+		"SearchType":  "duplicate",
+	}
+
+	err = s.Template.ExecuteTemplate(w, "search-results.html", data)
 	if err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))

@@ -38,55 +38,108 @@
 
 {{define "search-bar"}}
 <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-<div x-data="{
-    text: '',
-    placeholders: ['Search for a sunset...', 'Mountains in winter...', 'Portrait of a dog...', 'A red car on the street...'],
-    index: 0,
-    charIndex: 0,
-    isDeleting: false,
-    query: '',
-    type() {
-        let current = this.placeholders[this.index];
-        if (this.isDeleting) {
-            this.charIndex--;
-        } else {
-            this.charIndex++;
-        }
-        this.text = current.substring(0, this.charIndex);
-
-        let typeSpeed = this.isDeleting ? 30 : 80;
-
-        if (!this.isDeleting && this.charIndex === current.length) {
-            typeSpeed = 2000;
-            this.isDeleting = true;
-        } else if (this.isDeleting && this.charIndex === 0) {
-            this.isDeleting = false;
-            this.index = (this.index + 1) % this.placeholders.length;
-            typeSpeed = 500;
-        }
-
-        setTimeout(() => this.type(), typeSpeed);
-    }
-}" x-init="type()" style="position: relative; width: 100%;">
-	<input type="text"
-		class="input-clean"
-		name="q"
-		x-ref="searchInput"
-		x-model="query"
-		:placeholder="text"
-		hx-get="/gallery/{{.}}/search"
-		hx-include="#search-options-form"
-		hx-trigger="keyup[key=='Enter']"
+	<form hx-post="/gallery/{{.}}/search"
+		hx-encoding="multipart/form-data"
 		hx-target="#main-content"
-		style="padding-left: 40px; padding-right: 40px; border-radius: 24px; padding-top: 16px; padding-bottom: 16px; font-size: 1.1rem; flex-grow: 1;">
-	<span class="material-symbols-outlined" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted);">search</span>
-	
-	<button type="button" class="btn-icon" x-show="query.length > 0" x-transition 
-		@click="query = ''; $nextTick(() => htmx.trigger($refs.searchInput, 'keyup', {key: 'Enter'}))" 
-		style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); background: var(--bg); border-radius: 50%;">
-		<span class="material-symbols-outlined">close</span>
-	</button>
-</div>
+		hx-include="#search-options-form"
+		style="position: relative; width: 100%;"
+		x-data="{
+			text: '',
+			placeholders: ['Search for a sunset...', 'Mountains in winter...', 'Portrait of a dog...', 'A red car on the street...'],
+			index: 0,
+			charIndex: 0,
+			isDeleting: false,
+			query: '',
+			isDragging: false,
+			imageUrl: null,
+			type() {
+				let current = this.placeholders[this.index];
+				if (this.isDeleting) {
+					this.charIndex--;
+				} else {
+					this.charIndex++;
+				}
+				this.text = current.substring(0, this.charIndex);
+		
+				let typeSpeed = this.isDeleting ? 30 : 80;
+		
+				if (!this.isDeleting && this.charIndex === current.length) {
+					typeSpeed = 2000;
+					this.isDeleting = true;
+				} else if (this.isDeleting && this.charIndex === 0) {
+					this.isDeleting = false;
+					this.index = (this.index + 1) % this.placeholders.length;
+					typeSpeed = 500;
+				}
+		
+				setTimeout(() => this.type(), typeSpeed);
+			},
+			handleFile(file) {
+				if (!file || !file.type.startsWith('image/')) return;
+				this.imageUrl = URL.createObjectURL(file);
+				const dt = new DataTransfer();
+				dt.items.add(file);
+				this.$refs.fileInput.files = dt.files;
+				this.query = ''; // Suchtext leeren, da jetzt ein Bild da ist
+				this.$nextTick(() => {
+					this.$refs.searchInput.closest('form').requestSubmit();
+				});
+			},
+			handlePaste(event) {
+				const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+				for (let index in items) {
+					const item = items[index];
+					if (item.kind === 'file' && item.type.startsWith('image/')) {
+						this.handleFile(item.getAsFile());
+						return;
+					}
+				}
+			},
+			removeImage() {
+				this.imageUrl = null;
+				this.$refs.fileInput.value = '';
+			}
+		}" 
+		x-init="type()" 
+		@dragover.window.prevent="isDragging = true"
+		@dragleave.window.prevent="isDragging = false"
+		@drop.window.prevent="isDragging = false; handleFile($event.dataTransfer.files[0])"
+		@paste.window="handlePaste($event)"
+		@submit="if (query.trim() === '' && !imageUrl) $event.preventDefault()"
+		:style="isDragging ? 'position: relative; width: 100%; outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 24px;' : 'position: relative; width: 100%;'">
+		
+		<!-- Hidden input for HTMX to pick up the file -->
+		<input type="file" name="file" x-ref="fileInput" style="display: none;">
+
+		<!-- Image Preview -->
+		<template x-if="imageUrl">
+			<div style="position: absolute; left: 40px; top: 50%; transform: translateY(-50%); z-index: 10; display: flex; align-items: center; gap: 4px; background: var(--bg); padding: 4px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+				<img :src="imageUrl" style="height: 32px; width: 32px; border-radius: 4px; object-fit: cover;">
+				<button type="button" @click.stop="removeImage()" style="background: none; border: none; cursor: pointer; display: flex; align-items: center; color: var(--text-muted); padding: 0; margin-left: 4px;">
+					<span class="material-symbols-outlined" style="font-size: 18px;">close</span>
+				</button>
+			</div>
+		</template>
+
+		<input type="text"
+			class="input-clean"
+			name="q"
+			x-ref="searchInput"
+			x-model="query"
+			@keydown.enter.prevent="$el.closest('form').requestSubmit()"
+			:readonly="imageUrl !== null"
+			:placeholder="imageUrl ? 'Press Enter to search by image...' : text"
+			:style="imageUrl ? 'padding-left: 110px; padding-right: 40px; border-radius: 24px; padding-top: 16px; padding-bottom: 16px; font-size: 1.1rem; flex-grow: 1; cursor: not-allowed; color: transparent;' : 'padding-left: 40px; padding-right: 40px; border-radius: 24px; padding-top: 16px; padding-bottom: 16px; font-size: 1.1rem; flex-grow: 1;'">
+		
+		<span class="material-symbols-outlined" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted);">search</span>
+		
+		<!-- Clear Button -->
+		<button type="button" class="btn-icon" x-show="query.length > 0" x-transition 
+			@click="query = ''; $nextTick(() => htmx.trigger($el.closest('form'), 'submit'))" 
+			style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); background: var(--bg); border-radius: 50%;">
+			<span class="material-symbols-outlined">close</span>
+		</button>
+	</form>
 
 	<!-- Options Dropdown -->
 	<div x-data="{ open: false }" style="position: relative;">
@@ -111,6 +164,13 @@
 						<option value="desc" {{if eq (getConfig).DefaultSortOrder "desc"}}selected{{end}}>Descending</option>
 						<option value="asc" {{if eq (getConfig).DefaultSortOrder "asc"}}selected{{end}}>Ascending</option>
 					</select>
+				</div>
+				<div style="margin-top: 12px;" x-data="{ threshold: 0.9 }">
+					<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; display: flex; justify-content: space-between;">
+						<span>Similarity Threshold</span>
+						<span x-text="Number(threshold).toFixed(2)"></span>
+					</div>
+					<input type="range" name="threshold" x-model="threshold" min="0" max="2" step="0.05" style="width: 100%;">
 				</div>
 			</form>
 		</div>
@@ -151,6 +211,12 @@
 <div style="display: flex; flex-direction: column; gap: 16px; flex-grow: 1;">
     <h2 style="margin: 0; color: var(--text); font-size: 1.8rem; word-break: break-word;">{{.Name}}</h2>
 	<hr>
+	<template x-if="['nef', 'cr2', 'cr3', 'arw', 'dng', 'raf', 'orf', 'rw2', 'srw'].includes('{{.Extension}}'.toLowerCase().replace('.', ''))">
+		<div style="background: rgba(255, 170, 0, 0.1); color: #ffaa00; padding: 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+			<span class="material-symbols-outlined" style="font-size: 18px;">info</span>
+			<span>This RAW file is being displayed as its embedded Camera JPEG preview.</span>
+		</div>
+	</template>
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">ID</div>
 		<div style="word-break: break-all;">{{.ID}}</div>

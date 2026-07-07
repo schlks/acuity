@@ -47,4 +47,6 @@ services:
 
 volumes:
   weaviate_data:
+    name: weaviate_data
   acuity_data:
+    name: acuity_data
