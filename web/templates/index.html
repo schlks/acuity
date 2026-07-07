@@ -195,20 +195,39 @@
 					}
 				}
 			},
+			clampPan(pan, clientSize, windowSize) {
+				const scaledSize = clientSize * this.scale;
+				if (scaledSize <= windowSize) return 0;
+				const maxPan = (scaledSize - windowSize) / 2;
+				return Math.max(-maxPan, Math.min(maxPan, pan));
+			},
 			
 			handleWheel(e) {
 				e.preventDefault();
+				if (this.isDragging) return;
+				
 				const delta = e.deltaY > 0 ? -0.1 : 0.1;
-				this.scale = Math.max(1, Math.min(this.scale + delta * this.scale, 5));
+				const newScale = Math.max(1, Math.min(this.scale * (1 + delta), 50));
 				
 				const img = this.$el.querySelector('.carousel-image');
-				if (img) {
-					const scaledWidth = img.clientWidth * this.scale;
-					const scaledHeight = img.clientHeight * this.scale;
-					const maxPanX = Math.max(0, (scaledWidth - img.clientWidth) / 2);
-					const maxPanY = Math.max(0, (scaledHeight - img.clientHeight) / 2);
-					this.panX = Math.max(-maxPanX, Math.min(maxPanX, this.panX));
-					this.panY = Math.max(-maxPanY, Math.min(maxPanY, this.panY));
+				if (!img) return;
+
+				const mouseX = e.clientX - (window.innerWidth / 2);
+				const mouseY = e.clientY - (window.innerHeight / 2);
+				
+				const scaleRatio = newScale / this.scale;
+				
+				let newPanX = mouseX - (mouseX - this.panX) * scaleRatio;
+				let newPanY = mouseY - (mouseY - this.panY) * scaleRatio;
+				
+				this.scale = newScale;
+				
+				if (this.scale === 1) {
+					this.panX = 0;
+					this.panY = 0;
+				} else {
+					this.panX = this.clampPan(newPanX, img.clientWidth, window.innerWidth);
+					this.panY = this.clampPan(newPanY, img.clientHeight, window.innerHeight);
 				}
 			},
 			
@@ -228,18 +247,12 @@
 				
 				const img = this.$el.querySelector('.carousel-image');
 				if (img) {
-					const scaledWidth = img.clientWidth * this.scale;
-					const scaledHeight = img.clientHeight * this.scale;
-					
-					const maxPanX = Math.max(0, (scaledWidth - img.clientWidth) / 2);
-					const maxPanY = Math.max(0, (scaledHeight - img.clientHeight) / 2);
-					
-					newPanX = Math.max(-maxPanX, Math.min(maxPanX, newPanX));
-					newPanY = Math.max(-maxPanY, Math.min(maxPanY, newPanY));
+					this.panX = this.clampPan(newPanX, img.clientWidth, window.innerWidth);
+					this.panY = this.clampPan(newPanY, img.clientHeight, window.innerHeight);
+				} else {
+					this.panX = newPanX;
+					this.panY = newPanY;
 				}
-				
-				this.panX = newPanX;
-				this.panY = newPanY;
 			},
 			
 			stopDrag() {
