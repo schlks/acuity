@@ -37,15 +37,15 @@ do something like this:
 
 ```yaml
 volumes:
- - /your/folder/1:/images/1:rw
- - /your/folder/2:/images/2:rw
+  - /your/folder/1:/images/1:rw
+  - /your/folder/2:/images/2:rw
 ```
 
 While you're at it enable CUDA, if you have an Nvidia card:
 
 ```yaml
 environment:
-	ENABLE_CUDA: '1'
+  ENABLE_CUDA: '1'
 ```
 
 ### Step 3
@@ -53,7 +53,7 @@ environment:
 Open your preferred terminal in the acuity folder and run `docker compose up -d`
 
 > [!NOTE]
-> Weaviate will take ~15 GB to download its model. If you want a smaller mode head over to 
+> Weaviate will take ~8 GB to download its model. If you want a smaller (or larger) model head over to 
 > [the Weaviate docker install guide](https://docs.weaviate.io/deploy/installation-guides/docker-installation) and choose a model for your needs.
 >
 > You can also install `Docker Desktop` on Linux if you want to.
@@ -63,21 +63,21 @@ Open your preferred terminal in the acuity folder and run `docker compose up -d`
 Replace the acuity container in the [docker-compose](docker-dev.yml) with
 ```yml
 acuity:
-    # image: codeberg.org/shlks/acuity:latest
-    # pull_policy: always
-    build: # needed for building the container before deploying
-        context: .
-        pull: true
-    container_name: acuity
-    ports:
-        - "3000:3000"
-    volumes:
-      - acuity_data:/app/data
-      - ./your/folder:/data/folder:rw
-    environment:
-        - WEAVIATE_HOST=weaviate
-        - WEAVIATE_PORT=:50050
-    restart: on-failure
+  # image: codeberg.org/shlks/acuity:latest
+  # pull_policy: always
+  build: # needed for building the container before deploying
+    context: .
+    pull: true
+  container_name: acuity
+  ports:
+    - "3000:3000"
+  volumes:
+    - acuity_data:/app/data
+    - ./your/folder:/data/folder:rw
+  environment:
+    - WEAVIATE_HOST=weaviate
+    - WEAVIATE_PORT=:50050
+  restart: on-failure
 ```
 
 ### Linux/MacOS
@@ -121,5 +121,5 @@ Run [docker-run.bat](docker-run.bat).
 - [x] Delete image/selection
 - [x] Image rating
 - [x] Settings
-- [ ] Search duplicates
+- [x] Search duplicates
 - [x] Skip to beginning on new page

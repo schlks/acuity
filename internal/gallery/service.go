@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -46,6 +47,7 @@ type wService interface {
 	GetKnownPaths(ctx context.Context, galleryID int) (map[string]string, error)
 	GetInfo(ctx context.Context, imageID string) (db.Image, error)
 	GetGalleryCount(ctx context.Context, galleryID int) (int, error)
+	GetVectors(ctx context.Context) ([]db.ImageVector, error)
 	ResetDatabase(ctx context.Context) error
 	SetRating(ctx context.Context, imageID string, rating int) error
 }
@@ -409,4 +411,58 @@ func (g *GalleryService) SetRating(ctx context.Context, imageID string, rating i
 
 func (g *GalleryService) EditGalleryName(id int, newName string) error {
 	return g.sDB.UpdateGallery(id, newName)
+}
+
+func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold float64) ([][]db.ImageVector, error) {
+	allImages, err := g.wDB.GetVectors(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var groups [][]db.ImageVector
+	visited := make(map[string]bool)
+
+	for i, imgA := range allImages {
+		if visited[imgA.ID] {
+			continue
+		}
+
+		var currentGroup []db.ImageVector
+
+		for j := i + 1; j < len(allImages); j++ {
+			imgB := allImages[j]
+			if visited[imgB.ID] {
+				continue
+			}
+
+			distance := 1.0 - cosineSimilarity(imgA.Vector, imgB.Vector)
+			if distance <= threshold {
+				if len(currentGroup) == 0 {
+					currentGroup = append(currentGroup, imgA)
+				}
+				currentGroup = append(currentGroup, imgB)
+				visited[imgB.ID] = true
+			}
+		}
+
+		if len(currentGroup) > 0 {
+			visited[imgA.ID] = true
+			groups = append(groups, currentGroup)
+		}
+	}
+
+	return groups, nil
+}
+
+func cosineSimilarity(a, b []float64) float64 {
+	var dotProduct, normA, normB float64
+	for i := 0; i < len(a); i++ {
+		dotProduct += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+	return dotProduct / (math.Sqrt(normB) * math.Sqrt(normB))
 }

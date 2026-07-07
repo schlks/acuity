@@ -299,7 +299,7 @@
 {{end}}
 
 {{define "file-browser"}}
-<div>
+<div {{if eq (len .Folders) 0}}x-init="{{if .Target}}{{.Target}}{{else}}path{{end}} = '{{.CurrentDir}}'; showBrowser = false; {{if .Target}}showTransferBrowser = false;{{end}}"{{end}}>
     <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 8px;">
         Current path: <strong style="color: var(--text);">{{.CurrentDir}}</strong>
     </div>

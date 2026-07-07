@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -28,7 +29,18 @@ import (
 
 type WeaviateClient struct {
 	Client *weaviate.Client
-	Chan   chan []*models.Object
+	Chan   chan BatchRequest
+}
+
+type BatchRequest struct {
+	Objects []*models.Object
+	Wg      *sync.WaitGroup
+}
+
+type ImageVector struct {
+	ID     string
+	Path   string
+	Vector []float64
 }
 
 type Image struct {
@@ -58,11 +70,11 @@ func NewWeaviateClient(host string) (*WeaviateClient, error) {
 		return nil, err
 	}
 
-	channel := make(chan []*models.Object, runtime.NumCPU()*2)
+	channel := make(chan BatchRequest, runtime.NumCPU()*2)
 	w := &WeaviateClient{Client: client, Chan: channel}
 
-	// Spawn one writer per core to saturate Weaviate parallelism
-	for i := 0; i < runtime.NumCPU(); i++ {
+	// Only spawn a few concurrent writers to avoid overwhelming Weaviate's CLIP model
+	for i := 0; i < 2; i++ {
 		go w.batchWriterLoop()
 	}
 
@@ -167,8 +179,9 @@ func (w *WeaviateClient) InitSchema() error {
 
 func (w *WeaviateClient) batchWriterLoop() {
 	ctx := context.Background()
-	for batch := range w.Chan {
-		w.WriteBatchDB(ctx, batch)
+	for req := range w.Chan {
+		w.WriteBatchDB(ctx, req.Objects)
+		req.Wg.Done()
 	}
 }
 
@@ -183,6 +196,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 
 	go func() {
 		var batch []*models.Object
+		var importWg sync.WaitGroup
 
 		for result := range resultChan {
 			id := uuid.NewMD5(uuid.NameSpaceURL, []byte(result.Path+strconv.Itoa(galleryID))).String()
@@ -205,13 +219,16 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			}
 			batch = append(batch, obj)
 			if len(batch) >= batchSize {
-				w.Chan <- batch
+				importWg.Add(1)
+				w.Chan <- BatchRequest{Objects: batch, Wg: &importWg}
 				batch = make([]*models.Object, 0, batchSize)
 			}
 		}
 		if len(batch) > 0 {
-			w.Chan <- batch
+			importWg.Add(1)
+			w.Chan <- BatchRequest{Objects: batch, Wg: &importWg}
 		}
+		importWg.Wait()
 		close(done)
 	}()
 
@@ -924,6 +941,51 @@ func (w *WeaviateClient) GetGalleryCount(ctx context.Context, galleryID int) (in
 	}
 
 	return int(countFloat), nil
+}
+
+func (w *WeaviateClient) GetVectors(ctx context.Context) ([]ImageVector, error) {
+	var images []ImageVector
+	query := w.Client.GraphQL().Get().
+		WithClassName("Image").
+		WithFields(
+			graphql.Field{Name: "filepath"},
+			graphql.Field{
+				Name: "_additional",
+				Fields: []graphql.Field{
+					{Name: "id"},
+					{Name: "vector"},
+				},
+			},
+		)
+	result, err := query.Do(ctx)
+	if err != nil {
+		return []ImageVector{}, err
+	}
+
+	if getMap, ok := result.Data["Get"].(map[string]any); ok {
+		if imageArray, ok := getMap["Image"].([]any); ok {
+			for _, obj := range imageArray {
+				item := obj.(map[string]any)
+				path := item["filepath"].(string)
+
+				additional := item["_additional"].(map[string]any)
+				id := additional["id"].(string)
+				vectorAny := additional["vector"].([]any)
+
+				vector := make([]float64, len(vectorAny))
+				for i, v := range vectorAny {
+					vector[i] = v.(float64)
+				}
+				images = append(images, ImageVector{
+					ID:     id,
+					Path:   path,
+					Vector: vector,
+				})
+			}
+		}
+	}
+
+	return images, nil
 }
 
 func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {

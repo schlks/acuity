@@ -400,15 +400,11 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if len(progresses) > 0 {
-		if refreshImages {
-			w.Header().Set("HX-Trigger", "refresh-images")
-		}
-		if err := s.Template.ExecuteTemplate(w, "progress.html", progresses); err != nil {
-			slog.Error("progress cannot be loaded", slog.Any("error", err))
-		}
-	} else {
-		_, _ = w.Write([]byte(``))
+	if refreshImages {
+		w.Header().Set("HX-Trigger", "refresh-images")
+	}
+	if err := s.Template.ExecuteTemplate(w, "progress.html", progresses); err != nil {
+		slog.Error("progress cannot be loaded", slog.Any("error", err))
 	}
 }
 
@@ -470,13 +466,16 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	imageID := r.FormValue("imageID")
+	name := r.PathValue("name")
 	if imageID == "" {
-		message := "Failed to get Image ID"
-		http.Error(w, message, http.StatusBadRequest)
-		return
+		if name == "global" {
+			s.handleGlobalDuplicates(w, r)
+			return
+		} else {
+			http.Error(w, "Failed to get Image ID", http.StatusBadRequest)
+		}
 	}
 
-	name := r.PathValue("name")
 	page := query.Int(r, "page", 1)
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
@@ -518,6 +517,33 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 
 	err = s.Template.ExecuteTemplate(w, "search-results.html", data)
 	if err != nil {
+		message := "Internal server error during rendering"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	thresholdStr := query.String(r, "threshold", "0.1")
+	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 64)
+
+	groups, err := s.Service.FindGlobalDuplicates(ctx, thresholdFloat)
+	if err != nil {
+		message := "Failed to find duplicate Images"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+
+	data := map[string]any{
+		"Groups":    groups,
+		"Threshold": thresholdFloat,
+	}
+
+	if err := s.Template.ExecuteTemplate(w, "global-duplicates.html", data); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)

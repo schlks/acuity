@@ -71,7 +71,7 @@
 							</div>
 						</template>
 					</div>
-					<div id="sidebar-progress" hx-get="/api/progress" hx-trigger="every 7s" style="display: none;"></div>
+					<div id="sidebar-progress" hx-get="/api/progress" hx-trigger="load, every 4s, check-progress from:body" style="display: none;"></div>
 
                     <hr>
 					<button class="nav-item" hx-get="/settings" hx-target="body" hx-swap="beforeend">
@@ -158,8 +158,9 @@
 				this.panY = 0;
 			},
 			
-			open(id) {
-				const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
+			open(id, groupSelector) {
+				const selector = groupSelector ? `${groupSelector} .image-card img` : '#main-content .image-card img';
+				const imageEls = Array.from(document.querySelectorAll(selector));
 				this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, rating: parseInt(img.dataset.rating) || 0 }));
 				
 				const idx = this.images.findIndex(img => img.id === id);
@@ -259,7 +260,7 @@
 				this.isDragging = false;
 			}
 		}"
-		@open-carousel.window="open($event.detail.id)"
+		@open-carousel.window="open($event.detail.id, $event.detail.group)"
 		@close-carousel.window="close()"
 		@keydown.window.escape="if(showInfo) showInfo = false; else close()"
 		@keydown.window.arrow-right="if($refs.carouselDialog.open) next()"
@@ -288,7 +289,7 @@
 				<div id="carousel-info-container"></div>
 			</div>
 			
-			<div class="carousel-content" @click.self="if(showInfo) showInfo = false; else close()">
+			<div class="carousel-content" @click.self="if(showInfo) showInfo = false; else close()" @wheel.prevent="handleWheel">
 				<button class="btn-icon carousel-nav prev" @click="prev()" x-show="currentIndex > 0">
 					<span class="material-symbols-outlined">chevron_left</span>
 				</button>
@@ -297,7 +298,6 @@
 					<img :src="images[currentIndex].src" class="carousel-image" 
 						@click.stop=""
 						@dblclick.stop="resetZoom()"
-						@wheel="handleWheel"
 						@mousedown="startDrag"
 						@mousemove.window="doDrag"
 						@mouseup.window="stopDrag"
