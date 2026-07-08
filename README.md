@@ -23,9 +23,9 @@ while running entirely on your own infrastructure.
 
 (If you know what docker and git is and how to install skip to step 2)
 
-Follow this [guide](https://docs.docker.com/get-started/introduction/get-docker-desktop/) for the installation (you need WSL for windows)
+Follow this [guide](https://docs.docker.com/get-started/introduction/get-docker-desktop/) for the installation (you need WSL for windows).
 
-and download the [acuity repo](https://codeberg.org/Shlks/acuity/archive/master.zip) and extract it.
+Download the [acuity repo](https://codeberg.org/Shlks/acuity/archive/master.zip) and extract it.
 
 ### Step 2
 
@@ -82,12 +82,7 @@ acuity:
 
 ### Linux/MacOS
 
-Install `make` with your package manager, then run:
-
-```bash
-make docker
-make up
-```
+Run [run.sh](run.sh).
 
 ### Windows
 
@@ -98,7 +93,7 @@ Run [docker-run.bat](docker-run.bat).
 - find duplicates of images
 - find images by text/image
 - move/copy images between galleries
-- gallery culling (tbd)
+- gallery culling
 - image rating
 - get image info
 
@@ -123,3 +118,4 @@ Run [docker-run.bat](docker-run.bat).
 - [x] Settings
 - [x] Search duplicates
 - [x] Skip to beginning on new page
+- [ ] Polishing

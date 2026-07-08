@@ -11,17 +11,25 @@ window.addEventListener('keydown', (e) => {
 	const isCarouselOpen = document.querySelector('.carousel-modal')?.hasAttribute('open');
 	
 	switch(e.key) {
+        case 'h':
+        case 'H':
 		case 'ArrowRight':
 			if (isCarouselOpen) { window.dispatchEvent(new CustomEvent('acuity-next')); }
 			else { moveGridFocus(1, 0); e.preventDefault(); }
 			break;
+        case 'l':
+        case 'L':
 		case 'ArrowLeft':
 			if (isCarouselOpen) { window.dispatchEvent(new CustomEvent('acuity-prev')); }
 			else { moveGridFocus(-1, 0); e.preventDefault(); }
 			break;
+        case 'k':
+        case 'K':
 		case 'ArrowUp':
 			if (!isCarouselOpen) { moveGridFocus(0, -1); e.preventDefault(); }
 			break;
+        case 'j':
+        case 'J':
 		case 'ArrowDown':
 			if (!isCarouselOpen) { moveGridFocus(0, 1); e.preventDefault(); }
 			break;
@@ -38,6 +46,7 @@ window.addEventListener('keydown', (e) => {
 					const isDeleteFromDisk = document.querySelector('body').__x?.$data?.deleteFromDisk;
 					fetch(`/image/${id}?disk=${!!isDeleteFromDisk}`, { method: 'DELETE' })
 						.then(() => {
+							window.dispatchEvent(new CustomEvent('acuity-remove-selection', { detail: { id } }));
 							document.activeElement.remove();
 						});
 				}
@@ -86,14 +95,23 @@ window.addEventListener('keydown', (e) => {
 			break;
 		case 'i':
 		case 'I':
-			if (isCarouselOpen) { window.dispatchEvent(new CustomEvent('acuity-toggle-info')); }
+			if (isCarouselOpen) {
+                window.dispatchEvent(new CustomEvent('acuity-toggle-info'));
+            } else if (document.getElementById('settingsDialog')?.hasAttribute('open')) {
+                const details = document.getElementById('settingsDialog').querySelector('details');
+                if (details) {
+                    details.open = !details.open;
+                }
+            }
 			break;
 		case 'Enter':
 			if (!isCarouselOpen) {
 				if (document.activeElement.classList.contains('image-card')) {
 					const img = document.activeElement.querySelector('img');
 					if (img && img.dataset.id) {
-						window.dispatchEvent(new CustomEvent('open-carousel', { detail: { id: img.dataset.id } }));
+						const dupGroup = document.activeElement.closest('.duplicate-group');
+						const group = dupGroup ? `#${dupGroup.id}` : undefined;
+						window.dispatchEvent(new CustomEvent('open-carousel', { detail: { id: img.dataset.id, group } }));
 					}
 				} else if (document.activeElement.classList.contains('nav-item')) {
 					document.activeElement.click();
@@ -121,6 +139,14 @@ window.addEventListener('keydown', (e) => {
 			const firstGallery = document.querySelector('.nav-item[hx-get^="/gallery/"]');
 			if (firstGallery) firstGallery.focus();
 			break;
+        case 'c':
+        case 'C':
+            window.dispatchEvent(new CustomEvent('acuity-copy'));
+            break;
+        case 'm':
+        case 'M':
+            window.dispatchEvent(new CustomEvent('acuity-move'));
+            break;
 	}
 });
 
@@ -140,7 +166,11 @@ function moveGridFocus(dx, dy) {
 	
 	let currentIdx = cards.indexOf(document.activeElement);
 	if (currentIdx === -1) {
-		cards[0].focus();
+		if (dx < 0 || dy < 0) {
+			cards[cards.length - 1].focus();
+		} else {
+			cards[0].focus();
+		}
 		return;
 	}
 	
@@ -150,33 +180,61 @@ function moveGridFocus(dx, dy) {
 			cards[newIdx].focus();
 		} else if (newIdx >= cards.length) {
 			const nextBtn = document.getElementById('next-page-btn');
-			if (nextBtn) nextBtn.click();
+			if (nextBtn) { sessionStorage.setItem('acuity-focus', 'first'); nextBtn.click(); }
 		} else if (newIdx < 0) {
 			const prevBtn = document.getElementById('prev-page-btn');
-			if (prevBtn) prevBtn.click();
+			if (prevBtn) { sessionStorage.setItem('acuity-focus', 'last'); prevBtn.click(); }
 		}
 	} else if (dy !== 0) {
-		let cols = 1;
-		const firstTop = cards[0].offsetTop;
-		for (let i = 1; i < cards.length; i++) {
-			if (cards[i].offsetTop > firstTop) {
-				cols = i;
-				break;
-			}
-		}
-		if (cols === 1 && cards.length > 1 && cards[1].offsetTop === firstTop) {
-			cols = cards.length;
+		const currentCard = cards[currentIdx];
+		const currentTop = currentCard.offsetTop;
+		const currentCX = currentCard.offsetLeft + currentCard.offsetWidth / 2;
+		
+		let targetTop = -1;
+		if (dy < 0) {
+			let tops = cards.map(c => c.offsetTop).filter(t => t < currentTop - 5);
+			if (tops.length > 0) targetTop = Math.max(...tops);
+		} else {
+			let tops = cards.map(c => c.offsetTop).filter(t => t > currentTop + 5);
+			if (tops.length > 0) targetTop = Math.min(...tops);
 		}
 		
-		let newIdx = currentIdx + (dy * cols);
-		if (newIdx >= 0 && newIdx < cards.length) {
-			cards[newIdx].focus();
-		} else if (newIdx >= cards.length) {
-			const nextBtn = document.getElementById('next-page-btn');
-			if (nextBtn) nextBtn.click(); else cards[cards.length - 1].focus();
-		} else if (newIdx < 0) {
-			const prevBtn = document.getElementById('prev-page-btn');
-			if (prevBtn) prevBtn.click(); else cards[0].focus();
+		if (targetTop !== -1) {
+			let bestCard = null;
+			let minDiff = Infinity;
+			for (let i = 0; i < cards.length; i++) {
+				if (Math.abs(cards[i].offsetTop - targetTop) < 5) {
+					const cx = cards[i].offsetLeft + cards[i].offsetWidth / 2;
+					const diff = Math.abs(cx - currentCX);
+					if (diff < minDiff) {
+						minDiff = diff;
+						bestCard = cards[i];
+					}
+				}
+			}
+			if (bestCard) bestCard.focus();
+		} else {
+			if (dy > 0) {
+				const nextBtn = document.getElementById('next-page-btn');
+				if (nextBtn) { sessionStorage.setItem('acuity-focus', 'first'); nextBtn.click(); }
+				else cards[cards.length - 1].focus();
+			} else {
+				const prevBtn = document.getElementById('prev-page-btn');
+				if (prevBtn) { sessionStorage.setItem('acuity-focus', 'last'); prevBtn.click(); }
+				else cards[0].focus();
+			}
 		}
 	}
 }
+
+window.addEventListener('htmx:afterSettle', () => {
+	const focusAction = sessionStorage.getItem('acuity-focus');
+	if (focusAction) {
+		sessionStorage.removeItem('acuity-focus');
+		const cards = Array.from(document.querySelectorAll('.image-card'));
+		if (cards.length > 0) {
+			if (focusAction === 'last') cards[cards.length - 1].focus();
+			else if (focusAction === 'first') cards[0].focus();
+		}
+	}
+});

@@ -31,10 +31,11 @@
         <div style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.9rem; border-bottom: 1px solid var(--border); padding-bottom: 8px;" x-data="{ idx: {{$index}} + 1 }">
             <strong x-text="'Duplicate Set ' + idx"></strong> ({{len $group}} images)
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+        <div class="gallery-grid small" style="margin-top: 16px;">
             
             {{range $img := $group}}
-            <div class="image-card" tabindex="0" style="position: relative; border-radius: 4px; overflow: hidden;"
+            <div class="image-card" tabindex="0" 
+                 style="position: relative; border-radius: 4px; overflow: hidden; flex-grow: {{if gt $img.AspectRatio 0.0}}{{$img.AspectRatio}}{{else}}1{{end}}; flex-basis: calc(var(--grid-base, 150px) * {{if gt $img.AspectRatio 0.0}}{{$img.AspectRatio}}{{else}}1{{end}});"
                  x-data="{ hover: false }" 
                  @mouseenter="hover = true" 
                  @mouseleave="hover = false">

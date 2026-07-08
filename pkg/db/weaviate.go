@@ -38,9 +38,10 @@ type BatchRequest struct {
 }
 
 type ImageVector struct {
-	ID     string
-	Path   string
-	Vector []float64
+	ID          string
+	Path        string
+	Vector      []float64
+	AspectRatio float64
 }
 
 type Image struct {
@@ -949,6 +950,7 @@ func (w *WeaviateClient) GetVectors(ctx context.Context) ([]ImageVector, error) 
 		WithClassName("Image").
 		WithFields(
 			graphql.Field{Name: "filepath"},
+			graphql.Field{Name: "aspect_ratio"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -968,6 +970,11 @@ func (w *WeaviateClient) GetVectors(ctx context.Context) ([]ImageVector, error) 
 				item := obj.(map[string]any)
 				path := item["filepath"].(string)
 
+				var aspectRatio float64
+				if ar, ok := item["aspect_ratio"].(float64); ok {
+					aspectRatio = ar
+				}
+
 				additional := item["_additional"].(map[string]any)
 				id := additional["id"].(string)
 				vectorAny := additional["vector"].([]any)
@@ -977,9 +984,10 @@ func (w *WeaviateClient) GetVectors(ctx context.Context) ([]ImageVector, error) 
 					vector[i] = v.(float64)
 				}
 				images = append(images, ImageVector{
-					ID:     id,
-					Path:   path,
-					Vector: vector,
+					ID:          id,
+					Path:        path,
+					Vector:      vector,
+					AspectRatio: aspectRatio,
 				})
 			}
 		}

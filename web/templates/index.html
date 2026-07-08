@@ -16,15 +16,8 @@
 	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }"
 		  x-init="let saved = localStorage.getItem('openGallery'); if (saved) { currentGallery = saved; localStorage.removeItem('openGallery'); setTimeout(() => { htmx.ajax('GET', '/gallery/' + saved, {target: '#main-content'}) }, 100); }"
 		  @load-gallery.window="localStorage.setItem('openGallery', $event.detail.value); window.location.reload()"
-		  @acuity-toggle-disk-delete.window="deleteFromDisk = !deleteFromDisk"
-		  @keydown.window="
-		      if (['INPUT', 'TEXTAREA'].includes($event.target.tagName)) return;
-		      switch($event.key) {
-		          case 'ArrowRight': $dispatch('acuity-next'); break;
-		          case 'ArrowLeft':  $dispatch('acuity-prev'); break;
-		          case 'Escape':     $dispatch('acuity-escape'); break;
-		      }
-		  ">
+		  @acuity-remove-selection.window="selectedImages = selectedImages.filter(x => x !== $event.detail.id)"
+		  @acuity-toggle-disk-delete.window="deleteFromDisk = !deleteFromDisk">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
 				<a href="/" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; text-decoration: none; cursor: pointer;">
@@ -60,7 +53,7 @@
 						</div>
 					</div>
 					<div style="position: relative; display: flex; align-items: center;" x-data="{ hovered: false }" @mouseenter="hovered = true" @mouseleave="hovered = false">
-						<button class="nav-item" hx-get="/gallery/global/duplicates" hx-target="#main-content">
+						<button class="nav-item" :class="{ 'active': currentGallery === 'duplicates' }" @click="currentGallery = 'duplicates'" hx-get="/gallery/global/duplicates" hx-target="#main-content">
 							<span class="material-symbols-outlined">search</span> Duplicates
 						</button>
 					</div>
@@ -194,6 +187,13 @@
 					if(this.showInfo) {
 						htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#carousel-info-container'});
 					}
+				} else {
+					const nextBtn = document.getElementById('next-page-btn');
+					if (nextBtn) {
+						sessionStorage.setItem('acuity-focus', 'first');
+						sessionStorage.setItem('acuity-carousel-reopen', 'first');
+						nextBtn.click();
+					}
 				}
 			},
 			
@@ -203,6 +203,13 @@
 					this.resetZoom();
 					if(this.showInfo) {
 						htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#carousel-info-container'});
+					}
+				} else {
+					const prevBtn = document.getElementById('prev-page-btn');
+					if (prevBtn) {
+						sessionStorage.setItem('acuity-focus', 'last');
+						sessionStorage.setItem('acuity-carousel-reopen', 'last');
+						prevBtn.click();
 					}
 				}
 			},
@@ -278,9 +285,48 @@
 		@acuity-toggle-info.window="if($refs.carouselDialog.open) { showInfo = !showInfo; if(showInfo && images[currentIndex]) { htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'}) } }"
 		@acuity-toggle-select-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let id = images[currentIndex].id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) } }"
 		@acuity-rate-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let img = images[currentIndex]; let rating = $event.detail.rating; fetch('/image/' + img.id, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'rating=' + rating}).then(() => img.rating = rating); }"
-		@acuity-delete-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let img = images[currentIndex]; fetch('/image/' + img.id + '?disk=' + deleteFromDisk, {method: 'DELETE'}).then(() => { let prevId = img.id; next(); images = images.filter(i => i.id !== prevId); if(images.length===0) close(); }) }"
+		@acuity-delete-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let img = images[currentIndex]; fetch('/image/' + img.id + '?disk=' + deleteFromDisk, {method: 'DELETE'}).then(() => { let prevId = img.id; $dispatch('acuity-remove-selection', {id: prevId}); next(); images = images.filter(i => i.id !== prevId); if(images.length===0) close(); }) }"
 		@acuity-search-similar.window="if($refs.carouselDialog.open && images[currentIndex]) { htmx.ajax('GET', '/gallery/global/duplicates', {target: '#main-content', values: {imageID: images[currentIndex].id, returnTo: currentGallery}}); close(); showDetailPanel = false; }"
-		@rating-updated.window="let img = images.find(i => i.id === $event.detail.id); if(img) img.rating = $event.detail.rating;">
+		@rating-updated.window="let img = images.find(i => i.id === $event.detail.id); if(img) img.rating = $event.detail.rating;"
+		@acuity-copy.window="
+			if ($refs.carouselDialog.open && images[currentIndex]) {
+				if (!selectedImages.includes(images[currentIndex].id)) selectedImages.push(images[currentIndex].id);
+			} else if (document.activeElement && document.activeElement.classList.contains('image-card')) {
+				let img = document.activeElement.querySelector('img');
+				if (img && img.dataset.id && !selectedImages.includes(img.dataset.id)) selectedImages.push(img.dataset.id);
+			}
+			if (selectedImages.length > 0) {
+				let td = document.getElementById('transferDialog');
+				if (td) { document.getElementById('transferAction').value = 'copy'; td.showModal(); }
+			}
+		"
+		@acuity-move.window="
+			if ($refs.carouselDialog.open && images[currentIndex]) {
+				if (!selectedImages.includes(images[currentIndex].id)) selectedImages.push(images[currentIndex].id);
+			} else if (document.activeElement && document.activeElement.classList.contains('image-card')) {
+				let img = document.activeElement.querySelector('img');
+				if (img && img.dataset.id && !selectedImages.includes(img.dataset.id)) selectedImages.push(img.dataset.id);
+			}
+			if (selectedImages.length > 0) {
+				let td = document.getElementById('transferDialog');
+				if (td) { document.getElementById('transferAction').value = 'move'; td.showModal(); }
+			}
+		"
+		@htmx:after-settle.window="
+			let reopenAction = sessionStorage.getItem('acuity-carousel-reopen');
+			if (reopenAction && $refs.carouselDialog.open) {
+				sessionStorage.removeItem('acuity-carousel-reopen');
+				const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
+				if (imageEls.length > 0) {
+					this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, rating: parseInt(img.dataset.rating) || 0 }));
+					this.currentIndex = (reopenAction === 'last') ? this.images.length - 1 : 0;
+					this.resetZoom();
+					if(this.showInfo) htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#carousel-info-container'});
+				} else {
+					this.close();
+				}
+			}
+		">
 		
 			<!-- Toolbar -->
 			<div class="carousel-toolbar" x-show="images.length > 0">
