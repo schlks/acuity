@@ -207,6 +207,9 @@ dialog.closing::backdrop {
 	border-radius: 6px;
 	transition: all 0.2s;
     background: transparent;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 }
 .btn-icon:hover {
 	color: var(--text);
@@ -265,11 +268,17 @@ dialog.closing::backdrop {
 	object-fit: cover;
 	display: block;
 }
-.image-card:hover {
+body:not(.keyboard-navigating) .image-card:hover {
 	border-color: var(--primary-hover);
     box-shadow: 0 0 30px rgba(64, 124, 245, 0.3);
 }
-.image-card:hover img {
+.image-card:focus {
+	border-color: var(--secondary, #ffaa00);
+    box-shadow: 0 0 30px rgba(255, 170, 0, 0.3);
+	outline: none;
+}
+body:not(.keyboard-navigating) .image-card:hover img,
+.image-card:focus img {
 	opacity: 0.9;
 }
 .image-card.selected {
@@ -286,6 +295,9 @@ dialog.closing::backdrop {
 	border-radius: 50%;
 	padding: 4px;
 	z-index: 10;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 .image-card:hover .select-btn,
 .image-card.selected .select-btn {

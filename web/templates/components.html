@@ -200,24 +200,25 @@
 {{end}}
 
 {{define "image-card"}}
-<div class="image-card"
+<div class="image-card" tabindex="0"
 	style="flex-grow: {{if gt .AspectRatio 0.0}}{{.AspectRatio}}{{else}}1{{end}}; flex-basis: calc(var(--grid-base, 250px) * {{if gt .AspectRatio 0.0}}{{.AspectRatio}}{{else}}1{{end}});"
 	@click.stop="$dispatch('open-carousel', {id: '{{.ID}}'})"
-	:class="selectedImages.includes('{{.ID}}') ? 'selected' : ''">
-
-	<img src="/image?path={{.Path}}" data-id="{{.ID}}" data-rating="{{.Rating}}" alt="Gallery Image" loading="lazy">
+	:class="selectedImages.includes('{{.ID}}') ? 'selected' : ''"
+	x-data="{ hover: false, rating: {{.Rating}} }"
+	@rating-updated.window="if($event.detail.id === '{{.ID}}') rating = $event.detail.rating"
+	@mouseenter="hover = true"
+	@mouseleave="hover = false">
 	
-	<!-- Selection Toggle -->
 	<button class="btn-icon select-btn" 
 		@click.stop="if(selectedImages.includes('{{.ID}}')) { selectedImages = selectedImages.filter(id => id !== '{{.ID}}') } else { selectedImages.push('{{.ID}}') }">
 		<span class="material-symbols-outlined" x-text="selectedImages.includes('{{.ID}}') ? 'check_circle' : 'radio_button_unchecked'"></span>
 	</button>
-
-	<div class="rating-badge" id="badge-{{.ID}}" {{if eq .Rating 0}}style="display: none;"{{end}}>
-		{{if gt .Rating 0}}
+	
+	<img src="/image?path={{.Path}}" data-id="{{.ID}}" data-rating="{{.Rating}}" alt="Gallery Image" loading="lazy">
+	
+	<div class="rating-badge" x-show="rating > 0" x-transition style="{{if eq .Rating 0}}display: none;{{end}}">
 		<span class="material-symbols-outlined icon-filled">star</span>
-		<span>{{.Rating}}</span>
-		{{end}}
+		<span x-text="rating">{{.Rating}}</span>
 	</div>
 </div>
 {{end}}

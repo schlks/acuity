@@ -10,11 +10,21 @@
 		<!-- HTMX & Alpine.js -->
 		<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 		<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+		<script src="/static/js/keys.js"></script>
 	</head>
 
 	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }"
 		  x-init="let saved = localStorage.getItem('openGallery'); if (saved) { currentGallery = saved; localStorage.removeItem('openGallery'); setTimeout(() => { htmx.ajax('GET', '/gallery/' + saved, {target: '#main-content'}) }, 100); }"
-		  @load-gallery.window="localStorage.setItem('openGallery', $event.detail.value); window.location.reload()">
+		  @load-gallery.window="localStorage.setItem('openGallery', $event.detail.value); window.location.reload()"
+		  @acuity-toggle-disk-delete.window="deleteFromDisk = !deleteFromDisk"
+		  @keydown.window="
+		      if (['INPUT', 'TEXTAREA'].includes($event.target.tagName)) return;
+		      switch($event.key) {
+		          case 'ArrowRight': $dispatch('acuity-next'); break;
+		          case 'ArrowLeft':  $dispatch('acuity-prev'); break;
+		          case 'Escape':     $dispatch('acuity-escape'); break;
+		      }
+		  ">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
 				<a href="/" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; text-decoration: none; cursor: pointer;">
@@ -24,14 +34,14 @@
 				<hr>
 				<nav style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1;">
 					<div x-data="{ open: true }">
-						<button class="nav-item" @click="open = !open">
+						<button class="nav-item" tabindex="0" @click="open = !open">
 							<span class="material-symbols-outlined">grid_view</span> Galleries
 							<span class="material-symbols-outlined" style="margin-left: auto; font-size: 1rem;" x-text="open ? 'expand_less' : 'expand_more'">expand_less</span>
 						</button>
 						<div x-show="open" style="padding-left: 28px; display: flex; flex-direction: column; gap: 4px; margin-top: 4px;" x-transition>
 							{{range .Galleries}}
 							<div style="position: relative; display: flex; align-items: center;" x-data="{ hovered: false }" @mouseenter="hovered = true" @mouseleave="hovered = false">
-								<button class="nav-item" :class="{ 'active': currentGallery === '{{.Name}}' }" @click="currentGallery = '{{.Name}}'" hx-get="/gallery/{{.Name}}" hx-target="#main-content" style="padding-right: 40px; flex-grow: 1;">
+								<button class="nav-item" tabindex="0" :class="{ 'active': currentGallery === '{{.Name}}' }" @click="currentGallery = '{{.Name}}'" hx-get="/gallery/{{.Name}}" hx-target="#main-content" style="padding-right: 40px; flex-grow: 1;">
 									<span class="material-symbols-outlined" style="font-size: 1rem;">folder</span> {{.Name}}
 								</button>
 								<button class="btn-icon-danger" x-show="hovered" x-transition style="position: absolute; right: 8px; z-index: 10;"
@@ -262,9 +272,14 @@
 		}"
 		@open-carousel.window="open($event.detail.id, $event.detail.group)"
 		@close-carousel.window="close()"
-		@keydown.window.escape="if(showInfo) showInfo = false; else close()"
-		@keydown.window.arrow-right="if($refs.carouselDialog.open) next()"
-		@keydown.window.arrow-left="if($refs.carouselDialog.open) prev()"
+		@acuity-escape.window="if(showInfo) showInfo = false; else close()"
+		@acuity-next.window="if($refs.carouselDialog.open) next()"
+		@acuity-prev.window="if($refs.carouselDialog.open) prev()"
+		@acuity-toggle-info.window="if($refs.carouselDialog.open) { showInfo = !showInfo; if(showInfo && images[currentIndex]) { htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'}) } }"
+		@acuity-toggle-select-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let id = images[currentIndex].id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) } }"
+		@acuity-rate-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let img = images[currentIndex]; let rating = $event.detail.rating; fetch('/image/' + img.id, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'rating=' + rating}).then(() => img.rating = rating); }"
+		@acuity-delete-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let img = images[currentIndex]; fetch('/image/' + img.id + '?disk=' + deleteFromDisk, {method: 'DELETE'}).then(() => { let prevId = img.id; next(); images = images.filter(i => i.id !== prevId); if(images.length===0) close(); }) }"
+		@acuity-search-similar.window="if($refs.carouselDialog.open && images[currentIndex]) { htmx.ajax('GET', '/gallery/global/duplicates', {target: '#main-content', values: {imageID: images[currentIndex].id, returnTo: currentGallery}}); close(); showDetailPanel = false; }"
 		@rating-updated.window="let img = images.find(i => i.id === $event.detail.id); if(img) img.rating = $event.detail.rating;">
 		
 			<!-- Toolbar -->
