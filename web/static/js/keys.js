@@ -20,10 +20,30 @@ window.addEventListener('keydown', (e) => {
 			else { moveGridFocus(-1, 0); e.preventDefault(); }
 			break;
         case 'k': case 'K': case 'ArrowUp':
-			if (!isCarouselOpen) { moveGridFocus(0, -1); e.preventDefault(); }
+			if (!isCarouselOpen) {
+				if (document.activeElement.classList.contains('nav-item')) {
+					moveSidebarFocus(-1);
+				} else {
+					moveGridFocus(0, -1);
+				}
+				e.preventDefault();
+			} else {
+				window.dispatchEvent(new CustomEvent('acuity-arrow-up'));
+				e.preventDefault();
+			}
 			break;
         case 'j': case 'J': case 'ArrowDown':
-			if (!isCarouselOpen) { moveGridFocus(0, 1); e.preventDefault(); }
+			if (!isCarouselOpen) {
+				if (document.activeElement.classList.contains('nav-item')) {
+					moveSidebarFocus(1);
+				} else {
+					moveGridFocus(0, 1);
+				}
+				e.preventDefault();
+			} else {
+				window.dispatchEvent(new CustomEvent('acuity-arrow-down'));
+				e.preventDefault();
+			}
 			break;
 		case 'PageDown':
 			if (isCarouselOpen) { window.dispatchEvent(new CustomEvent('acuity-page-next')); }
@@ -193,7 +213,14 @@ window.addEventListener('keydown', (e) => {
 			if (dupBtn) dupBtn.click();
 			break;
 		case '+': case '=':
-			if (!isCarouselOpen && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+			if (isCarouselOpen) {
+				if (e.key === '=') {
+					window.dispatchEvent(new CustomEvent('acuity-zoom-reset'));
+				} else {
+					window.dispatchEvent(new CustomEvent('acuity-zoom-in'));
+				}
+				e.preventDefault();
+			} else if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
 				const th = document.querySelector('input[name="threshold"]');
 				if (th) {
 					let v = parseFloat(th.value);
@@ -207,7 +234,10 @@ window.addEventListener('keydown', (e) => {
 			}
 			break;
 		case '-': case '_':
-			if (!isCarouselOpen && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+			if (isCarouselOpen) {
+				window.dispatchEvent(new CustomEvent('acuity-zoom-out'));
+				e.preventDefault();
+			} else if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
 				const th = document.querySelector('input[name="threshold"]');
 				if (th) {
 					let v = parseFloat(th.value);
@@ -242,6 +272,24 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('mousemove', () => {
 	document.body.classList.remove('keyboard-navigating');
 });
+
+function moveSidebarFocus(dy) {
+	// Only select visible nav-items in the sidebar
+	const navItems = Array.from(document.querySelectorAll('.sidebar-left .nav-item')).filter(el => el.offsetWidth > 0 && el.offsetHeight > 0);
+	if (navItems.length === 0) return;
+	
+	let currentIdx = navItems.indexOf(document.activeElement);
+	if (currentIdx === -1) {
+		navItems[0].focus();
+		return;
+	}
+	
+	let nextIdx = currentIdx + dy;
+	if (nextIdx < 0) nextIdx = navItems.length - 1;
+	if (nextIdx >= navItems.length) nextIdx = 0;
+	
+	navItems[nextIdx].focus();
+}
 
 function moveGridFocus(dx, dy) {
 	const cards = Array.from(document.querySelectorAll('.image-card'));

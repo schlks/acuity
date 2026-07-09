@@ -317,10 +317,27 @@
 					
 					this.images = this.images.filter(i => i.id !== prevId);
 					if(this.images.length === 0) {
-						this.close();
+						const nextBtn = document.getElementById('next-page-btn');
+						if (nextBtn) {
+							this.isLoading = true;
+							sessionStorage.setItem('acuity-focus', 'first');
+							sessionStorage.setItem('acuity-carousel-reopen', 'first');
+							nextBtn.click();
+						} else {
+							this.close();
+						}
 					} else {
 						if (this.currentIndex >= this.images.length) {
-							this.currentIndex = this.images.length - 1;
+							const nextBtn = document.getElementById('next-page-btn');
+							if (nextBtn) {
+								this.isLoading = true;
+								sessionStorage.setItem('acuity-focus', 'first');
+								sessionStorage.setItem('acuity-carousel-reopen', 'first');
+								nextBtn.click();
+								return;
+							} else {
+								this.currentIndex = this.images.length - 1;
+							}
 						}
 						this.isLoading = true;
 						if(this.showInfo) {
@@ -341,8 +358,48 @@
 				$dispatch('acuity-toggle-select-carousel');
 			}
 		"
-		@acuity-next.window="if(document.querySelector('.carousel-modal').open) next()"
-		@acuity-prev.window="if(document.querySelector('.carousel-modal').open) prev()"
+		@acuity-next.window="
+			if(document.querySelector('.carousel-modal:not(.culling)').open) {
+				if (scale > 1) { 
+					const img = $el.querySelector('.carousel-image');
+					if (img) panX = clampPan(panX - 50, img.clientWidth, window.innerWidth);
+				} else { next(); }
+			}
+		"
+		@acuity-prev.window="
+			if(document.querySelector('.carousel-modal:not(.culling)').open) {
+				if (scale > 1) { 
+					const img = $el.querySelector('.carousel-image');
+					if (img) panX = clampPan(panX + 50, img.clientWidth, window.innerWidth);
+				} else { prev(); }
+			}
+		"
+		@acuity-arrow-up.window="
+			if(document.querySelector('.carousel-modal:not(.culling)').open && scale > 1) {
+				const img = $el.querySelector('.carousel-image');
+				if (img) panY = clampPan(panY + 50, img.clientHeight, window.innerHeight);
+			}
+		"
+		@acuity-arrow-down.window="
+			if(document.querySelector('.carousel-modal:not(.culling)').open && scale > 1) {
+				const img = $el.querySelector('.carousel-image');
+				if (img) panY = clampPan(panY - 50, img.clientHeight, window.innerHeight);
+			}
+		"
+		@acuity-zoom-in.window="
+			if(document.querySelector('.carousel-modal:not(.culling)').open) {
+				scale = Math.min(scale * 1.5, 50);
+			}
+		"
+		@acuity-zoom-out.window="
+			if(document.querySelector('.carousel-modal:not(.culling)').open) {
+				scale = Math.max(scale / 1.5, 1);
+				if(scale === 1) resetZoom();
+			}
+		"
+		@acuity-zoom-reset.window="
+			if(document.querySelector('.carousel-modal:not(.culling)').open) resetZoom();
+		"
 		@acuity-toggle-info.window="if(document.querySelector('.carousel-modal').open) { showInfo = !showInfo; if(showInfo && images[currentIndex]) { htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'}) } }"
 		@acuity-toggle-select-carousel.window="if(document.querySelector('.carousel-modal').open && images[currentIndex]) { let id = images[currentIndex].id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) } }"
 		@acuity-rate-carousel.window="if(document.querySelector('.carousel-modal').open && images[currentIndex]) { let img = images[currentIndex]; let rating = $event.detail.rating; fetch('/image/' + img.id, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'rating=' + rating}).then(() => img.rating = rating); }"
@@ -375,7 +432,7 @@
 		"
 		@htmx:after-settle.window="
 			let reopenAction = sessionStorage.getItem('acuity-carousel-reopen');
-			if (reopenAction && document.querySelector('.carousel-modal').open) {
+			if (reopenAction && document.querySelector('.carousel-modal:not(.culling)').open) {
 				sessionStorage.removeItem('acuity-carousel-reopen');
 				const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
 				if (imageEls.length > 0) {
@@ -416,15 +473,21 @@
 					<span class="material-symbols-outlined">chevron_left</span>
 				</button>
 				
-				<template x-if="images.length > 0">
-					<img :src="images[currentIndex].src" class="carousel-image" 
+				<template x-for="img in [images[currentIndex]]" :key="img ? img.id : 'empty'">
+					<img x-show="img" :src="img?.src" class="carousel-image" 
+						x-transition:enter="carousel-fade-active"
+						x-transition:enter-start="carousel-fade-from"
+						x-transition:enter-end="carousel-fade-to"
+						x-transition:leave="carousel-fade-active"
+						x-transition:leave-start="carousel-fade-to"
+						x-transition:leave-end="carousel-fade-from"
 						@load="isLoading = false"
 						@click.stop=""
 						@dblclick.stop="resetZoom()"
 						@mousedown="startDrag"
 						@mousemove.window="doDrag"
 						@mouseup.window="stopDrag"
-						:style="`transform: translate(${panX}px, ${panY}px) scale(${scale}); cursor: ${scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'}; transition: ${isDragging ? 'none' : 'transform 0.1s ease-out'}`">
+						:style="`transform: translate(${panX}px, ${panY}px) scale(${scale}); cursor: ${scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'}`">
 				</template>
 				
 				<div x-show="isLoading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 5;">
@@ -448,16 +511,105 @@
 		images: [],
 		currentIndex: 0,
 		isLoading: false,
+		scale: 1,
+		panX: 0,
+		panY: 0,
+		isDragging: false,
+		startX: 0,
+		startY: 0,
 		
 		init() {
-			this.$watch('currentIndex', () => { this.isLoading = true; });
+			this.$watch('currentIndex', () => { this.isLoading = true; this.resetZoom(); });
+		},
+		
+		resetZoom() {
+			this.scale = 1;
+			this.panX = 0;
+			this.panY = 0;
+			this.isDragging = false;
+		},
+		
+		clampPan(pan, clientSize, windowSize) {
+			const scaledSize = clientSize * this.scale;
+			if (scaledSize <= windowSize) return 0;
+			const maxPan = (scaledSize - windowSize) / 2;
+			return Math.max(-maxPan, Math.min(maxPan, pan));
+		},
+		
+		handleWheel(e) {
+			e.preventDefault();
+			if (this.isDragging) return;
+			
+			const delta = e.deltaY > 0 ? -0.1 : 0.1;
+			const newScale = Math.max(1, Math.min(this.scale * (1 + delta), 50));
+			
+			const img = this.$el.querySelector('.carousel-image');
+			if (!img) return;
+
+			const mouseX = e.clientX - (window.innerWidth / 2);
+			const mouseY = e.clientY - (window.innerHeight / 2);
+			
+			const scaleRatio = newScale / this.scale;
+			
+			let newPanX = mouseX - (mouseX - this.panX) * scaleRatio;
+			let newPanY = mouseY - (mouseY - this.panY) * scaleRatio;
+			
+			this.scale = newScale;
+			
+			if (this.scale === 1) {
+				this.panX = 0;
+				this.panY = 0;
+			} else {
+				this.panX = this.clampPan(newPanX, img.clientWidth, window.innerWidth);
+				this.panY = this.clampPan(newPanY, img.clientHeight, window.innerHeight);
+			}
+		},
+		
+		startDrag(e) {
+			if (this.scale <= 1) return;
+			e.preventDefault();
+			this.isDragging = true;
+			this.startX = e.clientX - this.panX;
+			this.startY = e.clientY - this.panY;
+		},
+		
+		doDrag(e) {
+			if (!this.isDragging) return;
+			
+			let newPanX = e.clientX - this.startX;
+			let newPanY = e.clientY - this.startY;
+			
+			const img = this.$el.querySelector('.carousel-image');
+			if (img) {
+				this.panX = this.clampPan(newPanX, img.clientWidth, window.innerWidth);
+				this.panY = this.clampPan(newPanY, img.clientHeight, window.innerHeight);
+			} else {
+				this.panX = newPanX;
+				this.panY = newPanY;
+			}
+		},
+		
+		stopDrag() {
+			this.isDragging = false;
 		},
 		
 		open() {
 			const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
 			if (imageEls.length > 0) {
+				let lastId = null;
+				if (this.images.length > 0 && this.images[this.currentIndex]) {
+					lastId = this.images[this.currentIndex].id;
+				}
+				
 				this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id }));
-				this.currentIndex = 0;
+				
+				let foundIdx = -1;
+				if (lastId) {
+					foundIdx = this.images.findIndex(img => img.id === lastId);
+				}
+				
+				this.currentIndex = foundIdx !== -1 ? foundIdx : 0;
+				this.resetZoom();
 				document.getElementById('culling-modal').showModal();
 				document.body.style.overflow = 'hidden';
 			}
@@ -472,7 +624,9 @@
 			fetch('/image/' + img.id + '/flag', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'flag=' + val })
 				.then(() => {
 					let flagBadge = document.getElementById('flag-badge-' + img.id);
-					if (flagBadge) htmx.ajax('GET', '/components/flag/' + img.id, {target: '#flag-badge-' + img.id, swap: 'innerHTML'});
+					if (flagBadge) {
+						flagBadge.outerHTML = '<div id=\'flag-badge-' + img.id + '\' hx-swap-oob=\'true\' style=\'position: absolute; top: 8px; left: 8px; z-index: 10;\'>' + (val === 1 ? '<span class=\'material-symbols-outlined icon-filled\' style=\'color: #2ecc71; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));\'>check_circle</span>' : (val === -1 ? '<span class=\'material-symbols-outlined icon-filled\' style=\'color: #e74c3c; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));\'>cancel</span>' : '')) + '</div>';
+					}
 					this.next();
 				});
 		},
@@ -485,7 +639,7 @@
 				if (nextBtn) {
 					this.isLoading = true;
 					sessionStorage.setItem('acuity-focus', 'first');
-					sessionStorage.setItem('acuity-carousel-reopen', 'first');
+					sessionStorage.setItem('acuity-culling-reopen', 'first');
 					nextBtn.click();
 				}
 			}
@@ -499,7 +653,7 @@
 				if (prevBtn) {
 					this.isLoading = true;
 					sessionStorage.setItem('acuity-focus', 'last');
-					sessionStorage.setItem('acuity-carousel-reopen', 'last');
+					sessionStorage.setItem('acuity-culling-reopen', 'last');
 					prevBtn.click();
 				}
 			}
@@ -515,15 +669,29 @@
 				
 				this.images = this.images.filter(i => i.id !== prevId);
 				if(this.images.length === 0) {
-					this.close();
+					const nextBtn = document.getElementById('next-page-btn');
+					if (nextBtn) {
+						this.isLoading = true;
+						sessionStorage.setItem('acuity-focus', 'first');
+						sessionStorage.setItem('acuity-culling-reopen', 'first');
+						nextBtn.click();
+					} else {
+						this.close();
+					}
 				} else {
 					if (this.currentIndex >= this.images.length) {
-						this.currentIndex = this.images.length - 1;
+						const nextBtn = document.getElementById('next-page-btn');
+						if (nextBtn) {
+							this.isLoading = true;
+							sessionStorage.setItem('acuity-focus', 'first');
+							sessionStorage.setItem('acuity-culling-reopen', 'first');
+							nextBtn.click();
+							return;
+						} else {
+							this.currentIndex = this.images.length - 1;
+						}
 					}
 					this.isLoading = true;
-					if(document.querySelector('body').__x?.$data?.showDetailPanel) {
-						htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#image-detail-container'});
-					}
 				}
 			});
 		}
@@ -532,9 +700,62 @@
 	@acuity-space-carousel.window="if(document.getElementById('culling-modal').open) flag(1)"
 	@acuity-backspace-carousel.window="if(document.getElementById('culling-modal').open) flag(-1)"
 	@acuity-escape.window="if(document.getElementById('culling-modal').open) close()"
-	@acuity-next.window="if(document.getElementById('culling-modal').open) next()"
-	@acuity-prev.window="if(document.getElementById('culling-modal').open) prev()"
+	@acuity-next.window="
+		if(document.getElementById('culling-modal').open) {
+			if (scale > 1) { 
+				const img = $el.querySelector('.carousel-image');
+				if (img) panX = clampPan(panX - 50, img.clientWidth, window.innerWidth);
+			} else { next(); }
+		}
+	"
+	@acuity-prev.window="
+		if(document.getElementById('culling-modal').open) {
+			if (scale > 1) { 
+				const img = $el.querySelector('.carousel-image');
+				if (img) panX = clampPan(panX + 50, img.clientWidth, window.innerWidth);
+			} else { prev(); }
+		}
+	"
+	@acuity-arrow-up.window="
+		if(document.getElementById('culling-modal').open && scale > 1) {
+			const img = $el.querySelector('.carousel-image');
+			if (img) panY = clampPan(panY + 50, img.clientHeight, window.innerHeight);
+		}
+	"
+	@acuity-arrow-down.window="
+		if(document.getElementById('culling-modal').open && scale > 1) {
+			const img = $el.querySelector('.carousel-image');
+			if (img) panY = clampPan(panY - 50, img.clientHeight, window.innerHeight);
+		}
+	"
+	@acuity-zoom-in.window="
+		if(document.getElementById('culling-modal').open) {
+			scale = Math.min(scale * 1.5, 50);
+		}
+	"
+	@acuity-zoom-out.window="
+		if(document.getElementById('culling-modal').open) {
+			scale = Math.max(scale / 1.5, 1);
+			if(scale === 1) resetZoom();
+		}
+	"
+	@acuity-zoom-reset.window="
+		if(document.getElementById('culling-modal').open) resetZoom();
+	"
 	@acuity-delete-carousel.window="if(document.getElementById('culling-modal').open) deleteCurrent()"
+	@htmx:after-settle.window="
+		let reopenAction = sessionStorage.getItem('acuity-culling-reopen');
+		if (reopenAction && document.getElementById('culling-modal').open) {
+			sessionStorage.removeItem('acuity-culling-reopen');
+			const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
+			if (imageEls.length > 0) {
+				images = imageEls.map(img => ({ src: img.src, id: img.dataset.id }));
+				currentIndex = (reopenAction === 'last') ? images.length - 1 : 0;
+			} else {
+				close();
+			}
+		}
+	"
 	>
 		<!-- Toolbar (Matching Design Language) -->
 		<div class="carousel-toolbar" x-show="images.length > 0">
@@ -549,13 +770,26 @@
 		</div>
 
 		<!-- Content (Matching Design Language) -->
-		<div class="carousel-content" @click.self="close()">
+		<div class="carousel-content" @click.self="close()" @wheel.prevent="handleWheel">
 			<button class="btn-icon carousel-nav prev" @click="prev()" x-show="currentIndex > 0 || document.getElementById('prev-page-btn')">
 				<span class="material-symbols-outlined">chevron_left</span>
 			</button>
 			
-			<template x-if="images.length > 0">
-				<img :src="images[currentIndex].src" class="carousel-image" @click.stop="" @load="isLoading = false">
+			<template x-for="img in [images[currentIndex]]" :key="img ? img.id : 'empty'">
+				<img x-show="img" :src="img?.src" class="carousel-image" 
+					x-transition:enter="carousel-fade-active"
+					x-transition:enter-start="carousel-fade-from"
+					x-transition:enter-end="carousel-fade-to"
+					x-transition:leave="carousel-fade-active"
+					x-transition:leave-start="carousel-fade-to"
+					x-transition:leave-end="carousel-fade-from"
+					@load="isLoading = false"
+					@click.stop=""
+					@dblclick.stop="resetZoom()"
+					@mousedown="startDrag"
+					@mousemove.window="doDrag"
+					@mouseup.window="stopDrag"
+					:style="`transform: translate(${panX}px, ${panY}px) scale(${scale}); cursor: ${scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'}`">
 			</template>
 			
 			<div x-show="isLoading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 5;">

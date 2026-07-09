@@ -294,7 +294,7 @@ body:not(.keyboard-navigating) .image-card:hover img {
 }
 
 .image-card.selected img {
-    opacity: 0.5;
+    opacity: 0.6;
 }
 .image-card .select-btn {
 	opacity: 0;
@@ -469,6 +469,21 @@ body:not(.keyboard-navigating) .image-card:hover img {
     max-height: 90vh;
     object-fit: contain;
     user-select: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: auto;
+}
+.carousel-fade-active {
+    transition: opacity 0.2s ease-in-out !important;
+}
+.carousel-fade-from {
+    opacity: 0 !important;
+}
+.carousel-fade-to {
+    opacity: 1 !important;
 }
 .carousel-nav {
     position: absolute;

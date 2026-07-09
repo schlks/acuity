@@ -137,7 +137,15 @@
 						<option value="asc" {{if eq (getConfig).DefaultSortOrder "asc"}}selected{{end}}>Ascending</option>
 					</select>
 				</div>
-
+				<div>
+					<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Flag</div>
+					<select name="flagFilter" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
+						<option value="any">Any</option>
+						<option value="1">Keep</option>
+						<option value="0">None</option>
+						<option value="-1">Reject</option>
+					</select>
+				</div>
 			</form>
 		</div>
 	</div>

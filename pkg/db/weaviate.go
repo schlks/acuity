@@ -252,7 +252,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 
 	for _, path := range filePaths {
 		g.Go(func() error {
-			data, err := bimg.Read(path)
+			data, err := os.ReadFile(path)
 			if err != nil {
 				slog.Error("Error decoding image", slog.String("path", path), slog.Any("error", err))
 				return err
@@ -497,7 +497,7 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 	}
 }
 
-func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]Image, error) {
+func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]Image, error) {
 	nearText := w.Client.GraphQL().
 		NearTextArgBuilder().
 		WithConcepts([]string{search}).
@@ -524,14 +524,36 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 			},
 		)
 
+	var whereFilter *filters.WhereBuilder
+
 	if galleryID >= 0 {
-		filter := filters.Where().
+		whereFilter = filters.Where().
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
 			WithValueInt(int64(galleryID))
+	}
 
+	if flagFilter != "" && flagFilter != "any" {
+		flagVal, err := strconv.Atoi(flagFilter)
+		if err == nil {
+			flagCond := filters.Where().
+				WithPath([]string{"flag"}).
+				WithOperator(filters.Equal).
+				WithValueInt(int64(flagVal))
+
+			if whereFilter != nil {
+				whereFilter = filters.Where().
+					WithOperator(filters.And).
+					WithOperands([]*filters.WhereBuilder{whereFilter, flagCond})
+			} else {
+				whereFilter = flagCond
+			}
+		}
+	}
+
+	if whereFilter != nil {
 		query = query.
-			WithWhere(filter).
+			WithWhere(whereFilter).
 			WithNearText(nearText).
 			WithLimit(imagesPerPage).
 			WithOffset(page * imagesPerPage)
@@ -565,7 +587,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 	return images, nil
 }
 
-func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]Image, error) {
+func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]Image, error) {
 	nearImage := w.Client.GraphQL().
 		NearImageArgBuilder().
 		WithImage(image).
@@ -592,14 +614,36 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 			},
 		)
 
+	var whereFilter *filters.WhereBuilder
+
 	if galleryID >= 0 {
-		filter := filters.Where().
+		whereFilter = filters.Where().
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
 			WithValueInt(int64(galleryID))
+	}
 
+	if flagFilter != "" && flagFilter != "any" {
+		flagVal, err := strconv.Atoi(flagFilter)
+		if err == nil {
+			flagCond := filters.Where().
+				WithPath([]string{"flag"}).
+				WithOperator(filters.Equal).
+				WithValueInt(int64(flagVal))
+
+			if whereFilter != nil {
+				whereFilter = filters.Where().
+					WithOperator(filters.And).
+					WithOperands([]*filters.WhereBuilder{whereFilter, flagCond})
+			} else {
+				whereFilter = flagCond
+			}
+		}
+	}
+
+	if whereFilter != nil {
 		query = query.
-			WithWhere(filter).
+			WithWhere(whereFilter).
 			WithNearImage(nearImage).
 			WithLimit(imagesPerPage).
 			WithOffset(page * imagesPerPage)
@@ -770,7 +814,7 @@ func (w *WeaviateClient) RemoveImages(ctx context.Context, images []Image) error
 	return g.Wait()
 }
 
-func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int) ([]Image, error) {
+func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string) ([]Image, error) {
 	query := w.Client.GraphQL().Get().
 		WithClassName("Image").
 		WithFields(
@@ -790,13 +834,40 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 					{Name: "id"},
 				},
 			},
-		).
-		WithWhere(
-			filters.Where().
-				WithPath([]string{"gallery_id"}).
+		)
+
+	var whereFilter *filters.WhereBuilder
+
+	if galleryID >= 0 {
+		whereFilter = filters.Where().
+			WithPath([]string{"gallery_id"}).
+			WithOperator(filters.Equal).
+			WithValueInt(int64(galleryID))
+	}
+
+	if flagFilter != "" && flagFilter != "any" {
+		flagVal, err := strconv.Atoi(flagFilter)
+		if err == nil {
+			flagCond := filters.Where().
+				WithPath([]string{"flag"}).
 				WithOperator(filters.Equal).
-				WithValueInt(int64(galleryID))).
-		WithLimit(imagesPerPage)
+				WithValueInt(int64(flagVal))
+
+			if whereFilter != nil {
+				whereFilter = filters.Where().
+					WithOperator(filters.And).
+					WithOperands([]*filters.WhereBuilder{whereFilter, flagCond})
+			} else {
+				whereFilter = flagCond
+			}
+		}
+	}
+
+	if whereFilter != nil {
+		query = query.WithWhere(whereFilter)
+	}
+
+	query = query.WithLimit(imagesPerPage)
 
 	if page >= 0 {
 		query = query.WithOffset(page * imagesPerPage)
