@@ -44,57 +44,9 @@
 		hx-include="#search-options-form"
 		style="position: relative; width: 100%;"
 		x-data="{
-			text: '',
-			placeholders: [
-				'Search for a sunset...', 
-				'Mountains in winter...', 
-				'Portrait of a dog...', 
-				'A red car on the street...',
-				'Coffee cup on a wooden table...',
-				'A foggy morning in the forest...',
-				'Cyberpunk city at night...',
-				'Golden retriever playing in the grass...',
-				'Minimalist white living room...',
-				'Close-up of a blue eye...',
-				'People walking in the rain...',
-				'A plate of fresh sushi...',
-				'Vintage camera on a desk...',
-				'Snowy cabin in the woods...',
-				'Starry night sky...',
-				'A person reading a book...',
-				'Macro shot of a water drop...',
-				'Abstract geometric shapes...',
-				'Beach with palm trees...',
-				'A cute cat sleeping...'
-			],
-			index: 0,
-			charIndex: 0,
-			isDeleting: false,
 			query: '',
 			isDragging: false,
 			imageUrl: null,
-			type() {
-				let current = this.placeholders[this.index];
-				if (this.isDeleting) {
-					this.charIndex--;
-				} else {
-					this.charIndex++;
-				}
-				this.text = current.substring(0, this.charIndex);
-		
-				let typeSpeed = this.isDeleting ? 30 : 80;
-		
-				if (!this.isDeleting && this.charIndex === current.length) {
-					typeSpeed = 2000;
-					this.isDeleting = true;
-				} else if (this.isDeleting && this.charIndex === 0) {
-					this.isDeleting = false;
-					this.index = (this.index + 1) % this.placeholders.length;
-					typeSpeed = 500;
-				}
-		
-				setTimeout(() => this.type(), typeSpeed);
-			},
 			handleFile(file) {
 				if (!file || !file.type.startsWith('image/')) return;
 				this.imageUrl = URL.createObjectURL(file);
@@ -121,7 +73,6 @@
 				this.$refs.fileInput.value = '';
 			}
 		}" 
-		x-init="type()" 
 		@dragover.window.prevent="isDragging = true"
 		@dragleave.window.prevent="isDragging = false"
 		@drop.window.prevent="isDragging = false; handleFile($event.dataTransfer.files[0])"
@@ -149,7 +100,7 @@
 			x-model="query"
 			@keydown.enter.prevent="$el.closest('form').requestSubmit()"
 			:readonly="imageUrl !== null"
-			:placeholder="imageUrl ? 'Press Enter to search by image...' : text"
+			:placeholder="imageUrl ? 'Press Enter to search by image...' : 'Press \'/\' to search'"
 			:style="imageUrl ? 'padding-left: 110px; padding-right: 40px; border-radius: 24px; padding-top: 16px; padding-bottom: 16px; font-size: 1.1rem; flex-grow: 1; cursor: not-allowed; color: transparent;' : 'padding-left: 40px; padding-right: 40px; border-radius: 24px; padding-top: 16px; padding-bottom: 16px; font-size: 1.1rem; flex-grow: 1;'">
 		
 		<span class="material-symbols-outlined" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted);">search</span>
@@ -209,16 +160,24 @@
 	@mouseenter="hover = true"
 	@mouseleave="hover = false">
 	
-	<button class="btn-icon select-btn" 
+	<!--<button class="btn-icon select-btn"
 		@click.stop="if(selectedImages.includes('{{.ID}}')) { selectedImages = selectedImages.filter(id => id !== '{{.ID}}') } else { selectedImages.push('{{.ID}}') }">
 		<span class="material-symbols-outlined" x-text="selectedImages.includes('{{.ID}}') ? 'check_circle' : 'radio_button_unchecked'"></span>
-	</button>
+	</button>-->
 	
 	<img src="/image?path={{.Path}}" data-id="{{.ID}}" data-rating="{{.Rating}}" alt="Gallery Image" loading="lazy">
 	
 	<div class="rating-badge" x-show="rating > 0" x-transition style="{{if eq .Rating 0}}display: none;{{end}}">
 		<span class="material-symbols-outlined icon-filled">star</span>
 		<span x-text="rating">{{.Rating}}</span>
+	</div>
+	
+	<div id="flag-badge-{{.ID}}" style="position: absolute; top: 8px; left: 8px; z-index: 10;">
+		{{if eq .Flag 1}}
+			<span class="material-symbols-outlined icon-filled" style="color: #2ecc71; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">check_circle</span>
+		{{else if eq .Flag -1}}
+			<span class="material-symbols-outlined icon-filled" style="color: #e74c3c; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">cancel</span>
+		{{end}}
 	</div>
 </div>
 {{end}}
@@ -249,6 +208,10 @@
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Rating</div>
 		{{template "rating-stars" .}}
+	</div>
+	<div>
+		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Flag</div>
+		{{template "flag-set" .}}
 	</div>
 	<hr>
 	<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
@@ -337,5 +300,34 @@
             style="margin-top: 12px; width: 100%; justify-content: center; background: var(--secondary); color: white;">
         Choose this Folder
     </button>
+</div>
+{{end}}
+
+{{define "flag-set"}}
+<div id="flag-container-{{.ID}}">
+    <button class="btn-icon"
+            style="color: {{if eq .Flag 1}}var(--success, #2ecc71){{else}}var(--text-muted){{end}};"
+            hx-post="/image/{{.ID}}/flag"
+            hx-vals='{"flag": "{{if eq .Flag 1}}0{{else}}1{{end}}"}'
+            hx-target="#flag-container-{{.ID}}"
+            hx-swap="outerHTML">
+        <span class="material-symbols-outlined {{if eq .Flag 1}}icon-filled{{end}}">check_circle</span>
+    </button>
+    <button class="btn-icon"
+            style="color: {{if eq .Flag -1}}var(--danger, #e74c3c){{else}}var(--text-muted){{end}};"
+            hx-post="/image/{{.ID}}/flag"
+            hx-vals='{"flag": "{{if eq .Flag -1}}0{{else}}-1{{end}}"}'
+            hx-target="#flag-container-{{.ID}}"
+            hx-swap="outerHTML">
+        <span class="material-symbols-outlined {{if eq .Flag -1}}icon-filled{{end}}">cancel</span>
+    </button>
+</div>
+
+<div id="flag-badge-{{.ID}}" hx-swap-oob="true" style="position: absolute; top: 8px; left: 8px; z-index: 10;">
+    {{if eq .Flag 1}}
+        <span class="material-symbols-outlined icon-filled" style="color: #2ecc71; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">check_circle</span>
+    {{else if eq .Flag -1}}
+        <span class="material-symbols-outlined icon-filled" style="color: #e74c3c; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">cancel</span>
+    {{end}}
 </div>
 {{end}}

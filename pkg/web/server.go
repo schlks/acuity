@@ -72,6 +72,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST	/gallery/transfer", s.transferGallery)
 	mux.HandleFunc("GET /api/browse", s.browseFiles)
 	mux.HandleFunc("POST /api/browse/mkdir", s.mkdir)
+	mux.HandleFunc("POST /image/{id}/flag", s.setFlag)
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
@@ -91,6 +92,31 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	err = s.Template.ExecuteTemplate(w, "index.html", data)
 	if err != nil {
 		message := "Index cannot be loaded"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	imageID := r.PathValue("id")
+	flagStr := r.FormValue("flag")
+	flag, _ := strconv.Atoi(flagStr)
+
+	if err := s.Service.SetFlag(ctx, imageID, flag); err != nil {
+		message := "Failed to set Flag"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		ID   string
+		Flag int
+	}{ID: imageID, Flag: flag}
+	if err := s.Template.ExecuteTemplate(w, "flag-set", data); err != nil {
+		message := "Failed to update Flag"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
@@ -530,7 +556,17 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 	thresholdStr := query.String(r, "threshold", "0.1")
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 64)
 
-	groups, err := s.Service.FindGlobalDuplicates(ctx, thresholdFloat)
+	_ = r.ParseForm()
+	var galleryIDs []int
+	selectedGalleries := make(map[int]bool)
+	for _, idStr := range r.Form["galleries"] {
+		if id, err := strconv.Atoi(idStr); err == nil {
+			galleryIDs = append(galleryIDs, id)
+			selectedGalleries[id] = true
+		}
+	}
+
+	groups, err := s.Service.FindGlobalDuplicates(ctx, thresholdFloat, galleryIDs)
 	if err != nil {
 		message := "Failed to find duplicate Images"
 		slog.Error(message, slog.Any("error", err))
@@ -538,9 +574,13 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	galleries, _ := s.Service.GetAllGalleries()
+
 	data := map[string]any{
-		"Groups":    groups,
-		"Threshold": thresholdFloat,
+		"Groups":            groups,
+		"Threshold":         thresholdFloat,
+		"Galleries":         galleries,
+		"SelectedGalleries": selectedGalleries,
 	}
 
 	if err := s.Template.ExecuteTemplate(w, "global-duplicates.html", data); err != nil {

@@ -14,9 +14,28 @@
 	</head>
 
 	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }"
+		  @acuity-clear-selection.window="selectedImages = []"
+		  @acuity-remove-selection.window="
+			selectedImages = selectedImages.filter(x => x !== $event.detail.id);
+			let cardImg = document.querySelector(`img[data-id='${$event.detail.id}']`);
+			if (cardImg && cardImg.closest('.image-card')) {
+				let card = cardImg.closest('.image-card');
+				let group = card.closest('.duplicate-group');
+				card.remove();
+				if (group) {
+					let remaining = group.querySelectorAll('.image-card').length;
+					if (remaining < 2) {
+						group.remove();
+					} else {
+						let countSpan = group.querySelector('.group-count');
+						if (countSpan) countSpan.textContent = remaining;
+					}
+				}
+			}
+		  "
 		  x-init="let saved = localStorage.getItem('openGallery'); if (saved) { currentGallery = saved; localStorage.removeItem('openGallery'); setTimeout(() => { htmx.ajax('GET', '/gallery/' + saved, {target: '#main-content'}) }, 100); }"
 		  @load-gallery.window="localStorage.setItem('openGallery', $event.detail.value); window.location.reload()"
-		  @acuity-remove-selection.window="selectedImages = selectedImages.filter(x => x !== $event.detail.id)"
+		  @acuity-toggle-select.window="let id = $event.detail.id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) }"
 		  @acuity-toggle-disk-delete.window="deleteFromDisk = !deleteFromDisk">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
@@ -58,9 +77,13 @@
 						</button>
 					</div>
 					<div id="sidebar-progress-ui" x-data="{ imports: [] }" @update-imports.window="imports = $event.detail" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;">
+						<template x-if="imports.length > 0">
+							<div>
+								<h3 style="color: var(--text-muted)">Imports</h3>
+								<hr>
+							</div>
+						</template>
 						<template x-for="imp in imports" :key="imp.name">
-                            <h3 style="color: var(--text-muted)">Imports</h3>
-                            <hr>
 							<div style="padding: 16px; background: var(--bg-light); border-radius: 8px; border: 1px solid var(--border); margin: 16px 0;">
 								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
 									<div style="display: flex; align-items: center; gap: 8px;">
@@ -154,6 +177,11 @@
 			isDragging: false,
 			startX: 0,
 			startY: 0,
+			isLoading: false,
+			
+			init() {
+				this.$watch('currentIndex', () => { this.isLoading = true; });
+			},
 			
 			resetZoom() {
 				this.scale = 1;
@@ -171,12 +199,12 @@
 				
 				this.resetZoom();
 				this.showInfo = false;
-				this.$refs.carouselDialog.showModal();
+				document.querySelector('.carousel-modal').showModal();
 				document.body.style.overflow = 'hidden';
 			},
 			
 			close() {
-				this.$refs.carouselDialog.close();
+				document.querySelector('.carousel-modal').close();
 				document.body.style.overflow = '';
 			},
 			
@@ -190,6 +218,7 @@
 				} else {
 					const nextBtn = document.getElementById('next-page-btn');
 					if (nextBtn) {
+						this.isLoading = true;
 						sessionStorage.setItem('acuity-focus', 'first');
 						sessionStorage.setItem('acuity-carousel-reopen', 'first');
 						nextBtn.click();
@@ -207,6 +236,7 @@
 				} else {
 					const prevBtn = document.getElementById('prev-page-btn');
 					if (prevBtn) {
+						this.isLoading = true;
 						sessionStorage.setItem('acuity-focus', 'last');
 						sessionStorage.setItem('acuity-carousel-reopen', 'last');
 						prevBtn.click();
@@ -275,21 +305,52 @@
 			
 			stopDrag() {
 				this.isDragging = false;
+			},
+			
+			deleteCurrent() {
+				if(!this.images[this.currentIndex]) return;
+				let img = this.images[this.currentIndex];
+				let isDisk = document.querySelector('body').__x?.$data?.deleteFromDisk;
+				fetch('/image/' + img.id + '?disk=' + !!isDisk, {method: 'DELETE'}).then(() => {
+					let prevId = img.id;
+					window.dispatchEvent(new CustomEvent('acuity-remove-selection', {detail: {id: prevId}}));
+					
+					this.images = this.images.filter(i => i.id !== prevId);
+					if(this.images.length === 0) {
+						this.close();
+					} else {
+						if (this.currentIndex >= this.images.length) {
+							this.currentIndex = this.images.length - 1;
+						}
+						this.isLoading = true;
+						if(this.showInfo) {
+							htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#carousel-info-container'});
+						}
+						if(document.querySelector('body').__x?.$data?.showDetailPanel) {
+							htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#image-detail-container'});
+						}
+					}
+				});
 			}
 		}"
 		@open-carousel.window="open($event.detail.id, $event.detail.group)"
 		@close-carousel.window="close()"
 		@acuity-escape.window="if(showInfo) showInfo = false; else close()"
-		@acuity-next.window="if($refs.carouselDialog.open) next()"
-		@acuity-prev.window="if($refs.carouselDialog.open) prev()"
-		@acuity-toggle-info.window="if($refs.carouselDialog.open) { showInfo = !showInfo; if(showInfo && images[currentIndex]) { htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'}) } }"
-		@acuity-toggle-select-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let id = images[currentIndex].id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) } }"
-		@acuity-rate-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let img = images[currentIndex]; let rating = $event.detail.rating; fetch('/image/' + img.id, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'rating=' + rating}).then(() => img.rating = rating); }"
-		@acuity-delete-carousel.window="if($refs.carouselDialog.open && images[currentIndex]) { let img = images[currentIndex]; fetch('/image/' + img.id + '?disk=' + deleteFromDisk, {method: 'DELETE'}).then(() => { let prevId = img.id; $dispatch('acuity-remove-selection', {id: prevId}); next(); images = images.filter(i => i.id !== prevId); if(images.length===0) close(); }) }"
-		@acuity-search-similar.window="if($refs.carouselDialog.open && images[currentIndex]) { htmx.ajax('GET', '/gallery/global/duplicates', {target: '#main-content', values: {imageID: images[currentIndex].id, returnTo: currentGallery}}); close(); showDetailPanel = false; }"
+		@acuity-space-carousel.window="
+			if (document.querySelector('.carousel-modal').open) {
+				$dispatch('acuity-toggle-select-carousel');
+			}
+		"
+		@acuity-next.window="if(document.querySelector('.carousel-modal').open) next()"
+		@acuity-prev.window="if(document.querySelector('.carousel-modal').open) prev()"
+		@acuity-toggle-info.window="if(document.querySelector('.carousel-modal').open) { showInfo = !showInfo; if(showInfo && images[currentIndex]) { htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'}) } }"
+		@acuity-toggle-select-carousel.window="if(document.querySelector('.carousel-modal').open && images[currentIndex]) { let id = images[currentIndex].id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) } }"
+		@acuity-rate-carousel.window="if(document.querySelector('.carousel-modal').open && images[currentIndex]) { let img = images[currentIndex]; let rating = $event.detail.rating; fetch('/image/' + img.id, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'rating=' + rating}).then(() => img.rating = rating); }"
+		@acuity-delete-carousel.window="if(document.querySelector('.carousel-modal').open) deleteCurrent()"
+		@acuity-search-similar.window="if(document.querySelector('.carousel-modal').open && images[currentIndex]) { htmx.ajax('GET', '/gallery/global/duplicates', {target: '#main-content', values: {imageID: images[currentIndex].id, returnTo: currentGallery}}); close(); showDetailPanel = false; }"
 		@rating-updated.window="let img = images.find(i => i.id === $event.detail.id); if(img) img.rating = $event.detail.rating;"
 		@acuity-copy.window="
-			if ($refs.carouselDialog.open && images[currentIndex]) {
+			if (document.querySelector('.carousel-modal').open && images[currentIndex]) {
 				if (!selectedImages.includes(images[currentIndex].id)) selectedImages.push(images[currentIndex].id);
 			} else if (document.activeElement && document.activeElement.classList.contains('image-card')) {
 				let img = document.activeElement.querySelector('img');
@@ -301,7 +362,7 @@
 			}
 		"
 		@acuity-move.window="
-			if ($refs.carouselDialog.open && images[currentIndex]) {
+			if (document.querySelector('.carousel-modal').open && images[currentIndex]) {
 				if (!selectedImages.includes(images[currentIndex].id)) selectedImages.push(images[currentIndex].id);
 			} else if (document.activeElement && document.activeElement.classList.contains('image-card')) {
 				let img = document.activeElement.querySelector('img');
@@ -314,16 +375,16 @@
 		"
 		@htmx:after-settle.window="
 			let reopenAction = sessionStorage.getItem('acuity-carousel-reopen');
-			if (reopenAction && $refs.carouselDialog.open) {
+			if (reopenAction && document.querySelector('.carousel-modal').open) {
 				sessionStorage.removeItem('acuity-carousel-reopen');
 				const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
 				if (imageEls.length > 0) {
-					this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, rating: parseInt(img.dataset.rating) || 0 }));
-					this.currentIndex = (reopenAction === 'last') ? this.images.length - 1 : 0;
-					this.resetZoom();
-					if(this.showInfo) htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#carousel-info-container'});
+					images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, rating: parseInt(img.dataset.rating) || 0 }));
+					currentIndex = (reopenAction === 'last') ? images.length - 1 : 0;
+					resetZoom();
+					if(showInfo) htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'});
 				} else {
-					this.close();
+					close();
 				}
 			}
 		">
@@ -357,6 +418,7 @@
 				
 				<template x-if="images.length > 0">
 					<img :src="images[currentIndex].src" class="carousel-image" 
+						@load="isLoading = false"
 						@click.stop=""
 						@dblclick.stop="resetZoom()"
 						@mousedown="startDrag"
@@ -364,6 +426,12 @@
 						@mouseup.window="stopDrag"
 						:style="`transform: translate(${panX}px, ${panY}px) scale(${scale}); cursor: ${scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'}; transition: ${isDragging ? 'none' : 'transform 0.1s ease-out'}`">
 				</template>
+				
+				<div x-show="isLoading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 5;">
+					<svg class="md3-spinner" viewBox="0 0 48 48">
+						<circle class="md3-spinner-path" cx="24" cy="24" r="18" fill="none" stroke-width="5"></circle>
+					</svg>
+				</div>
 				
 				<button class="btn-icon carousel-nav next" @click="next()" x-show="currentIndex < images.length - 1">
 					<span class="material-symbols-outlined">chevron_right</span>
@@ -374,5 +442,137 @@
 				<span x-text="currentIndex + 1"></span> / <span x-text="images.length"></span>
 			</div>
 		</dialog>
+
+	<!-- Dedicated Culling Modal -->
+	<dialog id="culling-modal" class="carousel-modal culling" x-data="{
+		images: [],
+		currentIndex: 0,
+		isLoading: false,
+		
+		init() {
+			this.$watch('currentIndex', () => { this.isLoading = true; });
+		},
+		
+		open() {
+			const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
+			if (imageEls.length > 0) {
+				this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id }));
+				this.currentIndex = 0;
+				document.getElementById('culling-modal').showModal();
+				document.body.style.overflow = 'hidden';
+			}
+		},
+		close() {
+			document.getElementById('culling-modal').close();
+			document.body.style.overflow = '';
+		},
+		flag(val) {
+			if(this.images.length === 0) return;
+			let img = this.images[this.currentIndex];
+			fetch('/image/' + img.id + '/flag', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'flag=' + val })
+				.then(() => {
+					let flagBadge = document.getElementById('flag-badge-' + img.id);
+					if (flagBadge) htmx.ajax('GET', '/components/flag/' + img.id, {target: '#flag-badge-' + img.id, swap: 'innerHTML'});
+					this.next();
+				});
+		},
+		
+		next() {
+			if (this.currentIndex < this.images.length - 1) {
+				this.currentIndex++;
+			} else {
+				const nextBtn = document.getElementById('next-page-btn');
+				if (nextBtn) {
+					this.isLoading = true;
+					sessionStorage.setItem('acuity-focus', 'first');
+					sessionStorage.setItem('acuity-carousel-reopen', 'first');
+					nextBtn.click();
+				}
+			}
+		},
+		
+		prev() {
+			if (this.currentIndex > 0) {
+				this.currentIndex--;
+			} else {
+				const prevBtn = document.getElementById('prev-page-btn');
+				if (prevBtn) {
+					this.isLoading = true;
+					sessionStorage.setItem('acuity-focus', 'last');
+					sessionStorage.setItem('acuity-carousel-reopen', 'last');
+					prevBtn.click();
+				}
+			}
+		},
+		
+		deleteCurrent() {
+			if(!this.images[this.currentIndex]) return;
+			let img = this.images[this.currentIndex];
+			let isDisk = document.querySelector('body').__x?.$data?.deleteFromDisk;
+			fetch('/image/' + img.id + '?disk=' + !!isDisk, {method: 'DELETE'}).then(() => {
+				let prevId = img.id;
+				window.dispatchEvent(new CustomEvent('acuity-remove-selection', {detail: {id: prevId}}));
+				
+				this.images = this.images.filter(i => i.id !== prevId);
+				if(this.images.length === 0) {
+					this.close();
+				} else {
+					if (this.currentIndex >= this.images.length) {
+						this.currentIndex = this.images.length - 1;
+					}
+					this.isLoading = true;
+					if(document.querySelector('body').__x?.$data?.showDetailPanel) {
+						htmx.ajax('GET', '/image/' + this.images[this.currentIndex].id, {target: '#image-detail-container'});
+					}
+				}
+			});
+		}
+	}" 
+	@acuity-start-culling.window="open()"
+	@acuity-space-carousel.window="if(document.getElementById('culling-modal').open) flag(1)"
+	@acuity-backspace-carousel.window="if(document.getElementById('culling-modal').open) flag(-1)"
+	@acuity-escape.window="if(document.getElementById('culling-modal').open) close()"
+	@acuity-next.window="if(document.getElementById('culling-modal').open) next()"
+	@acuity-prev.window="if(document.getElementById('culling-modal').open) prev()"
+	@acuity-delete-carousel.window="if(document.getElementById('culling-modal').open) deleteCurrent()"
+	>
+		<!-- Toolbar (Matching Design Language) -->
+		<div class="carousel-toolbar" x-show="images.length > 0">
+			<div class="carousel-action" style="padding: 0 12px; width: auto; font-weight: bold; pointer-events: none;">
+				<span class="material-symbols-outlined icon-filled" style="color: var(--primary);">bolt</span>
+				Culling Mode
+			</div>
+			<div style="flex: 1"></div>
+			<button class="carousel-action" title="Close fullscreen" @click="close()">
+				<span class="material-symbols-outlined">close</span>
+			</button>
+		</div>
+
+		<!-- Content (Matching Design Language) -->
+		<div class="carousel-content" @click.self="close()">
+			<button class="btn-icon carousel-nav prev" @click="prev()" x-show="currentIndex > 0 || document.getElementById('prev-page-btn')">
+				<span class="material-symbols-outlined">chevron_left</span>
+			</button>
+			
+			<template x-if="images.length > 0">
+				<img :src="images[currentIndex].src" class="carousel-image" @click.stop="" @load="isLoading = false">
+			</template>
+			
+			<div x-show="isLoading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 5;">
+				<svg class="md3-spinner" viewBox="0 0 48 48">
+					<circle class="md3-spinner-path" cx="24" cy="24" r="18" fill="none" stroke-width="5"></circle>
+				</svg>
+			</div>
+			
+			<button class="btn-icon carousel-nav next" @click="next()" x-show="currentIndex < images.length - 1 || document.getElementById('next-page-btn')">
+				<span class="material-symbols-outlined">chevron_right</span>
+			</button>
+		</div>
+
+		<!-- Counter (Matching Design Language) -->
+		<div class="carousel-counter">
+			<span x-text="currentIndex + 1"></span> / <span x-text="images.length"></span>
+		</div>
+	</dialog>
 	</body>
 </html>

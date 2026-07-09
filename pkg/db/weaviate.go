@@ -58,6 +58,7 @@ type Image struct {
 	Size        float64
 	Resolution  int
 	AspectRatio float64
+	Flag        int
 }
 
 func NewWeaviateClient(host string) (*WeaviateClient, error) {
@@ -139,7 +140,7 @@ func (w *WeaviateClient) InitSchema() error {
 				},
 				{
 					Name:     "rating",
-					DataType: []string{"int"},
+					DataType: []string{"number"},
 				},
 				{
 					Name:     "extension",
@@ -155,14 +156,18 @@ func (w *WeaviateClient) InitSchema() error {
 				},
 				{
 					Name:     "size",
-					DataType: []string{"int"},
+					DataType: []string{"number"},
 				},
 				{
 					Name:     "resolution",
-					DataType: []string{"int"},
+					DataType: []string{"number"},
 				},
 				{
 					Name:     "aspect_ratio",
+					DataType: []string{"number"},
+				},
+				{
+					Name:     "flag",
 					DataType: []string{"number"},
 				},
 			},
@@ -216,6 +221,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 					"size":         result.Size,
 					"resolution":   result.Resolution,
 					"aspect_ratio": result.AspectRatio,
+					"flag":         0,
 				},
 			}
 			batch = append(batch, obj)
@@ -422,10 +428,9 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 					}
 				}
 
-				var rating, resolution int
+				var rating, resolution, flag int
 				var extension, date, taken string
-				var size float64
-				var aspectRatio float64
+				var size, aspectRatio float64
 
 				if val, ok := imgProps["rating"].(float64); ok {
 					rating = int(val)
@@ -451,6 +456,9 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 				if val, ok := imgProps["aspect_ratio"].(float64); ok {
 					aspectRatio = val
 				}
+				if val, ok := imgProps["flag"].(float64); ok {
+					flag = int(val)
+				}
 
 				images = append(images, Image{
 					ID:          id,
@@ -466,6 +474,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 					Size:        size,
 					Resolution:  resolution,
 					AspectRatio: aspectRatio,
+					Flag:        flag,
 				})
 			}
 		}
@@ -730,6 +739,7 @@ func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, im
 				"size":         info.Size,
 				"resolution":   info.Resolution,
 				"aspect_ratio": info.AspectRatio,
+				"flag":         info.Flag,
 			}
 			_, err = w.Client.Data().Creator().
 				WithClassName("Image").
@@ -773,6 +783,7 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 			graphql.Field{Name: "size"},
 			graphql.Field{Name: "resolution"},
 			graphql.Field{Name: "aspect_ratio"},
+			graphql.Field{Name: "flag"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -875,6 +886,7 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (Image, er
 			graphql.Field{Name: "size"},
 			graphql.Field{Name: "resolution"},
 			graphql.Field{Name: "aspect_ratio"},
+			graphql.Field{Name: "flag"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -944,7 +956,7 @@ func (w *WeaviateClient) GetGalleryCount(ctx context.Context, galleryID int) (in
 	return int(countFloat), nil
 }
 
-func (w *WeaviateClient) GetVectors(ctx context.Context) ([]ImageVector, error) {
+func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]ImageVector, error) {
 	var images []ImageVector
 	query := w.Client.GraphQL().Get().
 		WithClassName("Image").
@@ -959,6 +971,27 @@ func (w *WeaviateClient) GetVectors(ctx context.Context) ([]ImageVector, error) 
 				},
 			},
 		)
+
+	if len(galleryIDs) > 0 {
+		var operands []*filters.WhereBuilder
+		for _, id := range galleryIDs {
+			operands = append(operands, filters.Where().
+				WithPath([]string{"gallery_id"}).
+				WithOperator(filters.Equal).
+				WithValueInt(int64(id)))
+		}
+
+		var whereFilter *filters.WhereBuilder
+		if len(operands) == 1 {
+			whereFilter = operands[0]
+		} else {
+			whereFilter = filters.Where().
+				WithOperator(filters.Or).
+				WithOperands(operands)
+		}
+		query = query.WithWhere(whereFilter)
+	}
+
 	result, err := query.Do(ctx)
 	if err != nil {
 		return []ImageVector{}, err
@@ -1021,6 +1054,18 @@ func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {
 func (w *WeaviateClient) SetRating(ctx context.Context, imageID string, rating int) error {
 	props := map[string]any{
 		"rating": rating,
+	}
+	return w.Client.Data().Updater().
+		WithMerge().
+		WithID(imageID).
+		WithClassName("Image").
+		WithProperties(props).
+		Do(ctx)
+}
+
+func (w *WeaviateClient) SetFlag(ctx context.Context, imageID string, flag int) error {
+	props := map[string]any{
+		"flag": flag,
 	}
 	return w.Client.Data().Updater().
 		WithMerge().

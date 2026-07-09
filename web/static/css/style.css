@@ -267,22 +267,34 @@ dialog.closing::backdrop {
 	height: 100%;
 	object-fit: cover;
 	display: block;
+	transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
 }
 body:not(.keyboard-navigating) .image-card:hover {
 	border-color: var(--primary-hover);
-    box-shadow: 0 0 30px rgba(64, 124, 245, 0.3);
+    box-shadow: 0 0 40px color-mix(in srgb, var(--primary-hover) 60%, transparent);
+    z-index: 5;
 }
 .image-card:focus {
 	border-color: var(--secondary, #ffaa00);
-    box-shadow: 0 0 30px rgba(255, 170, 0, 0.3);
+    box-shadow: 0 0 40px color-mix(in srgb, var(--secondary, #ffaa00) 60%, transparent);
 	outline: none;
+    z-index: 10;
 }
-body:not(.keyboard-navigating) .image-card:hover img,
-.image-card:focus img {
+body:not(.keyboard-navigating) .image-card:hover img {
 	opacity: 0.9;
 }
+.image-card:focus img {
+	transform: scale(0.92);
+	border-radius: 4px;
+}
 .image-card.selected {
-    border-color: var(--primary-hover);
+    border-color: var(--secondary);
+    box-shadow: 0 0 50px color-mix(in srgb, var(--secondary) 60%, transparent);
+    z-index: 6;
+}
+
+.image-card.selected img {
+    opacity: 0.5;
 }
 .image-card .select-btn {
 	opacity: 0;

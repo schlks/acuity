@@ -47,9 +47,10 @@ type wService interface {
 	GetKnownPaths(ctx context.Context, galleryID int) (map[string]string, error)
 	GetInfo(ctx context.Context, imageID string) (db.Image, error)
 	GetGalleryCount(ctx context.Context, galleryID int) (int, error)
-	GetVectors(ctx context.Context) ([]db.ImageVector, error)
+	GetVectors(ctx context.Context, galleryIDs []int) ([]db.ImageVector, error)
 	ResetDatabase(ctx context.Context) error
 	SetRating(ctx context.Context, imageID string, rating int) error
+	SetFlag(ctx context.Context, imageID string, flag int) error
 }
 
 type GalleryService struct {
@@ -394,10 +395,10 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[
 	}
 	galleryName, err := g.sDB.GetGalleryByID(gallery)
 	if err != nil {
-		return nil, err
+		imageInfo["Gallery"] = "Unknown"
+	} else {
+		imageInfo["Gallery"] = galleryName.Name
 	}
-	imageInfo["Gallery"] = galleryName.Name
-
 	return imageInfo, nil
 }
 
@@ -409,12 +410,16 @@ func (g *GalleryService) SetRating(ctx context.Context, imageID string, rating i
 	return g.wDB.SetRating(ctx, imageID, rating)
 }
 
+func (g *GalleryService) SetFlag(ctx context.Context, imageID string, rating int) error {
+	return g.wDB.SetFlag(ctx, imageID, rating)
+}
+
 func (g *GalleryService) EditGalleryName(id int, newName string) error {
 	return g.sDB.UpdateGallery(id, newName)
 }
 
-func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold float64) ([][]db.ImageVector, error) {
-	allImages, err := g.wDB.GetVectors(ctx)
+func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold float64, galleryIDs []int) ([][]db.ImageVector, error) {
+	allImages, err := g.wDB.GetVectors(ctx, galleryIDs)
 	if err != nil {
 		return nil, err
 	}
