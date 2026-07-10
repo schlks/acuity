@@ -43,6 +43,7 @@ services:
     environment:
       - WEAVIATE_HOST=weaviate
       - WEAVIATE_PORT=:50050
+      - WEB_DIR=/app/web
     restart: on-failure
 
 volumes:

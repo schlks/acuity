@@ -1,6 +1,5 @@
 FROM golang:1.26-alpine AS build-stage
-
-RUN apk add --no-cache vips-dev gcc musl-dev glycin-loaders-all upx
+RUN apk add --no-cache vips-dev gcc musl-dev glycin-loaders-all upx vips-heif
 
 WORKDIR /app
 COPY go.mod go.sum .
@@ -18,7 +17,7 @@ RUN go test -v ./...
 
 FROM alpine:latest AS production
 
-RUN apk add --no-cache vips exiftool
+RUN apk add --no-cache vips exiftool vips-heif
 
 WORKDIR /app
 COPY --from=build-stage /app/bin/acuity .

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/h2non/bimg"
 	"github.com/mallardduck/go-http-helpers/pkg/query"
@@ -47,7 +48,11 @@ func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config 
 
 // RegisterRoutes regusteres all the routes used by the webui
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	webDir := os.Getenv("WEB_DIR")
+	if webDir == "" {
+		webDir = "web"
+	}
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(filepath.Join(webDir, "static")))))
 
 	mux.HandleFunc("/", s.handleRoot)
 	mux.HandleFunc("GET	/settings", s.getSettings)
@@ -387,6 +392,25 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Redirect", "/gallery/"+newName)
 }
 
+type Progress struct {
+	GalleryName string
+	Current     int
+	Expected    int
+	Percent     int
+}
+
+func progressesEqual(p1, p2 []Progress) bool {
+	if len(p1) != len(p2) {
+		return false
+	}
+	for i := range p1 {
+		if p1[i].GalleryName != p2[i].GalleryName || p1[i].Current != p2[i].Current || p1[i].Expected != p2[i].Expected {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -396,37 +420,59 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type Progress struct {
-		GalleryName string
-		Current     int
-		Expected    int
-		Percent     int
-	}
-
 	var progresses []Progress
 	refreshImages := false
+	hasActive := false
 
-	for _, g := range galleries {
-		expected := s.Service.ExpectedCount[g.ID]
-		if expected > 0 {
-			current, _ := s.Service.GetGalleryCount(ctx, g.ID)
-			if current < expected {
-				progresses = append(progresses, Progress{
-					GalleryName: g.Name,
-					Current:     current,
-					Expected:    expected,
-					Percent:     int(float64(current) / float64(expected) * 100),
-				})
-				if current > 0 {
-					refreshImages = true
+	check := func() (bool, []Progress, bool) {
+		var p []Progress
+		var hasAct bool
+		var refresh bool
+		for _, g := range galleries {
+			expected := s.Service.ExpectedCount[g.ID]
+			if expected > 0 {
+				hasAct = true
+				current, _ := s.Service.GetGalleryCount(ctx, g.ID)
+				if current < expected {
+					p = append(p, Progress{
+						GalleryName: g.Name,
+						Current:     current,
+						Expected:    expected,
+						Percent:     int(float64(current) / float64(expected) * 100),
+					})
+					if current > 0 {
+						refresh = true
+					}
 				}
 			}
+		}
+		return hasAct, p, refresh
+	}
+
+	hasActive, progresses, refreshImages = check()
+
+	if hasActive {
+		// Long polling: wait up to 10 seconds for a change
+		for i := 0; i < 20; i++ {
+			time.Sleep(500 * time.Millisecond)
+			newActive, newProgresses, newRefresh := check()
+			if !progressesEqual(progresses, newProgresses) || !newActive {
+				hasActive = newActive
+				progresses = newProgresses
+				refreshImages = newRefresh
+				break
+			}
+		}
+		// If there are still active imports after waiting (or if we broke out early because of a change), tell the client to immediately re-poll
+		if hasActive {
+			w.Header().Add("HX-Trigger", "check-progress")
 		}
 	}
 
 	if refreshImages {
-		w.Header().Set("HX-Trigger", "refresh-images")
+		w.Header().Add("HX-Trigger", "refresh-images")
 	}
+
 	if err := s.Template.ExecuteTemplate(w, "progress.html", progresses); err != nil {
 		slog.Error("progress cannot be loaded", slog.Any("error", err))
 	}

@@ -243,6 +243,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 		rawExts := map[string]bool{
 			".nef": true, ".cr2": true, ".cr3": true, ".arw": true,
 			".dng": true, ".raf": true, ".orf": true, ".rw2": true, ".srw": true,
+			".avif": true, ".heic": true, ".heif": true,
 		}
 		return rawExts[strings.ToLower(ext)]
 	}
@@ -296,8 +297,19 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 
 			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
 			if err != nil {
-				slog.Error("Error converting image to JPEG", slog.String("path", path), slog.Any("error", err))
-				return err
+				// Fallback to calling vips via exec if bimg fails (e.g., for some AVIF/HEIC files)
+				tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("acuity_conv_%d.jpg", time.Now().UnixNano()))
+				ctxCmd, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctxCmd, "vips", "copy", path, tmpFile)
+				if vipsErr := cmd.Run(); vipsErr == nil {
+					jpegBuffer, err = os.ReadFile(tmpFile)
+					os.Remove(tmpFile)
+				}
+				if err != nil {
+					slog.Error("Error converting image to JPEG", slog.String("path", path), slog.Any("error", err))
+					return err
+				}
 			}
 
 			stat, err := os.Stat(path)

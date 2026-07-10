@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -115,7 +116,11 @@ func main() {
 		"getConfig":  func() *config.Config { return Config },
 	}
 
-	templates := template.Must(template.New("").Funcs(funcMap).ParseGlob("web/templates/*.html"))
+	webDir := os.Getenv("WEB_DIR")
+	if webDir == "" {
+		webDir = "web"
+	}
+	templates := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join(webDir, "templates/*.html")))
 
 	webServer := web.NewServer(sClient, wClient, Config, templates)
 
