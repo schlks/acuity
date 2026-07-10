@@ -117,6 +117,10 @@ window.addEventListener('keydown', (e) => {
 						method: 'POST',
 						headers: {'Content-Type': 'application/x-www-form-urlencoded'},
 						body: `rating=${rating}`
+					}).then(() => {
+						if(document.querySelector('body').__x?.$data?.showDetailPanel) {
+							htmx.ajax('GET', '/image/' + id, {target: '#image-detail-container'});
+						}
 					});
 				}
 			}
@@ -159,7 +163,9 @@ window.addEventListener('keydown', (e) => {
 			}
 			break;
 		case 'n': case 'N':
-			if (document.activeElement.classList.contains('image-card') && !isCarouselOpen) {
+			if (isCarouselOpen) {
+				window.dispatchEvent(new CustomEvent('acuity-flag-carousel', { detail: { type: 'keep' } }));
+			} else if (document.activeElement.classList.contains('image-card')) {
 				const img = document.activeElement.querySelector('img');
 				if (img && img.dataset.id) {
 					const id = img.dataset.id;
@@ -169,20 +175,19 @@ window.addEventListener('keydown', (e) => {
 					else if (badge && badge.innerHTML.includes('cancel')) currentFlag = -1;
 					
 					let newFlag = currentFlag === 1 ? 0 : 1;
-					const sidebarContainer = document.getElementById('flag-container-' + id);
-					if (sidebarContainer) {
-						htmx.ajax('POST', `/image/${id}/flag`, {values: {flag: newFlag}, target: '#flag-container-' + id, swap: 'outerHTML'});
-					} else {
-						fetch(`/image/${id}/flag`, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: `flag=${newFlag}`})
-							.then(() => {
-								if (badge) badge.outerHTML = '<div id=\'flag-badge-' + id + '\' style=\'position: absolute; top: 8px; left: 8px; z-index: 10;\'>' + (newFlag === 1 ? '<span class=\'material-symbols-outlined icon-filled\' style=\'color: #2ecc71; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));\'>check_circle</span>' : (newFlag === -1 ? '<span class=\'material-symbols-outlined icon-filled\' style=\'color: #e74c3c; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));\'>cancel</span>' : '')) + '</div>';
-							});
-					}
+					
+					fetch(`/image/${id}/flag`, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: `flag=${newFlag}`})
+						.then(() => {
+							window.dispatchEvent(new CustomEvent('flag-updated', { detail: { id, flag: newFlag } }));
+							if(document.querySelector('body').__x?.$data?.showDetailPanel) htmx.ajax('GET', '/image/' + id, {target: '#image-detail-container'});
+						});
 				}
 			}
 			break;
 		case 'w': case 'W':
-			if (document.activeElement.classList.contains('image-card') && !isCarouselOpen) {
+			if (isCarouselOpen) {
+				window.dispatchEvent(new CustomEvent('acuity-flag-carousel', { detail: { type: 'reject' } }));
+			} else if (document.activeElement.classList.contains('image-card')) {
 				const img = document.activeElement.querySelector('img');
 				if (img && img.dataset.id) {
 					const id = img.dataset.id;
@@ -192,15 +197,11 @@ window.addEventListener('keydown', (e) => {
 					else if (badge && badge.innerHTML.includes('cancel')) currentFlag = -1;
 					
 					let newFlag = currentFlag === -1 ? 0 : -1;
-					const sidebarContainer = document.getElementById('flag-container-' + id);
-					if (sidebarContainer) {
-						htmx.ajax('POST', `/image/${id}/flag`, {values: {flag: newFlag}, target: '#flag-container-' + id, swap: 'outerHTML'});
-					} else {
-						fetch(`/image/${id}/flag`, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: `flag=${newFlag}`})
-							.then(() => {
-								if (badge) badge.outerHTML = '<div id=\'flag-badge-' + id + '\' style=\'position: absolute; top: 8px; left: 8px; z-index: 10;\'>' + (newFlag === 1 ? '<span class=\'material-symbols-outlined icon-filled\' style=\'color: #2ecc71; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));\'>check_circle</span>' : (newFlag === -1 ? '<span class=\'material-symbols-outlined icon-filled\' style=\'color: #e74c3c; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));\'>cancel</span>' : '')) + '</div>';
-							});
-					}
+					fetch(`/image/${id}/flag`, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: `flag=${newFlag}`})
+						.then(() => {
+							window.dispatchEvent(new CustomEvent('flag-updated', { detail: { id, flag: newFlag } }));
+							if(document.querySelector('body').__x?.$data?.showDetailPanel) htmx.ajax('GET', '/image/' + id, {target: '#image-detail-container'});
+						});
 				}
 			}
 			break;

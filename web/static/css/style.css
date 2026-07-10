@@ -288,7 +288,7 @@ body:not(.keyboard-navigating) .image-card:hover img {
 	border-radius: 4px;
 }
 .image-card.selected {
-    border-color: var(--secondary);
+    border-color: var(--tertiary);
     box-shadow: 0 0 50px color-mix(in srgb, var(--secondary) 60%, transparent);
     z-index: 6;
 }

@@ -163,8 +163,9 @@
 	style="flex-grow: {{if gt .AspectRatio 0.0}}{{.AspectRatio}}{{else}}1{{end}}; flex-basis: calc(var(--grid-base, 250px) * {{if gt .AspectRatio 0.0}}{{.AspectRatio}}{{else}}1{{end}});"
 	@click.stop="$dispatch('open-carousel', {id: '{{.ID}}'})"
 	:class="selectedImages.includes('{{.ID}}') ? 'selected' : ''"
-	x-data="{ hover: false, rating: {{.Rating}} }"
+	x-data="{ hover: false, rating: {{.Rating}}, flag: {{.Flag}} }"
 	@rating-updated.window="if($event.detail.id === '{{.ID}}') rating = $event.detail.rating"
+	@flag-updated.window="if($event.detail.id === '{{.ID}}') flag = $event.detail.flag"
 	@mouseenter="hover = true"
 	@mouseleave="hover = false">
 	
@@ -173,7 +174,7 @@
 		<span class="material-symbols-outlined" x-text="selectedImages.includes('{{.ID}}') ? 'check_circle' : 'radio_button_unchecked'"></span>
 	</button>-->
 	
-	<img src="/image?path={{.Path}}" data-id="{{.ID}}" data-rating="{{.Rating}}" alt="Gallery Image" loading="lazy">
+	<img src="/image?path={{.Path}}" data-id="{{.ID}}" data-rating="{{.Rating}}" data-flag="{{.Flag}}" alt="Gallery Image" loading="lazy">
 	
 	<div class="rating-badge" x-show="rating > 0" x-transition style="{{if eq .Rating 0}}display: none;{{end}}">
 		<span class="material-symbols-outlined icon-filled">star</span>
@@ -181,11 +182,12 @@
 	</div>
 	
 	<div id="flag-badge-{{.ID}}" style="position: absolute; top: 8px; left: 8px; z-index: 10;">
-		{{if eq .Flag 1}}
+		<template x-if="flag === 1">
 			<span class="material-symbols-outlined icon-filled" style="color: #2ecc71; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">check_circle</span>
-		{{else if eq .Flag -1}}
+		</template>
+		<template x-if="flag === -1">
 			<span class="material-symbols-outlined icon-filled" style="color: #e74c3c; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">cancel</span>
-		{{end}}
+		</template>
 	</div>
 </div>
 {{end}}
@@ -312,13 +314,14 @@
 {{end}}
 
 {{define "flag-set"}}
-<div id="flag-container-{{.ID}}">
+<div id="flag-container-{{.ID}}" style="display: flex; gap: 4px;">
     <button class="btn-icon"
             style="color: {{if eq .Flag 1}}var(--success, #2ecc71){{else}}var(--text-muted){{end}};"
             hx-post="/image/{{.ID}}/flag"
             hx-vals='{"flag": "{{if eq .Flag 1}}0{{else}}1{{end}}"}'
             hx-target="#flag-container-{{.ID}}"
-            hx-swap="outerHTML">
+            hx-swap="outerHTML"
+            @click="$dispatch('flag-updated', {id: '{{.ID}}', flag: {{if eq .Flag 1}}0{{else}}1{{end}}})">
         <span class="material-symbols-outlined {{if eq .Flag 1}}icon-filled{{end}}">check_circle</span>
     </button>
     <button class="btn-icon"
@@ -326,16 +329,9 @@
             hx-post="/image/{{.ID}}/flag"
             hx-vals='{"flag": "{{if eq .Flag -1}}0{{else}}-1{{end}}"}'
             hx-target="#flag-container-{{.ID}}"
-            hx-swap="outerHTML">
+            hx-swap="outerHTML"
+            @click="$dispatch('flag-updated', {id: '{{.ID}}', flag: {{if eq .Flag -1}}0{{else}}-1{{end}}})">
         <span class="material-symbols-outlined {{if eq .Flag -1}}icon-filled{{end}}">cancel</span>
     </button>
-</div>
-
-<div id="flag-badge-{{.ID}}" hx-swap-oob="true" style="position: absolute; top: 8px; left: 8px; z-index: 10;">
-    {{if eq .Flag 1}}
-        <span class="material-symbols-outlined icon-filled" style="color: #2ecc71; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">check_circle</span>
-    {{else if eq .Flag -1}}
-        <span class="material-symbols-outlined icon-filled" style="color: #e74c3c; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">cancel</span>
-    {{end}}
 </div>
 {{end}}

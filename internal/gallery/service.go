@@ -386,6 +386,7 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[
 		"AspectRatio": wInfo.AspectRatio,
 		"Extension":   wInfo.Extension,
 		"Date":        wInfo.Date,
+		"Flag":        wInfo.Flag,
 		"Gallery":     "",
 	}
 	galleryStr := imageInfo["GalleryID"].(string)

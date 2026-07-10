@@ -539,7 +539,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 			flagCond := filters.Where().
 				WithPath([]string{"flag"}).
 				WithOperator(filters.Equal).
-				WithValueInt(int64(flagVal))
+				WithValueNumber(float64(flagVal))
 
 			if whereFilter != nil {
 				whereFilter = filters.Where().
@@ -629,7 +629,7 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 			flagCond := filters.Where().
 				WithPath([]string{"flag"}).
 				WithOperator(filters.Equal).
-				WithValueInt(int64(flagVal))
+				WithValueNumber(float64(flagVal))
 
 			if whereFilter != nil {
 				whereFilter = filters.Where().
@@ -851,7 +851,7 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 			flagCond := filters.Where().
 				WithPath([]string{"flag"}).
 				WithOperator(filters.Equal).
-				WithValueInt(int64(flagVal))
+				WithValueNumber(float64(flagVal))
 
 			if whereFilter != nil {
 				whereFilter = filters.Where().
