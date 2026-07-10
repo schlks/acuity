@@ -107,15 +107,5 @@ Run [docker-run.bat](docker-run.bat).
 
 ### Frontend
 
-- [x] Image carousel
-- [ ] Keybindings
-- [x] Search sorting options
-- [x] Edit Gallery
-- [x] Multiple image selection
-- [x] Drop image in Searchbar
-- [x] Delete image/selection
-- [x] Image rating
-- [x] Settings
-- [x] Search duplicates
-- [x] Skip to beginning on new page
+- [ ] Bulk actions with flags
 - [ ] Polishing
