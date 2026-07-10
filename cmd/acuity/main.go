@@ -10,10 +10,6 @@ import (
 	"strings"
 	"time"
 
-	//"context"
-	//"io/fs"
-	//"path/filepath"
-	"acuity"
 	"acuity/internal/config"
 	"acuity/pkg/db"
 	"acuity/pkg/web"
@@ -119,7 +115,7 @@ func main() {
 		"getConfig":  func() *config.Config { return Config },
 	}
 
-	templates := template.Must(template.New("").Funcs(funcMap).ParseFS(acuity.WebFS, "web/templates/*.html"))
+	templates := template.Must(template.New("").Funcs(funcMap).ParseGlob("web/templates/*.html"))
 
 	webServer := web.NewServer(sClient, wClient, Config, templates)
 

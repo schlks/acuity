@@ -3,7 +3,6 @@
 package web
 
 import (
-	"acuity"
 	"acuity/internal/config"
 	"acuity/internal/gallery"
 	"acuity/pkg/db"
@@ -11,7 +10,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -49,8 +47,7 @@ func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config 
 
 // RegisterRoutes regusteres all the routes used by the webui
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
-	staticFS, _ := fs.Sub(acuity.WebFS, "web/static")
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
 	mux.HandleFunc("/", s.handleRoot)
 	mux.HandleFunc("GET	/settings", s.getSettings)
@@ -69,7 +66,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/progress", s.getGlobalProgress)
 	mux.HandleFunc("POST	/gallery", s.createGallery)
 	mux.HandleFunc("DELETE /gallery/{name}", s.deleteGallery)
-	mux.HandleFunc("POST	/gallery/transfer", s.transferGallery)
+	mux.HandleFunc("POST /gallery/batch", s.handleBatchAction)
 	mux.HandleFunc("GET /api/browse", s.browseFiles)
 	mux.HandleFunc("POST /api/browse/mkdir", s.mkdir)
 	mux.HandleFunc("POST /image/{id}/flag", s.setFlag)
@@ -767,16 +764,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) transferGallery(w http.ResponseWriter, r *http.Request) {
-	action := strings.TrimSpace(r.FormValue("transfer_action"))
-	if action == "copy" {
-		s.copyToGallery(w, r)
-	} else {
-		s.changeGallery(w, r)
-	}
-}
-
-func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	err := r.ParseForm()
@@ -787,98 +775,93 @@ func (s *Server) changeGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isNew := r.FormValue("is_new") == "true"
-	var name string
+	criteria := r.FormValue("criteria")
+	action := r.FormValue("batch_action")
+	sourceGalleryName := r.FormValue("source_gallery")
 
-	if isNew {
-		name = r.FormValue("new_name")
-		path := r.FormValue("path")
+	var images []db.Image
 
-		if err := s.Service.CreateGallery(ctx, name, path); err != nil {
-			message := "Failed to create new Gallery"
+	if criteria == "selected" {
+		imageIDsStr := r.FormValue("image_ids")
+		if imageIDsStr != "" {
+			for _, id := range strings.Split(imageIDsStr, ",") {
+				images = append(images, db.Image{ID: id})
+			}
+		}
+	} else {
+		flagFilter := "any"
+		if strings.HasPrefix(criteria, "flag_") {
+			flagFilter = strings.TrimPrefix(criteria, "flag_")
+		}
+
+		files, err := s.Service.GetGalleryFiles(ctx, sourceGalleryName, "", "", 0, 100_000, flagFilter)
+		if err != nil {
+			message := "Failed to get files for batch action"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
 			return
 		}
-	} else {
-		name = r.FormValue("name")
+		images = files
 	}
 
-	newID, err, ok := s.Service.GetGalleryID(name)
-	if err != nil && !ok {
-		message := "Failed to get Gallery ID"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
-	}
-	imageIDs := r.Form["image_id"]
-
-	var images []db.Image
-	for _, id := range imageIDs {
-		images = append(images, db.Image{ID: id})
-	}
-
-	if err := s.Service.ChangeGallery(ctx, newID, images); err != nil {
-		message := "Failed to change Gallery"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
+	if len(images) == 0 {
+		w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, sourceGalleryName))
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, name))
-	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) copyToGallery(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	err := r.ParseForm()
-	if err != nil {
-		message := "Failed to parse Form"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusBadRequest)
-		return
-	}
-
-	isNew := r.FormValue("is_new") == "true"
-	var name string
-
-	if isNew {
-		name = r.FormValue("new_name")
-		path := r.FormValue("path")
-
-		if err := s.Service.CreateGallery(ctx, name, path); err != nil {
-			message := "Failed to create new Gallery"
+	if action == "delete" || action == "delete_disk" {
+		deleteDisk := action == "delete_disk"
+		if err := s.Service.DeleteImages(ctx, images, deleteDisk); err != nil {
+			message := "Failed to delete images in batch"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
 			return
 		}
-	} else {
-		name = r.FormValue("name")
+	} else if action == "move" || action == "copy" {
+		isNew := r.FormValue("is_new") == "true"
+		var targetGalleryName string
+
+		if isNew {
+			targetGalleryName = r.FormValue("new_name")
+			path := r.FormValue("path")
+
+			if err := s.Service.CreateGallery(ctx, targetGalleryName, path); err != nil {
+				message := "Failed to create new Gallery"
+				slog.Error(message, slog.Any("error", err))
+				http.Error(w, message, http.StatusInternalServerError)
+				return
+			}
+		} else {
+			targetGalleryName = r.FormValue("name")
+		}
+
+		targetID, err, ok := s.Service.GetGalleryID(targetGalleryName)
+		if err != nil || !ok {
+			message := "Failed to get target Gallery ID"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
+
+		if action == "move" {
+			if err := s.Service.ChangeGallery(ctx, targetID, images); err != nil {
+				message := "Failed to move images"
+				slog.Error(message, slog.Any("error", err))
+				http.Error(w, message, http.StatusInternalServerError)
+				return
+			}
+		} else if action == "copy" {
+			if err := s.Service.CopyToGallery(ctx, targetID, images); err != nil {
+				message := "Failed to copy images"
+				slog.Error(message, slog.Any("error", err))
+				http.Error(w, message, http.StatusInternalServerError)
+				return
+			}
+		}
 	}
 
-	newID, err, ok := s.Service.GetGalleryID(name)
-	if err != nil && !ok {
-		message := "Failed to get Gallery ID"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
-	}
-	imageIDs := r.Form["image_id"]
-
-	var images []db.Image
-	for _, id := range imageIDs {
-		images = append(images, db.Image{ID: id})
-	}
-
-	if err := s.Service.CopyToGallery(ctx, newID, images); err != nil {
-		message := "Failed to copy to Gallery"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, name))
+	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, sourceGalleryName))
 	w.WriteHeader(http.StatusOK)
 }
 

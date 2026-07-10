@@ -16,17 +16,8 @@
 		
 		<!-- Selection Actions im Header -->
 		<div x-show="selectedImages.length > 0" class="gallery-action-bar">
-			<span style="font-size: 0.95rem; color: var(--primary); font-weight: 500; white-space: nowrap;"><span
+			<span style="font-size: 0.95rem; color: var(--info); font-weight: 500; white-space: nowrap;"><span
                     x-text="selectedImages.length"></span> marked</span>
-			
-			<button class="btn-icon" title="Move" 
-				@click="document.getElementById('transferAction').value = 'move'; document.getElementById('transferDialog').showModal()">
-				<span class="material-symbols-outlined">drive_file_move</span>
-			</button>
-			<button class="btn-icon" title="Copy" 
-				@click="document.getElementById('transferAction').value = 'copy'; document.getElementById('transferDialog').showModal()">
-				<span class="material-symbols-outlined">content_copy</span>
-			</button>
 
 			<!-- Custom Toggle für Festplatten-Löschen -->
 			<button class="btn-icon" 
@@ -46,11 +37,24 @@
 				title="Delete Selection">
 				<span class="material-symbols-outlined" style="font-size: 1.2rem; margin: 0;">delete</span>
 			</button>
-			
+
+
 			<button class="btn-icon" @click="selectedImages = []" title="Clear selection" style="background: var(--bg-hover); display: flex; align-items: center; justify-content: center; border-radius: 50%; padding: 4px;">
 				<span class="material-symbols-outlined">close</span>
 			</button>
+
+            <button class="btn-icon" title="Invert Selection" style="flex-shrink: 0;" @click="document.querySelectorAll('#gallery-container img').forEach(img => { if(img.dataset.id) { if(selectedImages.includes(img.dataset.id)) selectedImages = selectedImages.filter(i => i !== img.dataset.id); else selectedImages.push(img.dataset.id); } })">
+                <span class="material-symbols-outlined">swap_calls</span>
+            </button>
 		</div>
+        
+        <!-- Selection & Batch Action Buttons -->
+		<button class="btn-icon" title="Select All (Page)" style="flex-shrink: 0;" @click="document.querySelectorAll('#gallery-container img').forEach(img => { if(img.dataset.id && !selectedImages.includes(img.dataset.id)) selectedImages.push(img.dataset.id) })">
+			<span class="material-symbols-outlined">library_add_check</span>
+		</button>
+		<button class="btn-icon" title="Batch Actions" style="flex-shrink: 0;" @click="document.getElementById('batchActionDialog').showModal()">
+			<span class="material-symbols-outlined">more_vert</span>
+		</button>
 	</div>
 	
 	<span id="gallery-image-count" style="color: var(--text-muted); font-size: 0.9rem;">
@@ -97,15 +101,40 @@
 	</form>
 </dialog>
 
-<!-- Transfer Dialog -->
-<dialog id="transferDialog" x-data="{ isNew: false }" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">
-	<h3 style="margin-bottom: 20px;">Move/Copy Images</h3>
-	<form id="transferForm" hx-post="/gallery/transfer" hx-target="#main-content" @submit="document.getElementById('transferDialog').close()">
-		<input type="hidden" name="transfer_action" id="transferAction" value="move">
-		<input type="hidden" name="image_id" x-bind:value="selectedImages.join(',')">
-		<input type="hidden" name="is_new" x-bind:value="isNew">
+<!-- Batch Action Dialog -->
+<dialog id="batchActionDialog" x-ref="batchActionDialog" x-data="{ isNew: false, action: 'move', criteria: 'selected' }" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">
+	<h3 style="margin-bottom: 20px;">Batch Actions</h3>
+	<form id="batchActionForm" hx-post="/gallery/batch" hx-target="#main-content" @submit="$el.closest('dialog').close()">
+		
+        <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px;">
+            <div>
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Selection Criteria</label>
+                <select name="criteria" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;" x-model="criteria">
+                    <option value="selected" x-text="`Currently Selected (${selectedImages.length} images)`"></option>
+                    <option value="all">Entire Gallery</option>
+                    <option value="flag_1">Flag: Keep (Green)</option>
+                    <option value="flag_0">Flag: None</option>
+                    <option value="flag_-1">Flag: Reject (Red)</option>
+                </select>
+                <!-- Include selected IDs if criteria is 'selected' -->
+                <input type="hidden" name="image_ids" x-bind:value="selectedImages.join(',')">
+                <input type="hidden" name="source_gallery" value="{{.Name}}">
+            </div>
 
-		<div x-show="!isNew" style="margin-bottom: 20px;">
+            <div>
+                <label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Action</label>
+                <select name="batch_action" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;" x-model="action">
+                    <option value="move">Move to Gallery</option>
+                    <option value="copy">Copy to Gallery</option>
+                    <option value="delete">Delete from Database</option>
+                    <option value="delete_disk">Delete from Database & Disk</option>
+                </select>
+            </div>
+        </div>
+
+		<!-- Target Gallery Selector (Only for Move/Copy) -->
+		<div x-show="action === 'move' || action === 'copy'" style="margin-bottom: 20px;">
+            <input type="hidden" name="is_new" x-bind:value="isNew">
 			<select name="name" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;" @change="if($event.target.value === '__new__') { isNew = true; $event.target.value = ''; }">
 				<option value="" disabled selected>Select a target gallery...</option>
 				{{range .Galleries}}
@@ -117,15 +146,15 @@
 			</select>
 		</div>
 
-		<div x-show="isNew" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+		<div x-show="(action === 'move' || action === 'copy') && isNew" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
 			<div>
 				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">New Gallery Name</label>
-				<input class="input-clean" type="text" name="new_name" placeholder="E.g. Wallpapers" x-bind:required="isNew">
+				<input class="input-clean" type="text" name="new_name" placeholder="E.g. Wallpapers" x-bind:required="isNew && (action === 'move' || action === 'copy')">
 			</div>
 			<div class="form-group" x-data="{ transferPath: '', showTransferBrowser: false }">
 				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Absolute Path</label>
 				<div style="display: flex; gap: 8px;">
-					<input class="input-clean" type="text" name="path" x-model="transferPath" placeholder="/data/images/wallpapers" x-bind:required="isNew" style="flex-grow: 1;">
+					<input class="input-clean" type="text" name="path" x-model="transferPath" placeholder="/data/images/wallpapers" x-bind:required="isNew && (action === 'move' || action === 'copy')" style="flex-grow: 1;">
 					<button type="button" class="btn-icon" @click="showTransferBrowser = true" hx-get="/api/browse?dir=/&target=transferPath" hx-target="#transfer-browser-container">
 						<span class="material-symbols-outlined">folder_open</span>
 					</button>
@@ -139,8 +168,8 @@
 		</div>
 		
 		<div style="display: flex; justify-content: flex-end; gap: 12px;">
-			<button type="button" class="nav-item" style="width: auto;" @click="let d = document.getElementById('transferDialog'); d.classList.add('closing'); setTimeout(() => { d.close(); isNew = false; d.classList.remove('closing'); }, 300)">Cancel</button>
-			<button type="submit" class="btn-primary" @click="setTimeout(() => { selectedImages = []; isNew = false; }, 100); let d = document.getElementById('transferDialog'); d.classList.add('closing'); setTimeout(() => { d.close(); d.classList.remove('closing'); }, 300)">Confirm</button>
+			<button type="button" class="nav-item" style="width: auto;" @click="let d = $el.closest('dialog'); d.classList.add('closing'); setTimeout(() => { d.close(); isNew = false; d.classList.remove('closing'); }, 300)">Cancel</button>
+			<button type="submit" class="btn-primary" @click="setTimeout(() => { if(criteria === 'selected') selectedImages = []; isNew = false; }, 100); let d = $el.closest('dialog'); d.classList.add('closing'); setTimeout(() => { d.close(); d.classList.remove('closing'); }, 300)">Confirm</button>
 		</div>
 	</form>
 </dialog>

@@ -3,7 +3,7 @@ FROM golang:1.26-alpine AS build-stage
 RUN apk add --no-cache vips-dev gcc musl-dev glycin-loaders-all upx
 
 WORKDIR /app
-COPY go.mod go.sum ./
+COPY go.mod go.sum .
 RUN go mod download
 RUN go install go.uber.org/mock/mockgen@latest
 
@@ -22,6 +22,7 @@ RUN apk add --no-cache vips exiftool
 
 WORKDIR /app
 COPY --from=build-stage /app/bin/acuity .
+COPY --from=build-stage /app/web ./web
 
 EXPOSE 3000
 ENTRYPOINT ["./acuity"]
