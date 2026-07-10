@@ -253,6 +253,12 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 
 	for _, path := range filePaths {
 		g.Go(func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
 			data, err := os.ReadFile(path)
 			if err != nil {
 				slog.Error("Error decoding image", slog.String("path", path), slog.Any("error", err))

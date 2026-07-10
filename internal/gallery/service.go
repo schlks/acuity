@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/weaviate/weaviate/entities/models"
 
@@ -57,6 +58,8 @@ type GalleryService struct {
 	sDB           sService
 	wDB           wService
 	ExpectedCount map[int]int
+	cancelFuncs   map[int]context.CancelFunc
+	mu            sync.Mutex
 }
 
 func NewService(sDB *db.SQLiteClient, wDB *db.WeaviateClient) *GalleryService {
@@ -64,6 +67,16 @@ func NewService(sDB *db.SQLiteClient, wDB *db.WeaviateClient) *GalleryService {
 		sDB:           sDB,
 		wDB:           wDB,
 		ExpectedCount: make(map[int]int),
+		cancelFuncs:   make(map[int]context.CancelFunc),
+	}
+}
+
+func (g *GalleryService) CancelImport(galleryID int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if cancel, exists := g.cancelFuncs[galleryID]; exists {
+		cancel()
+		delete(g.cancelFuncs, galleryID)
 	}
 }
 
@@ -158,9 +171,18 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 	currentCount, _ := g.wDB.GetGalleryCount(ctx, gallery.ID)
 	g.ExpectedCount[gallery.ID] = currentCount + len(filePaths) - len(missingIds)
 
+	importCtx, cancel := context.WithCancel(context.Background())
+	g.mu.Lock()
+	g.cancelFuncs[gallery.ID] = cancel
+	g.mu.Unlock()
+
 	go func() {
 		defer func() {
 			g.ExpectedCount[gallery.ID] = 0 // Reset when done to prevent infinite UI polling
+			g.mu.Lock()
+			delete(g.cancelFuncs, gallery.ID)
+			g.mu.Unlock()
+			cancel()
 		}()
 		if len(missingIds) > 0 {
 			var imagesToDelete []db.Image
@@ -168,10 +190,10 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 				imagesToDelete = append(imagesToDelete, db.Image{ID: id})
 			}
 			// Delete from DB without touching the disk (since they are already missing)
-			_ = g.DeleteImages(context.Background(), imagesToDelete, false)
+			_ = g.DeleteImages(importCtx, imagesToDelete, false)
 		}
 		if len(filePaths) > 0 {
-			g.wDB.ImportImages(context.Background(), filePaths, gallery.ID)
+			g.wDB.ImportImages(importCtx, filePaths, gallery.ID)
 		}
 	}()
 	return nil

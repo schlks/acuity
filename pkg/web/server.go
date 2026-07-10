@@ -65,6 +65,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET	/gallery/{name}/duplicates", s.handleDuplicates)
 	mux.HandleFunc("POST	/gallery/{name}/search", s.handleSearch)
 	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
+	mux.HandleFunc("DELETE /gallery/{name}/scan", s.cancelScan)
 	mux.HandleFunc("POST /gallery/{name}/edit", s.editGallery)
 	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
 	mux.HandleFunc("GET	/gallery/{name}/images", s.getGalleryImages)
@@ -490,6 +491,15 @@ func (s *Server) scanGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("HX-Trigger", "check-progress")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if id, err, ok := s.Service.GetGalleryID(name); err == nil && ok {
+		s.Service.CancelImport(id)
+	}
 	w.Header().Set("HX-Trigger", "check-progress")
 	w.WriteHeader(http.StatusOK)
 }

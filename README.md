@@ -107,5 +107,4 @@ Run [docker-run.bat](docker-run.bat).
 
 ### Frontend
 
-- [ ] Bulk actions with flags
 - [ ] Polishing

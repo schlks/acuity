@@ -91,7 +91,13 @@
 										center; justify-content: center; width: 1.1rem; height: 1.1rem; transform-origin: center;">sync</span>-->
 										<span style="font-weight: 500; color: var(--text);" x-text="imp.name"></span>
 									</div>
-									<span style="color: var(--text-muted); font-size: 0.9rem;" x-text="imp.current + ' / ' + imp.expected"></span>
+									<div style="display: flex; align-items: center; gap: 12px;">
+										<span style="color: var(--text-muted); font-size: 0.9rem;" x-text="imp.current + ' / ' + imp.expected"></span>
+										<button style="background: none; border: none; padding: 4px; cursor: pointer; color: var(--error);" 
+												@click="fetch('/gallery/' + imp.name + '/scan', { method: 'DELETE' })" title="Cancel Import">
+											<span class="material-symbols-outlined" style="font-size: 1.2rem;">cancel</span>
+										</button>
+									</div>
 								</div>
 								<div class="md3-linear-progress"></div>
 							</div>
