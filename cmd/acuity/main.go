@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -177,7 +178,27 @@ func main() {
 		"formatAperture": formatAperture,
 		"formatShutter":  formatShutter,
 		"formatLens":     formatLens,
-		"getConfig":      func() *config.Config { return Config },
+		"formatDeepest": func(path string) string {
+			if path == "" {
+				return ""
+			}
+			return filepath.Base(filepath.Dir(path))
+		},
+		"getConfig": func() *config.Config { return Config },
+		"dict": func(values ...interface{}) (map[string]interface{}, error) {
+			if len(values)%2 != 0 {
+				return nil, errors.New("invalid dict call")
+			}
+			dict := make(map[string]interface{}, len(values)/2)
+			for i := 0; i < len(values); i += 2 {
+				key, ok := values[i].(string)
+				if !ok {
+					return nil, errors.New("dict keys must be strings")
+				}
+				dict[key] = values[i+1]
+			}
+			return dict, nil
+		},
 	}
 
 	webDir := os.Getenv("WEB_DIR")

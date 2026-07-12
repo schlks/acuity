@@ -123,8 +123,9 @@ func (w *WeaviateClient) InitSchema() error {
 			},
 			Properties: []*models.Property{
 				{
-					Name:     "filepath",
-					DataType: []string{"text"},
+					Name:         "filepath",
+					DataType:     []string{"text"},
+					Tokenization: "field",
 				},
 				{
 					Name:     "image",
@@ -230,7 +231,6 @@ func (w *WeaviateClient) batchWriterLoop() {
 	}
 }
 
-// TODO: run both in parallel without stopping
 func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, galleryID int) {
 	batchSize := 43
 	threads := runtime.NumCPU()
@@ -279,11 +279,12 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 		close(done)
 	}()
 
-	isRawExt := func(ext string) bool {
+	isSpecialExt := func(ext string) bool {
 		rawExts := map[string]bool{
 			".nef": true, ".cr2": true, ".cr3": true, ".arw": true,
 			".dng": true, ".raf": true, ".orf": true, ".rw2": true, ".srw": true,
-			".avif": true, ".heic": true, ".heif": true,
+			".avif": true, ".avifs": true, ".avis": true, ".heic": true, ".heif": true,
+			".mp4": true, ".webm": true, ".gif": true,
 		}
 		return rawExts[strings.ToLower(ext)]
 	}
@@ -310,17 +311,42 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 
 			var width, height int
 
-			if isRawExt(filepath.Ext(path)) {
+			if isSpecialExt(filepath.Ext(path)) {
 				ctxCmd, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(ctxCmd, "exiftool", "-ImageWidth", "-ImageHeight", "-S", "-n", path)
+				cmd := exec.CommandContext(ctxCmd, "exiftool", "-ImageWidth", "-ImageHeight", "-Make", "-LensMake", "-LensModel", "-ISO", "-FocalLength", "-ShutterSpeed", "-Flash", "-Aperture", "-DateTimeOriginal", "-S", "-n", path)
 				if out, err := cmd.Output(); err == nil {
 					lines := strings.Split(string(out), "\n")
 					for _, line := range lines {
-						if strings.HasPrefix(line, "ImageWidth:") {
-							width, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "ImageWidth:")))
-						} else if strings.HasPrefix(line, "ImageHeight:") {
-							height, _ = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "ImageHeight:")))
+						parts := strings.SplitN(line, ":", 2)
+						if len(parts) != 2 {
+							continue
+						}
+						key := strings.TrimSpace(parts[0])
+						val := strings.TrimSpace(parts[1])
+						switch key {
+						case "ImageWidth":
+							width, _ = strconv.Atoi(val)
+						case "ImageHeight":
+							height, _ = strconv.Atoi(val)
+						case "Make":
+							cameraDetails["make"] = val
+						case "LensMake":
+							cameraDetails["lens_make"] = val
+						case "LensModel":
+							cameraDetails["lens_model"] = val
+						case "ISO":
+							cameraDetails["iso"] = val
+						case "FocalLength":
+							cameraDetails["focal_length"] = val
+						case "ShutterSpeed":
+							cameraDetails["shutter_speed"] = val
+						case "Flash":
+							cameraDetails["flash"] = val != "0"
+						case "Aperture":
+							cameraDetails["aperture"] = val
+						case "DateTimeOriginal":
+							cameraDetails["date_time_original"] = val
 						}
 					}
 				}
@@ -354,7 +380,15 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 					os.Remove(tmpFile)
 				}
 				if err != nil {
-					slog.Error("Error converting image to JPEG", slog.String("path", path), slog.Any("error", err))
+					// Fallback for videos/animations via ffmpeg
+					cmdFfmpeg := exec.CommandContext(ctxCmd, "ffmpeg", "-y", "-i", path, "-vframes", "1", "-q:v", "2", tmpFile)
+					if ffmpegErr := cmdFfmpeg.Run(); ffmpegErr == nil {
+						jpegBuffer, err = os.ReadFile(tmpFile)
+						os.Remove(tmpFile)
+					}
+				}
+				if err != nil {
+					slog.Error("Error converting image/video to JPEG preview", slog.String("path", path), slog.Any("error", err))
 					return nil
 				}
 			}
@@ -372,6 +406,18 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 
 			fileDate := modTime.Format(time.RFC3339)
 			takenDate := fileDate
+
+			if val, ok := cameraDetails["date_time_original"].(string); ok {
+				tm, err := time.Parse("2006:01:02 15:04:05-07:00", val)
+				if err != nil {
+					tm, err = time.Parse("2006:01:02 15:04:05", val)
+				}
+				if err == nil {
+					takenDate = tm.Format(time.RFC3339)
+				}
+				delete(cameraDetails, "date_time_original")
+			}
+
 			file, err := os.Open(path)
 			if err != nil {
 				return err
@@ -384,20 +430,38 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			}(file)
 			x, err := imagemeta.Decode(file)
 			if err != nil {
-				slog.Warn("No Exif data found", slog.String("path", path), slog.Any("error", err))
+				if !strings.Contains(strings.ToLower(err.Error()), "unsupported") {
+					slog.Warn("No Exif data found", slog.String("path", path), slog.Any("error", err))
+				}
 			} else {
 				tm := x.OriginalDate()
 				if !tm.IsZero() {
 					takenDate = tm.Format(time.RFC3339)
 				}
-				cameraDetails["make"] = x.CameraMake()
-				cameraDetails["lens_make"] = x.ExifIFD.LensMake
-				cameraDetails["lens_model"] = x.ExifIFD.LensModel
-				cameraDetails["iso"] = fmt.Sprintf("%v", x.ExifIFD.ISOSpeedRatings)
-				cameraDetails["focal_length"] = x.ExifIFD.FocalLength.String()
-				cameraDetails["shutter_speed"] = x.ExifIFD.ShutterSpeedValue.String()
-				cameraDetails["flash"] = x.ExifIFD.Flash.Fired()
-				cameraDetails["aperture"] = x.ExifIFD.ApertureValue.String()
+				if cameraDetails["make"] == nil {
+					cameraDetails["make"] = x.CameraMake()
+				}
+				if cameraDetails["lens_make"] == nil {
+					cameraDetails["lens_make"] = x.ExifIFD.LensMake
+				}
+				if cameraDetails["lens_model"] == nil {
+					cameraDetails["lens_model"] = x.ExifIFD.LensModel
+				}
+				if cameraDetails["iso"] == nil {
+					cameraDetails["iso"] = fmt.Sprintf("%v", x.ExifIFD.ISOSpeedRatings)
+				}
+				if cameraDetails["focal_length"] == nil {
+					cameraDetails["focal_length"] = x.ExifIFD.FocalLength.String()
+				}
+				if cameraDetails["shutter_speed"] == nil {
+					cameraDetails["shutter_speed"] = x.ExifIFD.ShutterSpeedValue.String()
+				}
+				if cameraDetails["flash"] == nil {
+					cameraDetails["flash"] = x.ExifIFD.Flash.Fired()
+				}
+				if cameraDetails["aperture"] == nil {
+					cameraDetails["aperture"] = x.ExifIFD.ApertureValue.String()
+				}
 			}
 
 			base64Image := base64.StdEncoding.EncodeToString(jpegBuffer)
@@ -954,7 +1018,7 @@ func (w *WeaviateClient) RemoveImages(ctx context.Context, images []Image) error
 	return g.Wait()
 }
 
-func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string) ([]Image, error) {
+func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]Image, error) {
 	query := w.Client.GraphQL().Get().
 		WithClassName("Image").
 		WithFields(
@@ -1013,6 +1077,21 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 			} else {
 				whereFilter = flagCond
 			}
+		}
+	}
+
+	if folderFilter != "" {
+		folderCond := filters.Where().
+			WithPath([]string{"filepath"}).
+			WithOperator(filters.Like).
+			WithValueString(folderFilter + "/*")
+
+		if whereFilter != nil {
+			whereFilter = filters.Where().
+				WithOperator(filters.And).
+				WithOperands([]*filters.WhereBuilder{whereFilter, folderCond})
+		} else {
+			whereFilter = folderCond
 		}
 	}
 
@@ -1305,6 +1384,12 @@ func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {
 	}
 
 	slog.Info("Weaviate database successfully and completely cleared")
+
+	err = w.InitSchema()
+	if err != nil {
+		return fmt.Errorf("failed to re-initialize schema after reset: %w", err)
+	}
+
 	return nil
 }
 

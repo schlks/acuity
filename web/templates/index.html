@@ -13,7 +13,7 @@
 		<script src="/static/js/keys.js"></script>
 	</head>
 
-	<body x-data="{ showDetailPanel: false, currentGallery: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }"
+	<body x-data="{ showDetailPanel: false, currentGallery: '', currentFolder: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }"
 		  @acuity-clear-selection.window="selectedImages = []"
 		  @acuity-remove-selection.window="
 			selectedImages = selectedImages.filter(x => x !== $event.detail.id);
@@ -43,7 +43,7 @@
 				qs.append('image_id', selectedImages.join(','));
 				qs.append('delete_disk', deleteFromDisk);
 				qs.append('name', currentGallery);
-				fetch('/images?' + qs.toString(), {method: 'DELETE'})
+				fetch('/images', {method: 'POST', body: qs})
 				  .then(() => {
 					selectedImages.forEach(id => { window.dispatchEvent(new CustomEvent('acuity-remove-selection', {detail: {id}})) });
 					selectedImages = [];
@@ -57,7 +57,31 @@
 					<h1 style="color: var(--primary);">Acuity</h1>
 				</a>
 				<hr>
-				<nav style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1;">
+				<nav style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1; overflow: hidden;">
+					<div style="flex-grow: 1; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+					{{define "folder-tree"}}
+						{{$galName := index . "GalName"}}
+						{{$folders := index . "Folders"}}
+						{{range $folders}}
+						<div x-data="{ openFolder: false }">
+							<div style="position: relative; display: flex; align-items: center;">
+								{{if gt (len .SubFolders) 0}}
+								<button style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 0 4px;" @click="openFolder = !openFolder">
+									<span class="material-symbols-outlined" style="font-size: 1rem;" x-text="openFolder ? 'expand_more' : 'chevron_right'">chevron_right</span>
+								</button>
+								{{end}}
+								<button class="nav-item" tabindex="0" :class="{ 'active': currentGallery === '{{$galName}}' && currentFolder === '{{.Path}}' }" @click="currentGallery = '{{$galName}}'; currentFolder = '{{.Path}}';" hx-get="/gallery/{{$galName}}?folder={{urlquery .Path}}" hx-target="#main-content" style="flex-grow: 1; font-size: 0.9rem; {{if eq (len .SubFolders) 0}}margin-left: 24px;{{end}}">
+									<span class="material-symbols-outlined" style="font-size: 0.9rem;">folder_open</span> {{.Name}}
+								</button>
+							</div>
+							{{if gt (len .SubFolders) 0}}
+							<div x-show="openFolder" x-collapse style="padding-left: 16px;">
+								{{template "folder-tree" (dict "GalName" $galName "Folders" .SubFolders)}}
+							</div>
+							{{end}}
+						</div>
+						{{end}}
+					{{end}}
 					<div x-data="{ open: true }">
 						<button class="nav-item" tabindex="0" @click="open = !open">
 							<span class="material-symbols-outlined">grid_view</span> Galleries
@@ -65,17 +89,30 @@
 						</button>
 						<div x-show="open" style="padding-left: 28px; display: flex; flex-direction: column; gap: 4px; margin-top: 4px;" x-transition>
 							{{range .Galleries}}
-							<div style="position: relative; display: flex; align-items: center;" x-data="{ hovered: false }" @mouseenter="hovered = true" @mouseleave="hovered = false">
-								<button class="nav-item" tabindex="0" :class="{ 'active': currentGallery === '{{.Name}}' }" @click="currentGallery = '{{.Name}}'" hx-get="/gallery/{{.Name}}" hx-target="#main-content" style="padding-right: 40px; flex-grow: 1;">
-									<span class="material-symbols-outlined" style="font-size: 1rem;">folder</span> {{.Name}}
-								</button>
-								<button class="btn-icon-danger" x-show="hovered" x-transition style="position: absolute; right: 8px; z-index: 10;"
-										hx-delete="/gallery/{{.Name}}" 
-										hx-confirm="Do you really want to delete '{{.Name}}'?"
-										hx-target="closest div" 
-										hx-swap="outerHTML">
-									<span class="material-symbols-outlined" style="font-size: 1rem;">delete</span>
-								</button>
+							<div x-data="{ openFolder: false }">
+								<div style="position: relative; display: flex; align-items: center;" x-data="{ hovered: false }" @mouseenter="hovered = true" @mouseleave="hovered = false">
+									{{if gt (len .SubFolders) 0}}
+									<button style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 0 4px;" @click="openFolder = !openFolder">
+										<span class="material-symbols-outlined" style="font-size: 1rem;" x-text="openFolder ? 'expand_more' : 'chevron_right'">chevron_right</span>
+									</button>
+									{{end}}
+									<button class="nav-item" tabindex="0" :class="{ 'active': currentGallery === '{{.Name}}' && currentFolder === '' }" @click="currentGallery = '{{.Name}}'; currentFolder = '';" hx-get="/gallery/{{.Name}}" hx-target="#main-content" style="padding-right: 40px; flex-grow: 1; {{if eq (len .SubFolders) 0}}margin-left: 24px;{{end}}">
+										<span class="material-symbols-outlined" style="font-size: 1rem;">folder</span> {{.Name}}
+									</button>
+									<button class="btn-icon-danger" x-show="hovered" x-transition style="position: absolute; right: 8px; z-index: 10;"
+											hx-delete="/gallery/{{.Name}}" 
+											hx-confirm="Do you really want to delete '{{.Name}}'?"
+											hx-target="closest div" 
+											hx-swap="outerHTML">
+										<span class="material-symbols-outlined" style="font-size: 1rem;">delete</span>
+									</button>
+								</div>
+								
+								{{if gt (len .SubFolders) 0}}
+								<div x-show="openFolder" x-collapse style="padding-left: 8px;">
+									{{template "folder-tree" (dict "GalName" .Name "Folders" .SubFolders)}}
+								</div>
+								{{end}}
 							</div>
 							{{end}}
 
@@ -84,6 +121,9 @@
 							</button>
 						</div>
 					</div>
+					</div>
+
+					<div style="flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; padding-top: 8px;">
 					<div style="position: relative; display: flex; align-items: center;" x-data="{ hovered: false }" @mouseenter="hovered = true" @mouseleave="hovered = false">
 						<button class="nav-item" :class="{ 'active': currentGallery === 'duplicates' }" @click="currentGallery = 'duplicates'" hx-get="/gallery/global/duplicates" hx-target="#main-content">
 							<span class="material-symbols-outlined">search</span> Duplicates
@@ -97,18 +137,14 @@
 							</div>
 						</template>
 						<template x-for="imp in imports" :key="imp.name">
-							<div style="padding: 16px; background: var(--bg-light); border-radius: 8px; border: 1px solid var(--border); margin: 16px 0;">
-								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-									<div style="display: flex; align-items: center; gap: 8px;">
-										<!--<span class="material-symbols-outlined" style="font-size: 1.1rem; animation: spin 2s linear infinite; color: var(--primary); display: flex; align-items:
-										center; justify-content: center; width: 1.1rem; height: 1.1rem; transform-origin: center;">sync</span>-->
-										<span style="font-weight: 500; color: var(--text);" x-text="imp.name"></span>
-									</div>
-									<div style="display: flex; align-items: center; gap: 12px;">
-										<span style="color: var(--text-muted); font-size: 0.9rem;" x-text="imp.current + ' / ' + imp.expected"></span>
-										<button style="background: none; border: none; padding: 4px; cursor: pointer; color: var(--error);" 
+							<div style="padding: 8px 12px; background: var(--bg-light); border-radius: 6px; border: 1px solid var(--border); margin: 8px 0;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px;">
+									<div style="font-weight: 500; color: var(--text); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;" x-text="imp.name" :title="imp.name"></div>
+									<div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+										<span style="color: var(--text-muted); font-size: 0.8rem;" x-text="imp.current + ' / ' + imp.expected"></span>
+										<button style="background: none; border: none; padding: 2px; cursor: pointer; color: var(--error); display: flex; align-items: center;" 
 												@click="fetch('/gallery/' + imp.name + '/scan', { method: 'DELETE' })" title="Cancel Import">
-											<span class="material-symbols-outlined" style="font-size: 1.2rem;">cancel</span>
+											<span class="material-symbols-outlined" style="font-size: 1.1rem;">cancel</span>
 										</button>
 									</div>
 								</div>
@@ -328,9 +364,13 @@
 			
 			deleteCurrent() {
 				if(!this.images[this.currentIndex]) return;
-				let img = this.images[this.currentIndex];
 				let isDisk = document.querySelector('body').__x?.$data?.deleteFromDisk;
-				fetch('/image/' + img.id + '?disk=' + !!isDisk, {method: 'DELETE'}).then(() => {
+				if(!isDisk) {
+					alert('Delete from disk is not enabled');
+					return;
+				}
+				let img = this.images[this.currentIndex];
+				fetch('/image/' + img.id + '/delete', {method: 'POST'}).then(() => {
 					let prevId = img.id;
 					window.dispatchEvent(new CustomEvent('acuity-remove-selection', {detail: {id: prevId}}));
 					
@@ -628,7 +668,7 @@
 					lastId = this.images[this.currentIndex].id;
 				}
 				
-				this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id }));
+				this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, flag: parseInt(img.dataset.flag) || 0 }));
 				
 				let foundIdx = -1;
 				if (lastId) {
@@ -648,6 +688,7 @@
 		flag(val) {
 			if(this.images.length === 0) return;
 			let img = this.images[this.currentIndex];
+			img.flag = val;
 			fetch('/image/' + img.id + '/flag', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'flag=' + val })
 				.then(() => {
 					let flagBadge = document.getElementById('flag-badge-' + img.id);
@@ -688,9 +729,13 @@
 		
 		deleteCurrent() {
 			if(!this.images[this.currentIndex]) return;
-			let img = this.images[this.currentIndex];
 			let isDisk = document.querySelector('body').__x?.$data?.deleteFromDisk;
-			fetch('/image/' + img.id + '?disk=' + !!isDisk, {method: 'DELETE'}).then(() => {
+			if(!isDisk) {
+				alert('Delete from disk is not enabled');
+				return;
+			}
+			let img = this.images[this.currentIndex];
+			fetch('/image/' + img.id + '/delete', {method: 'POST'}).then(() => {
 				let prevId = img.id;
 				window.dispatchEvent(new CustomEvent('acuity-remove-selection', {detail: {id: prevId}}));
 				
@@ -797,7 +842,13 @@
 		</div>
 
 		<!-- Content (Matching Design Language) -->
-		<div class="carousel-content" @click.self="close()" @wheel.prevent="handleWheel">
+		<div class="carousel-content" @click.self="close()" @wheel.prevent="handleWheel" style="position: relative;">
+			<div x-show="images[currentIndex] && images[currentIndex].flag === 1" style="position: absolute; top: 24px; left: 24px; z-index: 10; pointer-events: none;">
+				<span class="material-symbols-outlined icon-filled" style="color: #2ecc71; font-size: 3rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));">check_circle</span>
+			</div>
+			<div x-show="images[currentIndex] && images[currentIndex].flag === -1" style="position: absolute; top: 24px; left: 24px; z-index: 10; pointer-events: none;">
+				<span class="material-symbols-outlined icon-filled" style="color: #e74c3c; font-size: 3rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));">cancel</span>
+			</div>
 			<button class="btn-icon carousel-nav prev" @click="prev()" x-show="currentIndex > 0 || document.getElementById('prev-page-btn')">
 				<span class="material-symbols-outlined">chevron_left</span>
 			</button>

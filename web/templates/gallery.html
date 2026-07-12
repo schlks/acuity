@@ -6,12 +6,12 @@
 
 <div style="margin-bottom: 32px; display: flex; flex-direction: column; gap: 4px;">
 	<div style="display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; overflow-x: visible;">
-		<h2 style="margin: 0; color: var(--text); font-size: 1.8rem; white-space: nowrap;">{{.Name}}</h2>
+		<h2 style="margin: 0; color: var(--text); font-size: 1.8rem; white-space: nowrap;">{{if .Heading}}{{.Heading}}{{else}}{{.Name}}{{end}}</h2>
 		<button class="btn-icon" @click="$refs.editGalleryDialog.showModal()" title="Edit Gallery" style="flex-shrink: 0;">
 			<span class="material-symbols-outlined">edit</span>
 		</button>
-		<button class="btn-icon" hx-post="/gallery/{{.Name}}/scan" hx-swap="none" title="Rescan Gallery" style="flex-shrink: 0;" x-data="{ spinning: false }" @click="spinning = true; setTimeout(() => spinning = false, 1500)">
-			<span class="material-symbols-outlined" :class="spinning ? 'spin' : ''">refresh</span>
+		<button class="btn-icon" hx-post="/gallery/{{.Name}}/scan" hx-swap="none" title="Rescan Gallery" style="flex-shrink: 0;" x-data="{ isScanning: false }" @update-imports.window="isScanning = $event.detail.some(i => i.name === '{{.Name}}')" @click="isScanning = true">
+			<span class="material-symbols-outlined" :class="isScanning ? 'spin' : ''">refresh</span>
 		</button>
 		
 		<!-- Selection Actions im Header -->
@@ -30,7 +30,7 @@
 
 			<button class="btn-primary" 
 				style="background: var(--danger); border: 1px solid var(--danger); display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box; padding: 0;"
-				hx-delete="/images"
+				hx-post="/images"
 				x-bind:hx-vals="JSON.stringify({image_id: selectedImages.join(','), delete_disk: deleteFromDisk, name: '{{.Name}}'})"
 				hx-confirm="Are you sure you want to delete these images?"
 				@click="setTimeout(() => selectedImages = [], 100)"
@@ -78,7 +78,7 @@
     <div id="gallery-container" 
          x-show="!loading"
          style="display: none;"
-         hx-get="/gallery/{{.Name}}/images?page=1" 
+         hx-get="/gallery/{{.Name}}/images?page=1{{if .Folder}}&folder={{urlquery .Folder}}{{end}}" 
          hx-include="#search-options-form" 
          hx-trigger="load, refresh-images from:body">
     </div>

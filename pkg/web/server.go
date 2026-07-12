@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -58,10 +59,10 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET	/settings", s.getSettings)
 	mux.HandleFunc("POST	/settings", s.setSettings)
 	mux.HandleFunc("GET	/image", s.handleImage)
-	mux.HandleFunc("DELETE /image/{id}", s.deleteFile)
+	mux.HandleFunc("POST /image/{id}/delete", s.deleteFile)
 	mux.HandleFunc("GET	/image/{id}", s.getInfo)
 	mux.HandleFunc("POST	/image/{id}", s.setRating)
-	mux.HandleFunc("DELETE /images", s.deleteFiles)
+	mux.HandleFunc("POST /images", s.deleteFiles)
 	mux.HandleFunc("GET	/gallery/{name}/duplicates", s.handleDuplicates)
 	mux.HandleFunc("POST	/gallery/{name}/search", s.handleSearch)
 	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
@@ -76,6 +77,18 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/browse", s.browseFiles)
 	mux.HandleFunc("POST /api/browse/mkdir", s.mkdir)
 	mux.HandleFunc("POST /image/{id}/flag", s.setFlag)
+	mux.HandleFunc("POST /api/reset", s.resetDatabase)
+}
+
+type SubFolder struct {
+	Name       string
+	Path       string
+	SubFolders []*SubFolder
+}
+
+type GalleryView struct {
+	db.Gallery
+	SubFolders []*SubFolder
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
@@ -84,21 +97,62 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		slog.Error("Failed to load galleries", slog.Any("error", err))
 	}
 
+	var galleryViews []GalleryView
+	for _, g := range galleries {
+		gv := GalleryView{Gallery: g}
+		nodeMap := make(map[string]*SubFolder)
+		filepath.WalkDir(g.Path, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || path == g.Path {
+				return nil
+			}
+			if d.IsDir() {
+				if strings.HasPrefix(d.Name(), ".") {
+					return filepath.SkipDir
+				}
+				node := &SubFolder{
+					Name: d.Name(),
+					Path: path,
+				}
+				nodeMap[path] = node
+
+				parentPath := filepath.Dir(path)
+				if parentPath == g.Path {
+					gv.SubFolders = append(gv.SubFolders, node)
+				} else if parentNode, ok := nodeMap[parentPath]; ok {
+					parentNode.SubFolders = append(parentNode.SubFolders, node)
+				}
+			}
+			return nil
+		})
+		galleryViews = append(galleryViews, gv)
+	}
+
 	data := struct {
-		Galleries []db.Gallery
+		Galleries []GalleryView
 		Config    *config.Config
 	}{
-		Galleries: galleries,
+		Galleries: galleryViews,
 		Config:    s.Config,
 	}
 
-	err = s.Template.ExecuteTemplate(w, "index.html", data)
+	if err = s.Template.ExecuteTemplate(w, "index.html", data); err != nil {
+		slog.Error("Internal server error during rendering", slog.Any("error", err))
+		http.Error(w, "Internal server error during rendering", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) resetDatabase(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	err := s.Service.ResetDatabase(ctx)
 	if err != nil {
-		message := "Index cannot be loaded"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
+		slog.Error("Failed to reset database", slog.Any("error", err))
+		http.Error(w, "Failed to reset database", http.StatusInternalServerError)
 		return
 	}
+
+	// Close the settings dialog and optionally reload the page
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
@@ -314,6 +368,11 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	ext := strings.ToLower(filepath.Ext(image))
+	if ext == ".avif" || ext == ".avis" || ext == ".avifs" {
+		w.Header().Set("Content-Type", "image/avif")
+	}
+
 	http.ServeFile(w, r, image)
 }
 
@@ -341,7 +400,7 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	flagFilter := r.FormValue("flagFilter")
-	images, err := s.Service.GetAllImages(ctx, id, s.Config.DefaultSortBy, s.Config.DefaultSortOrder, 0, s.Config.ImagesPerPage, flagFilter)
+	images, err := s.Service.GetAllImages(ctx, id, s.Config.DefaultSortBy, s.Config.DefaultSortOrder, 0, s.Config.ImagesPerPage, flagFilter, "")
 	if err != nil {
 		message := "Failed to fetch images for new gallery"
 		slog.Error(message, slog.Any("error", err))
@@ -536,7 +595,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if deleteGallery {
-		files, err := s.Service.GetGalleryFiles(ctx, name, "", "", -1, 10_000, "")
+		files, err := s.Service.GetGalleryFiles(ctx, name, "", "", -1, 10_000, "", "")
 		if err != nil {
 			message := "Failed to get Files in Gallery"
 			slog.Error(message, slog.Any("error", err))
@@ -667,8 +726,7 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	image.Path = r.FormValue("path")
 
-	deleteDiskStr := r.FormValue("delete_disk")
-	deleteDisk := deleteDiskStr == "true"
+	deleteDisk := true
 
 	if err := s.Service.DeleteImage(ctx, image, deleteDisk); err != nil {
 		message := "Failed to delete File"
@@ -677,7 +735,7 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, r.FormValue("name")))
+	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": ""}`)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -694,13 +752,13 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 
 	// Go's r.ParseForm() doesn't parse the body for DELETE requests.
 	// If HTMX sends hx-vals in the body, we need to parse it manually.
-	if r.Method == http.MethodDelete && r.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
+	/*if r.Method == http.MethodDelete && r.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
 		body, _ := io.ReadAll(r.Body)
 		parsedBody, _ := url.ParseQuery(string(body))
 		for k, v := range parsedBody {
 			r.Form[k] = v
 		}
-	}
+	}*/
 
 	imageIDsStr := r.FormValue("image_id")
 	var imageIDs []string
@@ -726,7 +784,7 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, r.FormValue("name")))
+	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": ""}`)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -751,11 +809,19 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	folder := r.URL.Query().Get("folder")
+	heading := name
+	if folder != "" {
+		heading = name + " / " + filepath.Base(folder)
+	}
+
 	galleries, _ := s.Service.GetAllGalleries()
 	data := map[string]any{
 		"Images":    nil,
 		"Count":     count,
 		"Name":      name,
+		"Heading":   heading,
+		"Folder":    folder,
 		"Galleries": galleries,
 	}
 
@@ -795,7 +861,8 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	flagFilter := r.FormValue("flagFilter")
-	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, flagFilter)
+	folderFilter := r.FormValue("folder")
+	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, flagFilter, folderFilter)
 	if err != nil {
 		http.Error(w, "Images not found", http.StatusNotFound)
 		return
@@ -824,6 +891,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		HasNext     bool
 		LastPage    int
 		Count       int
+		Folder      string
 	}{
 		GalleryName: name,
 		Images:      images,
@@ -833,6 +901,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		HasNext:     nextPage != -1,
 		LastPage:    lastPage,
 		Count:       count,
+		Folder:      folderFilter,
 	}
 
 	// Rendert nur die Bilder-Kacheln aus dem neuen Template
@@ -872,7 +941,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			flagFilter = strings.TrimPrefix(criteria, "flag_")
 		}
 
-		files, err := s.Service.GetGalleryFiles(ctx, sourceGalleryName, "", "", 0, 100_000, flagFilter)
+		files, err := s.Service.GetGalleryFiles(ctx, sourceGalleryName, "", "", 0, 100_000, flagFilter, "")
 		if err != nil {
 			message := "Failed to get files for batch action"
 			slog.Error(message, slog.Any("error", err))
@@ -883,7 +952,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(images) == 0 {
-		w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, sourceGalleryName))
+		w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": ""}`)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -939,7 +1008,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"refresh-sidebar": "", "load-gallery": "%s"}`, sourceGalleryName))
+	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": ""}`)
 	w.WriteHeader(http.StatusOK)
 }
 

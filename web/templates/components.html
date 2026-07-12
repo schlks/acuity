@@ -153,7 +153,7 @@
 {{end}}
 
 {{define "delete-button"}}
-<button class="btn-icon" hx-delete="/image/{{.ID}}">
+<button class="btn-icon" hx-post="/image/{{.ID}}/delete">
 	<span class="material-symbols-outlined">delete</span>
 </button>
 {{end}}
@@ -207,8 +207,12 @@
 		<div style="word-break: break-all;">{{.ID}}</div>
 	</div>
 	<div>
+		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Folder</div>
+		<div style="word-break: break-all; font-family: monospace; font-size: 0.9rem;">{{formatDeepest .Path}}</div>
+	</div>
+	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Path</div>
-		<div style="word-break: break-all; font-family: monospace; font-size: 0.9rem;">{{.Path}}</div>
+		<div style="word-break: break-all; font-family: monospace; font-size: 0.8rem;">{{.Path}}</div>
 	</div>
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Size</div>
@@ -278,7 +282,7 @@
             </div>
             {{end}}
             {{end}}
-            {{if index .CameraDetails "focal_length"}}
+            {{if index .CameraDetails "focal_length" gt 0}}
             <div class="meta-tag">
                 <span class="material-symbols-outlined">straighten</span>
                 {{index .CameraDetails "focal_length"}}
@@ -293,7 +297,7 @@
             </div>
             {{end}}
             {{end}}
-            {{if index .CameraDetails "iso"}}
+            {{if index .CameraDetails "iso" gt 0}}
             <div class="meta-tag">
                 <span class="material-symbols-outlined">exposure</span>
                 ISO {{index .CameraDetails "iso"}}
@@ -316,7 +320,7 @@
 		
 		<div style="display: flex; gap: 8px;">
 			<button class="btn-primary" style="background: #e74c3c; border-color: #c0392b; flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 6px;"
-				hx-delete="/images"
+				hx-post="/images"
 				x-bind:hx-vals="JSON.stringify({image_id: '{{.ID}}', delete_disk: deleteFromDisk})"
 				hx-confirm="Are you sure you want to delete this image?">
 				<span class="material-symbols-outlined">delete</span> Delete

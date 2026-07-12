@@ -49,9 +49,17 @@
 			</div>
 		</details>
 
-        <div style="display: flex; justify-content: flex-end; gap: 12px;">
-            <button type="button" class="nav-item" style="width: auto;" @click="$el.closest('dialog').classList.add('closing'); setTimeout(() => { $el.closest('dialog').close(); $el.closest('dialog').remove(); }, 300)">Cancel</button>
-            <button type="submit" class="btn-primary">Save Settings</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 16px;">
+			<button type="button" class="btn-icon-danger" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 6px; font-size: 0.9rem;"
+					hx-post="/api/reset"
+					hx-confirm="Are you sure you want to reset the entire database? This will delete all images and you will need to re-import them."
+					hx-swap="none">
+				<span class="material-symbols-outlined" style="font-size: 1.1rem;">delete_forever</span> Reset Database
+			</button>
+            <div style="display: flex; gap: 12px;">
+                <button type="button" class="nav-item" style="width: auto;" @click="$el.closest('dialog').classList.add('closing'); setTimeout(() => { $el.closest('dialog').close(); $el.closest('dialog').remove(); }, 300)">Cancel</button>
+                <button type="submit" class="btn-primary">Save Settings</button>
+            </div>
         </div>
     </form>
 </dialog>

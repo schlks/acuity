@@ -44,7 +44,7 @@ type wService interface {
 	ChangeGallery(ctx context.Context, newID int, images []db.Image) error
 	CopyToGallery(ctx context.Context, newGalleryID int, images []db.Image) error
 	RemoveImages(ctx context.Context, images []db.Image) error
-	GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string) ([]db.Image, error)
+	GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.Image, error)
 	GetKnownPaths(ctx context.Context, galleryID int) (map[string]string, error)
 	GetInfo(ctx context.Context, imageID string) (db.Image, error)
 	GetGalleryCount(ctx context.Context, galleryID int) (int, error)
@@ -212,12 +212,12 @@ func (g *GalleryService) GetGalleryID(name string) (int, error, bool) {
 	return gallery.ID, nil, true
 }
 
-func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string) ([]db.Image, error) {
+func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.Image, error) {
 	gallery, err := g.sDB.GetGalleryByName(name)
 	if err != nil {
 		return nil, err
 	}
-	files, err := g.wDB.GetAll(ctx, gallery.ID, sortBy, sortOrder, page, imagesPerPage, flagFilter)
+	files, err := g.wDB.GetAll(ctx, gallery.ID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -233,8 +233,8 @@ func (g *GalleryService) SearchImages64(ctx context.Context, search string, gall
 	return g.wDB.SearchImage64(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
 }
 
-func (g *GalleryService) GetAllImages(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string) ([]db.Image, error) {
-	return g.wDB.GetAll(ctx, galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter)
+func (g *GalleryService) GetAllImages(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.Image, error) {
+	return g.wDB.GetAll(ctx, galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
 }
 
 func (g *GalleryService) ConvertImage(file []byte) (string, error) {
@@ -426,6 +426,10 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[
 		imageInfo["Gallery"] = galleryName.Name
 	}
 	return imageInfo, nil
+}
+
+func (g *GalleryService) ResetDatabase(ctx context.Context) error {
+	return g.wDB.ResetDatabase(ctx)
 }
 
 func (g *GalleryService) GetGalleryCount(ctx context.Context, galleryID int) (int, error) {
