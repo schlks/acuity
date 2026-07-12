@@ -234,7 +234,7 @@ func (w *WeaviateClient) batchWriterLoop() {
 func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, galleryID int) {
 	batchSize := 43
 	threads := runtime.NumCPU()
-	maxWorkers := threads
+	maxWorkers := max(1, threads-2)
 
 	resultChan := make(chan Image, batchSize)
 	done := make(chan struct{})
