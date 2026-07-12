@@ -25,7 +25,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("port", "3000")
 	viper.SetDefault("weaviate_host", "localhost")
 	viper.SetDefault("weaviate_port", ":50050")
-	viper.SetDefault("db_path", "acuity.db")
+	viper.SetDefault("db_path", "data/acuity.db")
 	viper.SetDefault("images_per_page", 100)
 	viper.SetDefault("default_sort_by", "name")
 	viper.SetDefault("default_sort_order", "desc")

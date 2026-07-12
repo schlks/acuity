@@ -1,5 +1,5 @@
 {
-  "db_path": "./acuity.db",
+  "db_path": "data/acuity.db",
   "default_sort_by": "name",
   "default_sort_order": "asc",
   "grid_size": "medium",

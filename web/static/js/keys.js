@@ -68,16 +68,6 @@ window.addEventListener('keydown', (e) => {
 				
 				if (selectedImages && selectedImages.length > 0) {
 					window.dispatchEvent(new CustomEvent('acuity-bulk-delete'));
-				} else if (targetCard) {
-					const img = targetCard.querySelector('img');
-					if (img && img.dataset.id) {
-						const id = img.dataset.id;
-						const isDeleteFromDisk = bodyData?.deleteFromDisk;
-						fetch(`/image/${id}?disk=${!!isDeleteFromDisk}`, { method: 'DELETE' })
-							.then(() => {
-								window.dispatchEvent(new CustomEvent('acuity-remove-selection', { detail: { id } }));
-							});
-					}
 				}
 			}
 			break;
