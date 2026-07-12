@@ -28,7 +28,7 @@ services:
     image: cr.weaviate.io/semitechnologies/multi2vec-clip:sentence-transformers-clip-ViT-B-32
     container_name: clip
     environment:
-      ENABLE_CUDA: '0'
+      ENABLE_CUDA: '1'
 
   acuity:
     image: codeberg.org/shlks/acuity:latest
@@ -37,7 +37,7 @@ services:
       - "3000:3000"
     volumes:
       - "acuity_data:/app/data"
-      - "/your/folder:/data/folder"
+      - "/media/data/Wallpaper/:/data/Wallpaper"
     working_dir: /app/data
     entrypoint: ["/app/acuity"]
     environment:

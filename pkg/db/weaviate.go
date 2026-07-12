@@ -21,10 +21,10 @@ import (
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 
+	"github.com/evanoberholster/imagemeta"
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
 	"github.com/h2non/bimg"
-	"github.com/rwcarlsen/goexif/exif"
 )
 
 type WeaviateClient struct {
@@ -45,20 +45,21 @@ type ImageVector struct {
 }
 
 type Image struct {
-	ID          string
-	Path        string
-	Base64      string
-	GalleryID   string
-	Distance    float64
-	Name        string
-	Rating      int
-	Extension   string
-	Date        string // Weaviate akzeptiert und liefert RFC3339 formatierte Strings für Datum
-	Taken       string
-	Size        float64
-	Resolution  int
-	AspectRatio float64
-	Flag        int
+	ID            string
+	Path          string
+	Base64        string
+	GalleryID     string
+	Distance      float64
+	Name          string
+	Rating        int
+	Extension     string
+	Date          string // Weaviate akzeptiert und liefert RFC3339 formatierte Strings für Datum
+	Taken         string
+	Size          float64
+	Resolution    int
+	AspectRatio   float64
+	Flag          int
+	CameraDetails map[string]any
 }
 
 func NewWeaviateClient(host string) (*WeaviateClient, error) {
@@ -170,6 +171,44 @@ func (w *WeaviateClient) InitSchema() error {
 					Name:     "flag",
 					DataType: []string{"number"},
 				},
+				{
+					Name:     "camera_details",
+					DataType: []string{"object"},
+					NestedProperties: []*models.NestedProperty{
+						{
+							Name:     "make",
+							DataType: []string{"text"},
+						},
+						{
+							Name:     "lens_make",
+							DataType: []string{"text"},
+						},
+						{
+							Name:     "lens_model",
+							DataType: []string{"text"},
+						},
+						{
+							Name:     "iso",
+							DataType: []string{"text"},
+						},
+						{
+							Name:     "focal_length",
+							DataType: []string{"text"},
+						},
+						{
+							Name:     "shutter_speed",
+							DataType: []string{"text"},
+						},
+						{
+							Name:     "flash",
+							DataType: []string{"boolean"},
+						},
+						{
+							Name:     "aperture",
+							DataType: []string{"text"},
+						},
+					},
+				},
 			},
 		}
 
@@ -210,18 +249,19 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 				ID:    strfmt.UUID(id),
 				Class: "Image",
 				Properties: map[string]any{
-					"filepath":     result.Path,
-					"image":        result.Base64,
-					"gallery_id":   galleryID,
-					"name":         filepath.Base(result.Path),
-					"rating":       0,
-					"extension":    filepath.Ext(result.Path),
-					"date":         result.Date,
-					"taken":        result.Taken,
-					"size":         result.Size,
-					"resolution":   result.Resolution,
-					"aspect_ratio": result.AspectRatio,
-					"flag":         0,
+					"filepath":       result.Path,
+					"image":          result.Base64,
+					"gallery_id":     galleryID,
+					"name":           filepath.Base(result.Path),
+					"rating":         0,
+					"extension":      filepath.Ext(result.Path),
+					"date":           result.Date,
+					"taken":          result.Taken,
+					"size":           result.Size,
+					"resolution":     result.Resolution,
+					"aspect_ratio":   result.AspectRatio,
+					"flag":           0,
+					"camera_details": result.CameraDetails,
 				},
 			}
 			batch = append(batch, obj)
@@ -259,6 +299,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			default:
 			}
 
+			cameraDetails := map[string]any{}
 			data, err := os.ReadFile(path)
 			if err != nil {
 				slog.Error("Error decoding image", slog.String("path", path), slog.Any("error", err))
@@ -314,7 +355,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 				}
 				if err != nil {
 					slog.Error("Error converting image to JPEG", slog.String("path", path), slog.Any("error", err))
-					return err
+					return nil
 				}
 			}
 
@@ -332,32 +373,44 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			fileDate := modTime.Format(time.RFC3339)
 			takenDate := fileDate
 			file, err := os.Open(path)
-			if err == nil {
-				defer func(file *os.File) {
-					err := file.Close()
-					if err != nil {
-						return
-					}
-				}(file)
-				x, err := exif.Decode(file)
-				if err == nil {
-					tm, err := x.DateTime()
-					if err == nil {
-						takenDate = tm.Format(time.RFC3339)
-					}
+			if err != nil {
+				return err
+			}
+			defer func(file *os.File) {
+				err := file.Close()
+				if err != nil {
+					return
 				}
+			}(file)
+			x, err := imagemeta.Decode(file)
+			if err != nil {
+				slog.Warn("No Exif data found", slog.String("path", path), slog.Any("error", err))
+			} else {
+				tm := x.OriginalDate()
+				if !tm.IsZero() {
+					takenDate = tm.Format(time.RFC3339)
+				}
+				cameraDetails["make"] = x.CameraMake()
+				cameraDetails["lens_make"] = x.ExifIFD.LensMake
+				cameraDetails["lens_model"] = x.ExifIFD.LensModel
+				cameraDetails["iso"] = fmt.Sprintf("%v", x.ExifIFD.ISOSpeedRatings)
+				cameraDetails["focal_length"] = x.ExifIFD.FocalLength.String()
+				cameraDetails["shutter_speed"] = x.ExifIFD.ShutterSpeedValue.String()
+				cameraDetails["flash"] = x.ExifIFD.Flash.Fired()
+				cameraDetails["aperture"] = x.ExifIFD.ApertureValue.String()
 			}
 
 			base64Image := base64.StdEncoding.EncodeToString(jpegBuffer)
 
 			resultChan <- Image{
-				Path:        path,
-				Base64:      base64Image,
-				Date:        fileDate,
-				Taken:       takenDate,
-				Size:        imgSize,
-				Resolution:  resolution,
-				AspectRatio: aspectRatio,
+				Path:          path,
+				Base64:        base64Image,
+				Date:          fileDate,
+				Taken:         takenDate,
+				Size:          imgSize,
+				Resolution:    resolution,
+				AspectRatio:   aspectRatio,
+				CameraDetails: cameraDetails,
 			}
 			return nil
 		})
@@ -408,6 +461,14 @@ func (w *WeaviateClient) RemoveImage(ctx context.Context, image Image) error {
 }
 
 func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
+	if len(result.Errors) > 0 {
+		var errMsgs []string
+		for _, err := range result.Errors {
+			errMsgs = append(errMsgs, err.Message)
+		}
+		slog.Error("GraphQL query returned errors", slog.String("graphql_errors", strings.Join(errMsgs, " | ")))
+	}
+
 	var images []Image
 	if getMap, ok := result.Data["Get"].(map[string]any); ok {
 		if imageArray, ok := getMap["Image"].([]any); ok {
@@ -449,6 +510,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 				var rating, resolution, flag int
 				var extension, date, taken string
 				var size, aspectRatio float64
+				var cameraDetails map[string]any
 
 				if val, ok := imgProps["rating"].(float64); ok {
 					rating = int(val)
@@ -477,22 +539,28 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 				if val, ok := imgProps["flag"].(float64); ok {
 					flag = int(val)
 				}
+				if val, ok := imgProps["camera_details"].(map[string]interface{}); ok {
+					cameraDetails = val
+				} else if imgProps["camera_details"] != nil {
+					slog.Warn("Failed to cast camera_details", slog.Any("val", imgProps["camera_details"]), slog.String("type", fmt.Sprintf("%T", imgProps["camera_details"])))
+				}
 
 				images = append(images, Image{
-					ID:          id,
-					Path:        filePath,
-					Base64:      image,
-					Name:        name,
-					GalleryID:   gallery,
-					Distance:    distance,
-					Rating:      rating,
-					Extension:   extension,
-					Date:        date,
-					Taken:       taken,
-					Size:        size,
-					Resolution:  resolution,
-					AspectRatio: aspectRatio,
-					Flag:        flag,
+					ID:            id,
+					Path:          filePath,
+					Base64:        image,
+					Name:          name,
+					GalleryID:     gallery,
+					Distance:      distance,
+					Rating:        rating,
+					Extension:     extension,
+					Date:          date,
+					Taken:         taken,
+					Size:          size,
+					Resolution:    resolution,
+					AspectRatio:   aspectRatio,
+					Flag:          flag,
+					CameraDetails: cameraDetails,
 				})
 			}
 		}
@@ -504,14 +572,30 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	_, err := w.Client.Batch().
+	res, err := w.Client.Batch().
 		ObjectsBatcher().
 		WithObjects(batch...).
 		Do(ctxTimeout)
 	if err != nil {
 		slog.Error("Error during batch write to Weaviate", slog.Any("error", err))
 	} else {
-		slog.Info("Successfully wrote images to Weaviate", slog.Int("count", len(batch)))
+		successCount := 0
+		failedCount := 0
+		for _, r := range res {
+			if r.Result != nil && r.Result.Errors != nil && len(r.Result.Errors.Error) > 0 {
+				failedCount++
+				var errMsgs []string
+				for _, e := range r.Result.Errors.Error {
+					if e != nil {
+						errMsgs = append(errMsgs, e.Message)
+					}
+				}
+				slog.Error("Failed to insert object", slog.String("errors", strings.Join(errMsgs, " | ")))
+			} else {
+				successCount++
+			}
+		}
+		slog.Info("Batch write to Weaviate completed", slog.Int("success", successCount), slog.Int("failed", failedCount))
 	}
 }
 
@@ -533,6 +617,19 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 			graphql.Field{Name: "size"},
 			graphql.Field{Name: "resolution"},
 			graphql.Field{Name: "aspect_ratio"},
+			graphql.Field{
+				Name: "camera_details",
+				Fields: []graphql.Field{
+					{Name: "make"},
+					{Name: "lens_make"},
+					{Name: "lens_model"},
+					{Name: "iso"},
+					{Name: "focal_length"},
+					{Name: "shutter_speed"},
+					{Name: "flash"},
+					{Name: "aperture"},
+				},
+			},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -624,6 +721,19 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 			graphql.Field{Name: "resolution"},
 			graphql.Field{Name: "aspect_ratio"},
 			graphql.Field{
+				Name: "camera_details",
+				Fields: []graphql.Field{
+					{Name: "make"},
+					{Name: "lens_make"},
+					{Name: "lens_model"},
+					{Name: "iso"},
+					{Name: "focal_length"},
+					{Name: "shutter_speed"},
+					{Name: "flash"},
+					{Name: "aperture"},
+				},
+			},
+			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
 					{Name: "id"},
@@ -699,6 +809,19 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, gal
 			graphql.Field{Name: "resolution"},
 			graphql.Field{Name: "aspect_ratio"},
 			graphql.Field{
+				Name: "camera_details",
+				Fields: []graphql.Field{
+					{Name: "make"},
+					{Name: "lens_make"},
+					{Name: "lens_model"},
+					{Name: "iso"},
+					{Name: "focal_length"},
+					{Name: "shutter_speed"},
+					{Name: "flash"},
+					{Name: "aperture"},
+				},
+			},
+			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
 					{Name: "id"},
@@ -722,7 +845,6 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, gal
 	}
 
 	result, err := query.Do(ctx)
-
 	if err != nil {
 		return nil, err
 	}
@@ -845,6 +967,19 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 			graphql.Field{Name: "size"},
 			graphql.Field{Name: "resolution"},
 			graphql.Field{Name: "aspect_ratio"},
+			graphql.Field{
+				Name: "camera_details",
+				Fields: []graphql.Field{
+					{Name: "make"},
+					{Name: "lens_make"},
+					{Name: "lens_model"},
+					{Name: "iso"},
+					{Name: "focal_length"},
+					{Name: "shutter_speed"},
+					{Name: "flash"},
+					{Name: "aperture"},
+				},
+			},
 			graphql.Field{Name: "flag"},
 			graphql.Field{
 				Name: "_additional",
@@ -931,10 +1066,11 @@ func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[
 			},
 		).
 		WithWhere(
-					filters.Where().
-						WithPath([]string{"gallery_id"}).
-						WithOperator(filters.Equal).
-						WithValueInt(int64(galleryID))).
+			filters.Where().
+				WithPath([]string{"gallery_id"}).
+				WithOperator(filters.Equal).
+				WithValueInt(int64(galleryID)),
+		).
 		WithLimit(10_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
 		Do(ctx)
 	if err != nil {
@@ -975,6 +1111,19 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (Image, er
 			graphql.Field{Name: "size"},
 			graphql.Field{Name: "resolution"},
 			graphql.Field{Name: "aspect_ratio"},
+			graphql.Field{
+				Name: "camera_details",
+				Fields: []graphql.Field{
+					{Name: "make"},
+					{Name: "lens_make"},
+					{Name: "lens_model"},
+					{Name: "iso"},
+					{Name: "focal_length"},
+					{Name: "shutter_speed"},
+					{Name: "flash"},
+					{Name: "aperture"},
+				},
+			},
 			graphql.Field{Name: "flag"},
 			graphql.Field{
 				Name: "_additional",
@@ -987,14 +1136,19 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (Image, er
 			filters.Where().
 				WithPath([]string{"id"}).
 				WithOperator(filters.Equal).
-				WithValueText(imageID)).
+				WithValueText(imageID),
+		).
 		WithLimit(1).
 		Do(ctx)
 	if err != nil {
 		return Image{}, err
 	}
 
-	return w.getData(result)[0], nil
+	data := w.getData(result)
+	if len(data) == 0 {
+		return Image{}, fmt.Errorf("image not found")
+	}
+	return data[0], nil
 }
 
 func (w *WeaviateClient) GetGalleryCount(ctx context.Context, galleryID int) (int, error) {
@@ -1011,7 +1165,8 @@ func (w *WeaviateClient) GetGalleryCount(ctx context.Context, galleryID int) (in
 			filters.Where().
 				WithPath([]string{"gallery_id"}).
 				WithOperator(filters.Equal).
-				WithValueInt(int64(galleryID))).
+				WithValueInt(int64(galleryID)),
+		).
 		Do(ctx)
 	if err != nil {
 		return 0, err
@@ -1052,6 +1207,19 @@ func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]Im
 		WithFields(
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "aspect_ratio"},
+			graphql.Field{
+				Name: "camera_details",
+				Fields: []graphql.Field{
+					{Name: "make"},
+					{Name: "lens_make"},
+					{Name: "lens_model"},
+					{Name: "iso"},
+					{Name: "focal_length"},
+					{Name: "shutter_speed"},
+					{Name: "flash"},
+					{Name: "aperture"},
+				},
+			},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{

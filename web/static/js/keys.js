@@ -9,6 +9,7 @@ window.addEventListener('keydown', (e) => {
 	}
 
 	const isCarouselOpen = document.querySelector('.carousel-modal[open], #culling-modal[open]') !== null;
+	const targetCard = document.querySelector('.image-card:hover') || (document.activeElement && document.activeElement.classList.contains('image-card') ? document.activeElement : null);
 	
 	switch(e.key) {
         case 'h': case 'H': case 'ArrowRight':
@@ -61,15 +62,31 @@ window.addEventListener('keydown', (e) => {
 		case 'Delete':
 			if (isCarouselOpen) {
 				window.dispatchEvent(new CustomEvent('acuity-delete-carousel'));
-			} else if (document.activeElement.classList.contains('image-card')) {
-				const img = document.activeElement.querySelector('img');
-				if (img && img.dataset.id) {
-					const id = img.dataset.id;
-					const isDeleteFromDisk = document.querySelector('body').__x?.$data?.deleteFromDisk;
-					fetch(`/image/${id}?disk=${!!isDeleteFromDisk}`, { method: 'DELETE' })
-						.then(() => {
-							window.dispatchEvent(new CustomEvent('acuity-remove-selection', { detail: { id } }));
-						});
+			} else {
+				const bodyData = document.querySelector('body').__x?.$data;
+				const selectedImages = bodyData?.selectedImages;
+				
+				if (selectedImages && selectedImages.length > 0) {
+					window.dispatchEvent(new CustomEvent('acuity-bulk-delete'));
+				} else if (targetCard) {
+					const img = targetCard.querySelector('img');
+					if (img && img.dataset.id) {
+						const id = img.dataset.id;
+						const isDeleteFromDisk = bodyData?.deleteFromDisk;
+						fetch(`/image/${id}?disk=${!!isDeleteFromDisk}`, { method: 'DELETE' })
+							.then(() => {
+								window.dispatchEvent(new CustomEvent('acuity-remove-selection', { detail: { id } }));
+							});
+					}
+				}
+			}
+			break;
+		case 'r': case 'R':
+			if (!isCarouselOpen) {
+				const bodyData = document.querySelector('body').__x?.$data;
+				if (bodyData && bodyData.currentGallery) {
+					fetch(`/gallery/${bodyData.currentGallery}/scan`, { method: 'POST' });
+					// Optional: Feedback-Animation oder Benachrichtigung
 				}
 			}
 			break;
@@ -89,8 +106,8 @@ window.addEventListener('keydown', (e) => {
 			if (isCarouselOpen) {
 				window.dispatchEvent(new CustomEvent('acuity-space-carousel'));
 			} else {
-				if (document.activeElement.classList.contains('image-card')) {
-					const img = document.activeElement.querySelector('img');
+				if (targetCard) {
+					const img = targetCard.querySelector('img');
 					if (img && img.dataset.id) {
 						window.dispatchEvent(new CustomEvent('acuity-toggle-select', { detail: { id: img.dataset.id } }));
 					}
@@ -108,8 +125,8 @@ window.addEventListener('keydown', (e) => {
 			const rating = parseInt(e.key);
 			if (isCarouselOpen) {
 				window.dispatchEvent(new CustomEvent('acuity-rate-carousel', { detail: { rating } }));
-			} else if (document.activeElement.classList.contains('image-card')) {
-				const img = document.activeElement.querySelector('img');
+			} else if (targetCard) {
+				const img = targetCard.querySelector('img');
 				if (img && img.dataset.id) {
 					const id = img.dataset.id;
 					window.dispatchEvent(new CustomEvent('rating-updated', { detail: { id, rating } }));
@@ -137,10 +154,10 @@ window.addEventListener('keydown', (e) => {
 			break;
 		case 'Enter':
 			if (!isCarouselOpen) {
-				if (document.activeElement.classList.contains('image-card')) {
-					const img = document.activeElement.querySelector('img');
+				if (targetCard) {
+					const img = targetCard.querySelector('img');
 					if (img && img.dataset.id) {
-						const dupGroup = document.activeElement.closest('.duplicate-group');
+						const dupGroup = targetCard.closest('.duplicate-group');
 						const group = dupGroup ? `#${dupGroup.id}` : undefined;
 						window.dispatchEvent(new CustomEvent('open-carousel', { detail: { id: img.dataset.id, group } }));
 					}
@@ -165,8 +182,8 @@ window.addEventListener('keydown', (e) => {
 		case 'n': case 'N':
 			if (isCarouselOpen) {
 				window.dispatchEvent(new CustomEvent('acuity-flag-carousel', { detail: { type: 'keep' } }));
-			} else if (document.activeElement.classList.contains('image-card')) {
-				const img = document.activeElement.querySelector('img');
+			} else if (targetCard) {
+				const img = targetCard.querySelector('img');
 				if (img && img.dataset.id) {
 					const id = img.dataset.id;
 					const badge = document.getElementById('flag-badge-' + id);
@@ -187,8 +204,8 @@ window.addEventListener('keydown', (e) => {
 		case 'w': case 'W':
 			if (isCarouselOpen) {
 				window.dispatchEvent(new CustomEvent('acuity-flag-carousel', { detail: { type: 'reject' } }));
-			} else if (document.activeElement.classList.contains('image-card')) {
-				const img = document.activeElement.querySelector('img');
+			} else if (targetCard) {
+				const img = targetCard.querySelector('img');
 				if (img && img.dataset.id) {
 					const id = img.dataset.id;
 					const badge = document.getElementById('flag-badge-' + id);

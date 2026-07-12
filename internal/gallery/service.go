@@ -271,6 +271,7 @@ func (g *GalleryService) DeleteImage(ctx context.Context, file db.Image, deleteD
 }
 
 func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image, deleteDisk bool) error {
+	slog.Info("Deleting from disk: %v", deleteDisk)
 	var paths []string
 	if deleteDisk {
 		for _, img := range images {
@@ -291,6 +292,7 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.Image, de
 
 	if deleteDisk {
 		for _, path := range paths {
+			slog.Info("Deleting physical file: %s", path)
 			err := os.Remove(path)
 			if err != nil {
 				slog.Warn("Failed to delete physical file", slog.String("path", path), slog.Any("error", err))
@@ -397,19 +399,20 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID string) (map[
 
 	baseName := filepath.Base(wInfo.Path)
 	imageInfo := map[string]any{
-		"ID":          wInfo.ID,
-		"Name":        strings.TrimSuffix(baseName, filepath.Ext(baseName)),
-		"Path":        wInfo.Path,
-		"GalleryID":   wInfo.GalleryID,
-		"Rating":      wInfo.Rating,
-		"Time":        wInfo.Taken, // Genutzt von Weaviate
-		"Size":        wInfo.Size,
-		"Resolution":  wInfo.Resolution,
-		"AspectRatio": wInfo.AspectRatio,
-		"Extension":   wInfo.Extension,
-		"Date":        wInfo.Date,
-		"Flag":        wInfo.Flag,
-		"Gallery":     "",
+		"ID":            wInfo.ID,
+		"Name":          strings.TrimSuffix(baseName, filepath.Ext(baseName)),
+		"Path":          wInfo.Path,
+		"GalleryID":     wInfo.GalleryID,
+		"Rating":        wInfo.Rating,
+		"Time":          wInfo.Taken, // Genutzt von Weaviate
+		"Size":          wInfo.Size,
+		"Resolution":    wInfo.Resolution,
+		"AspectRatio":   wInfo.AspectRatio,
+		"Extension":     wInfo.Extension,
+		"Date":          wInfo.Date,
+		"Flag":          wInfo.Flag,
+		"CameraDetails": wInfo.CameraDetails,
+		"Gallery":       "",
 	}
 	galleryStr := imageInfo["GalleryID"].(string)
 	gallery, err := strconv.Atoi(galleryStr)

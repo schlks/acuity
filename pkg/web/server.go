@@ -127,9 +127,9 @@ func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
-	dir := query.String(r, "dir", "/dir")
+	dir := query.String(r, "dir", "/data")
 	if dir == "" {
-		dir = "/"
+		dir = "/data"
 	}
 
 	dir = filepath.Clean(dir)
@@ -458,20 +458,32 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(500 * time.Millisecond)
 			newActive, newProgresses, newRefresh := check()
 			if !progressesEqual(progresses, newProgresses) || !newActive {
+				// Wenn ein Import gerade abgeschlossen wurde (!newActive),
+				// erzwingen wir ein letztes Refresh der Galerie, damit die neuen Bilder sichtbar sind.
+				if hasActive && !newActive {
+					newRefresh = true
+				}
+
 				hasActive = newActive
 				progresses = newProgresses
 				refreshImages = newRefresh
 				break
 			}
 		}
-		// If there are still active imports after waiting (or if we broke out early because of a change), tell the client to immediately re-poll
+		var triggers []string
 		if hasActive {
-			w.Header().Add("HX-Trigger", "check-progress")
+			triggers = append(triggers, "check-progress")
 		}
-	}
-
-	if refreshImages {
-		w.Header().Add("HX-Trigger", "refresh-images")
+		if refreshImages {
+			triggers = append(triggers, "refresh-images")
+		}
+		if len(triggers) > 0 {
+			w.Header().Set("HX-Trigger", strings.Join(triggers, ", "))
+		}
+	} else {
+		if refreshImages {
+			w.Header().Set("HX-Trigger", "refresh-images")
+		}
 	}
 
 	if err := s.Template.ExecuteTemplate(w, "progress.html", progresses); err != nil {
@@ -678,6 +690,16 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusBadRequest)
 		return
+	}
+
+	// Go's r.ParseForm() doesn't parse the body for DELETE requests.
+	// If HTMX sends hx-vals in the body, we need to parse it manually.
+	if r.Method == http.MethodDelete && r.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
+		body, _ := io.ReadAll(r.Body)
+		parsedBody, _ := url.ParseQuery(string(body))
+		for k, v := range parsedBody {
+			r.Form[k] = v
+		}
 	}
 
 	imageIDsStr := r.FormValue("image_id")

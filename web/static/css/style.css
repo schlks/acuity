@@ -283,7 +283,7 @@ dialog.closing::backdrop {
 body:not(.keyboard-navigating) .image-card:hover {
 	border-color: var(--primary-hover);
     box-shadow: 0 0 40px color-mix(in srgb, var(--primary-hover) 60%, transparent);
-    z-index: 7;
+    z-index: 6;
 }
 body:not(.keyboard-navigating) .image-card:hover img {
 	opacity: 0.9;

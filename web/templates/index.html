@@ -36,7 +36,20 @@
 		  x-init="let saved = localStorage.getItem('openGallery'); if (saved) { currentGallery = saved; localStorage.removeItem('openGallery'); setTimeout(() => { htmx.ajax('GET', '/gallery/' + saved, {target: '#main-content'}) }, 100); }"
 		  @load-gallery.window="localStorage.setItem('openGallery', $event.detail.value); window.location.reload()"
 		  @acuity-toggle-select.window="let id = $event.detail.id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) }"
-		  @acuity-toggle-disk-delete.window="deleteFromDisk = !deleteFromDisk">
+		  @acuity-toggle-disk-delete.window="deleteFromDisk = !deleteFromDisk"
+		  @acuity-bulk-delete.window="if(selectedImages.length > 0) {
+			  if(confirm('Are you sure you want to delete these ' + selectedImages.length + ' images?')) {
+				let qs = new URLSearchParams();
+				qs.append('image_id', selectedImages.join(','));
+				qs.append('delete_disk', deleteFromDisk);
+				qs.append('name', currentGallery);
+				fetch('/images?' + qs.toString(), {method: 'DELETE'})
+				  .then(() => {
+					selectedImages.forEach(id => { window.dispatchEvent(new CustomEvent('acuity-remove-selection', {detail: {id}})) });
+					selectedImages = [];
+				  });
+			  }
+		  }">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
 				<a href="/" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; text-decoration: none; cursor: pointer;">
@@ -155,7 +168,7 @@
 							<input class="input-clean" type="text" name="path" x-model="path" required style="flex-grow: 1;" placeholder="/data/wallpaper">
 
 							<!-- Klick öffnet den Browser und lädt das Root-Verzeichnis via HTMX -->
-							<button type="button" class="btn-icon" @click="showBrowser = true" hx-get="/api/browse?dir=/" hx-target="#file-browser-container">
+							<button type="button" class="btn-icon" @click="showBrowser = true" hx-get="/api/browse?dir=/data" hx-target="#file-browser-container">
 								<span class="material-symbols-outlined">folder_open</span>
 							</button>
 						</div>

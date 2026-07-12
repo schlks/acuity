@@ -31,7 +31,7 @@
 			<button class="btn-primary" 
 				style="background: var(--danger); border: 1px solid var(--danger); display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box; padding: 0;"
 				hx-delete="/images"
-				hx-vals='js:{"image_id": selectedImages.join(","), "delete_disk": deleteFromDisk, "name": "{{.Name}}"}'
+				x-bind:hx-vals="JSON.stringify({image_id: selectedImages.join(','), delete_disk: deleteFromDisk, name: '{{.Name}}'})"
 				hx-confirm="Are you sure you want to delete these images?"
 				@click="setTimeout(() => selectedImages = [], 100)"
 				title="Delete Selection">
@@ -155,7 +155,7 @@
 				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Absolute Path</label>
 				<div style="display: flex; gap: 8px;">
 					<input class="input-clean" type="text" name="path" x-model="transferPath" placeholder="/data/images/wallpapers" x-bind:required="isNew && (action === 'move' || action === 'copy')" style="flex-grow: 1;">
-					<button type="button" class="btn-icon" @click="showTransferBrowser = true" hx-get="/api/browse?dir=/&target=transferPath" hx-target="#transfer-browser-container">
+					<button type="button" class="btn-icon" @click="showTransferBrowser = true" hx-get="/api/browse?dir=/data&target=transferPath" hx-target="#transfer-browser-container">
 						<span class="material-symbols-outlined">folder_open</span>
 					</button>
 				</div>
