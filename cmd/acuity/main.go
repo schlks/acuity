@@ -77,7 +77,7 @@ func formatExt(ext string) string {
 
 func formatAperture(a string) string {
 	a = strings.TrimSpace(a)
-	if a == "" || a == "0" || a == "0.0" {
+	if a == "" || a == "0" || a == "0.0" || a == "0.00" {
 		return ""
 	}
 	return strings.TrimPrefix(a, "f/")
@@ -85,7 +85,7 @@ func formatAperture(a string) string {
 
 func formatShutter(s string) string {
 	s = strings.TrimSpace(strings.TrimSuffix(s, "s"))
-	if s == "" || s == "0" || s == "0.0" {
+	if s == "" || s == "0" || s == "0.0" || s == "0.00" {
 		return ""
 	}
 
@@ -104,6 +104,25 @@ func formatShutter(s string) string {
 		return s + "s"
 	}
 	return s
+}
+
+func formatFocalLength(f string) string {
+	f = strings.TrimSpace(f)
+	if f == "" || f == "0" || f == "0.0" || f == "0.00" || f == "0mm" || f == "0.0mm" || f == "0.00mm" {
+		return ""
+	}
+	if !strings.HasSuffix(strings.ToLower(f), "mm") {
+		return f + "mm"
+	}
+	return f
+}
+
+func formatIso(iso string) string {
+	iso = strings.TrimSpace(iso)
+	if iso == "" || iso == "0" || iso == "0.0" || iso == "0.00" {
+		return ""
+	}
+	return iso
 }
 
 var lensMetaRegex = regexp.MustCompile(`(?i)\b\d+(\.\d+)?mm\b|\bf/\d+(\.\d+)?\b`)
@@ -171,13 +190,15 @@ func main() {
 	}
 
 	funcMap := template.FuncMap{
-		"formatSize":     formatSize,
-		"formatRes":      formatResolution,
-		"formatDate":     formatDate,
-		"formatExt":      formatExt,
-		"formatAperture": formatAperture,
-		"formatShutter":  formatShutter,
-		"formatLens":     formatLens,
+		"formatSize":        formatSize,
+		"formatRes":         formatResolution,
+		"formatDate":        formatDate,
+		"formatExt":         formatExt,
+		"formatAperture":    formatAperture,
+		"formatShutter":     formatShutter,
+		"formatLens":        formatLens,
+		"formatFocalLength": formatFocalLength,
+		"formatIso":         formatIso,
 		"formatDeepest": func(path string) string {
 			if path == "" {
 				return ""

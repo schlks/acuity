@@ -4,6 +4,7 @@ package config
 
 import (
 	"errors"
+	"os"
 
 	"github.com/spf13/viper"
 )
@@ -31,7 +32,15 @@ func Load() (*Config, error) {
 	viper.SetDefault("default_sort_order", "desc")
 	viper.SetDefault("grid_size", "medium")
 
+	configDir := os.Getenv("CONFIG_DIR")
+	if configDir == "" {
+		configDir = "data"
+	}
+	// Ensure the config directory exists
+	_ = os.MkdirAll(configDir, 0755)
+
 	viper.SetConfigName("config")
+	viper.AddConfigPath(configDir)
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
 
@@ -39,7 +48,8 @@ func Load() (*Config, error) {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
 			// Datei existiert nicht, wir legen eine neue an
-			if writeErr := viper.SafeWriteConfigAs("config.json"); writeErr != nil {
+			configFile := configDir + "/config.json"
+			if writeErr := viper.SafeWriteConfigAs(configFile); writeErr != nil {
 				return nil, writeErr
 			}
 		}

@@ -1133,43 +1133,54 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[string]string, error) {
 	knownPaths := make(map[string]string)
 
-	result, err := w.Client.GraphQL().Get().
-		WithClassName("Image").
-		WithFields(
-			graphql.Field{Name: "filepath"},
-			graphql.Field{
-				Name: "_additional",
-				Fields: []graphql.Field{
-					{Name: "id"},
-				},
-			},
-		).
-		WithWhere(
-			filters.Where().
-				WithPath([]string{"gallery_id"}).
-				WithOperator(filters.Equal).
-				WithValueInt(int64(galleryID)),
-		).
-		WithLimit(10_000). // Weaviate Standard-Limit ist 10 – explizit hochsetzen!
-		Do(ctx)
-	if err != nil {
-		return nil, err
-	}
+	var afterID string
 
-	data, ok := result.Data["Get"].(map[string]any)
-	if !ok || data["Image"] == nil {
-		return knownPaths, nil
-	}
-	images, ok := data["Image"].([]any)
-	if !ok {
-		return knownPaths, nil
-	}
-	for _, imgObj := range images {
-		img := imgObj.(map[string]any)
-		path := img["filepath"].(string)
-		additional := img["_additional"].(map[string]any)
-		id := additional["id"].(string)
-		knownPaths[path] = id
+	for {
+		builder := w.Client.GraphQL().Get().
+			WithClassName("Image").
+			WithFields(
+				graphql.Field{Name: "filepath"},
+				graphql.Field{
+					Name: "_additional",
+					Fields: []graphql.Field{
+						{Name: "id"},
+					},
+				},
+			).
+			WithWhere(
+				filters.Where().
+					WithPath([]string{"gallery_id"}).
+					WithOperator(filters.Equal).
+					WithValueInt(int64(galleryID)),
+			).
+			WithLimit(10000)
+
+		if afterID != "" {
+			builder = builder.WithAfter(afterID)
+		}
+
+		result, err := builder.Do(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		data, ok := result.Data["Get"].(map[string]any)
+		if !ok || data["Image"] == nil {
+			break
+		}
+		images, ok := data["Image"].([]any)
+		if !ok || len(images) == 0 {
+			break
+		}
+
+		for _, imgObj := range images {
+			img := imgObj.(map[string]any)
+			path := img["filepath"].(string)
+			additional := img["_additional"].(map[string]any)
+			id := additional["id"].(string)
+			knownPaths[path] = id
+			afterID = id
+		}
 	}
 
 	return knownPaths, nil

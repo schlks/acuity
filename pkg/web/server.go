@@ -6,6 +6,7 @@ import (
 	"acuity/internal/config"
 	"acuity/internal/gallery"
 	"acuity/pkg/db"
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -40,11 +41,27 @@ type SearchResult struct {
 // NewServer creates a new server
 func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config *config.Config, tmpl *template.Template) *Server {
 	service := gallery.NewService(sdatabase, wdatabase)
-	return &Server{
+	server := &Server{
 		Service:  service,
 		Template: tmpl,
 		Config:   config,
 	}
+
+	// Background task for periodic gallery scans (every hour)
+	go func() {
+		for {
+			time.Sleep(1 * time.Hour)
+			galleries, err := service.GetAllGalleries()
+			if err == nil {
+				for _, g := range galleries {
+					slog.Info("Running periodic scan for gallery", slog.String("name", g.Name))
+					_ = service.UpdateFolder(context.Background(), g.Name)
+				}
+			}
+		}
+	}()
+
+	return server
 }
 
 // RegisterRoutes regusteres all the routes used by the webui

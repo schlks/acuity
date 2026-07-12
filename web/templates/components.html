@@ -282,11 +282,14 @@
             </div>
             {{end}}
             {{end}}
-            {{if index .CameraDetails "focal_length" gt 0}}
+            {{if index .CameraDetails "focal_length"}}
+            {{$fmtFocalLength := formatFocalLength (index .CameraDetails "focal_length")}}
+            {{if $fmtFocalLength}}
             <div class="meta-tag">
                 <span class="material-symbols-outlined">straighten</span>
-                {{index .CameraDetails "focal_length"}}
+                {{$fmtFocalLength}}
             </div>
+            {{end}}
             {{end}}
             {{if index .CameraDetails "shutter_speed"}}
             {{$fmtShutter := formatShutter (index .CameraDetails "shutter_speed")}}
@@ -297,11 +300,14 @@
             </div>
             {{end}}
             {{end}}
-            {{if index .CameraDetails "iso" gt 0}}
+            {{if index .CameraDetails "iso"}}
+            {{$fmtIso := formatIso (index .CameraDetails "iso")}}
+            {{if $fmtIso}}
             <div class="meta-tag">
                 <span class="material-symbols-outlined">exposure</span>
-                ISO {{index .CameraDetails "iso"}}
+                ISO {{$fmtIso}}
             </div>
+            {{end}}
             {{end}}
             {{if index .CameraDetails "flash"}}
             <div class="meta-tag">
