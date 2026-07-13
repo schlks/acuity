@@ -45,22 +45,11 @@ type ImageVector struct {
 	AspectRatio float64
 }
 
-type Image struct {
-	ID            string
-	Path          string
-	Base64        string
-	GalleryID     string
-	Distance      float64
-	Name          string
-	Rating        int
-	Extension     string
-	Date          string // Weaviate akzeptiert und liefert RFC3339 formatierte Strings für Datum
-	Taken         string
-	Size          float64
-	Resolution    int
-	AspectRatio   float64
-	Flag          int
-	CameraDetails map[string]any
+type WImage struct {
+	ID        string
+	Path      string
+	Base64    string
+	GalleryID string
 }
 
 func NewWeaviateClient(host string) (*WeaviateClient, error) {
@@ -136,81 +125,6 @@ func (w *WeaviateClient) InitSchema() error {
 					Name:     "gallery_id",
 					DataType: []string{"int"},
 				},
-				{
-					Name:         "name",
-					DataType:     []string{"text"},
-					Tokenization: "field",
-				},
-				{
-					Name:     "rating",
-					DataType: []string{"number"},
-				},
-				{
-					Name:     "extension",
-					DataType: []string{"text"},
-				},
-				{
-					Name:     "date",
-					DataType: []string{"date"},
-				},
-				{
-					Name:     "taken",
-					DataType: []string{"date"},
-				},
-				{
-					Name:     "size",
-					DataType: []string{"number"},
-				},
-				{
-					Name:     "resolution",
-					DataType: []string{"number"},
-				},
-				{
-					Name:     "aspect_ratio",
-					DataType: []string{"number"},
-				},
-				{
-					Name:     "flag",
-					DataType: []string{"number"},
-				},
-				{
-					Name:     "camera_details",
-					DataType: []string{"object"},
-					NestedProperties: []*models.NestedProperty{
-						{
-							Name:     "make",
-							DataType: []string{"text"},
-						},
-						{
-							Name:     "lens_make",
-							DataType: []string{"text"},
-						},
-						{
-							Name:     "lens_model",
-							DataType: []string{"text"},
-						},
-						{
-							Name:     "iso",
-							DataType: []string{"text"},
-						},
-						{
-							Name:     "focal_length",
-							DataType: []string{"text"},
-						},
-						{
-							Name:     "shutter_speed",
-							DataType: []string{"text"},
-						},
-						{
-							Name:     "flash",
-							DataType: []string{"boolean"},
-						},
-						{
-							Name:     "aperture",
-							DataType: []string{"text"},
-						},
-					},
-				},
 			},
 		}
 
@@ -240,7 +154,7 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 	threads := runtime.NumCPU()
 	maxWorkers := max(1, threads-2)
 
-	resultChan := make(chan Image, batchSize)
+	resultChan := make(chan WImage, batchSize)
 	done := make(chan struct{})
 
 	go func() {
@@ -253,19 +167,9 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 				ID:    strfmt.UUID(id),
 				Class: "Image",
 				Properties: map[string]any{
-					"filepath":       result.Path,
-					"image":          result.Base64,
-					"gallery_id":     galleryID,
-					"name":           filepath.Base(result.Path),
-					"rating":         0,
-					"extension":      filepath.Ext(result.Path),
-					"date":           result.Date,
-					"taken":          result.Taken,
-					"size":           result.Size,
-					"resolution":     result.Resolution,
-					"aspect_ratio":   result.AspectRatio,
-					"flag":           0,
-					"camera_details": result.CameraDetails,
+					"filepath":   result.Path,
+					"image":      result.Base64,
+					"gallery_id": galleryID,
 				},
 			}
 			batch = append(batch, obj)
@@ -486,15 +390,19 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 
 			base64Image := base64.StdEncoding.EncodeToString(jpegBuffer)
 
-			resultChan <- Image{
-				Path:          path,
-				Base64:        base64Image,
-				Date:          fileDate,
-				Taken:         takenDate,
-				Size:          imgSize,
-				Resolution:    resolution,
-				AspectRatio:   aspectRatio,
-				CameraDetails: cameraDetails,
+			// Bypass unused variable errors during migration
+			_ = resolution
+			_ = aspectRatio
+			_ = imgSize
+			_ = takenDate
+			_ = fileDate
+			_ = cameraDetails
+
+			resultChan <- WImage{
+				Path:   path,
+				Base64: base64Image,
+				// NOTE: EXIF metadata variables are available here (fileDate, imgSize, etc.)
+				// ready to be inserted into SQLite!
 			}
 			return nil
 		})
@@ -533,7 +441,7 @@ func (w *WeaviateClient) RemoveGalleryImages(ctx context.Context, galleryID int)
 	return nil
 }
 
-func (w *WeaviateClient) RemoveImage(ctx context.Context, image Image) error {
+func (w *WeaviateClient) RemoveImage(ctx context.Context, image WImage) error {
 	err := w.Client.Data().Deleter().
 		WithClassName("Image").
 		WithID(image.ID).
@@ -544,7 +452,7 @@ func (w *WeaviateClient) RemoveImage(ctx context.Context, image Image) error {
 	return nil
 }
 
-func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
+func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 	if len(result.Errors) > 0 {
 		var errMsgs []string
 		for _, err := range result.Errors {
@@ -553,7 +461,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 		slog.Error("GraphQL query returned errors", slog.String("graphql_errors", strings.Join(errMsgs, " | ")))
 	}
 
-	var images []Image
+	var images []WImage
 	if getMap, ok := result.Data["Get"].(map[string]any); ok {
 		if imageArray, ok := getMap["Image"].([]any); ok {
 			for _, item := range imageArray {
@@ -629,22 +537,25 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 					slog.Warn("Failed to cast camera_details", slog.Any("val", imgProps["camera_details"]), slog.String("type", fmt.Sprintf("%T", imgProps["camera_details"])))
 				}
 
-				images = append(images, Image{
-					ID:            id,
-					Path:          filePath,
-					Base64:        image,
-					Name:          name,
-					GalleryID:     gallery,
-					Distance:      distance,
-					Rating:        rating,
-					Extension:     extension,
-					Date:          date,
-					Taken:         taken,
-					Size:          size,
-					Resolution:    resolution,
-					AspectRatio:   aspectRatio,
-					Flag:          flag,
-					CameraDetails: cameraDetails,
+				// Bypass unused variable errors during migration
+				_ = gallery
+				_ = name
+				_ = distance
+				_ = rating
+				_ = resolution
+				_ = flag
+				_ = extension
+				_ = date
+				_ = taken
+				_ = size
+				_ = aspectRatio
+				_ = cameraDetails
+
+				images = append(images, WImage{
+					ID:     id,
+					Path:   filePath,
+					Base64: image,
+					// TODO: Other metadata now comes from SQLite
 				})
 			}
 		}
@@ -685,7 +596,7 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 	}
 }
 
-func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]Image, error) {
+func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]WImage, error) {
 	nearText := w.Client.GraphQL().
 		NearTextArgBuilder().
 		WithConcepts([]string{search}).
@@ -788,7 +699,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 	return images, nil
 }
 
-func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]Image, error) {
+func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]WImage, error) {
 	nearImage := w.Client.GraphQL().
 		NearImageArgBuilder().
 		WithImage(image).
@@ -877,7 +788,7 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 	return images, nil
 }
 
-func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int, threshold float32) ([]Image, error) {
+func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
 	imageObj := w.Client.GraphQL().NearObjectArgBuilder().
 		WithID(imageID).
 		WithDistance(threshold)
@@ -936,7 +847,7 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, gal
 	}
 
 	images := w.getData(result)
-	var filtered []Image
+	var filtered []WImage
 
 	for _, img := range images {
 		if img.ID != imageID {
@@ -947,7 +858,7 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, gal
 	return filtered, nil
 }
 
-func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []Image) error {
+func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []WImage) error {
 	threads := runtime.NumCPU()
 	maxWorkers := max(threads-2, threads/2)
 	maxWorkers = max(maxWorkers, 1)
@@ -976,7 +887,7 @@ func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []
 	return g.Wait()
 }
 
-func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, images []Image) error {
+func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, images []WImage) error {
 	threads := runtime.NumCPU()
 	maxWorkers := max(threads-2, threads/2)
 	maxWorkers = max(maxWorkers, 1)
@@ -998,18 +909,9 @@ func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, im
 
 			newImageID := uuid.NewMD5(uuid.NameSpaceURL, []byte(newPath+strconv.Itoa(newGalleryID))).String()
 			props := map[string]any{
-				"filepath":     newPath,
-				"image":        info.Base64,
-				"gallery_id":   newGalleryID,
-				"name":         info.Name,
-				"rating":       info.Rating,
-				"extension":    info.Extension,
-				"date":         info.Date,
-				"taken":        info.Taken,
-				"size":         info.Size,
-				"resolution":   info.Resolution,
-				"aspect_ratio": info.AspectRatio,
-				"flag":         info.Flag,
+				"filepath":   newPath,
+				"image":      info.Base64,
+				"gallery_id": newGalleryID,
 			}
 			_, err = w.Client.Data().Creator().
 				WithClassName("Image").
@@ -1023,7 +925,7 @@ func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, im
 	return g.Wait()
 }
 
-func (w *WeaviateClient) RemoveImages(ctx context.Context, images []Image) error {
+func (w *WeaviateClient) RemoveImages(ctx context.Context, images []WImage) error {
 	threads := runtime.NumCPU()
 	maxWorkers := max(threads-2, threads/2)
 	maxWorkers = max(maxWorkers, 1)
@@ -1040,7 +942,7 @@ func (w *WeaviateClient) RemoveImages(ctx context.Context, images []Image) error
 	return g.Wait()
 }
 
-func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]Image, error) {
+func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]WImage, error) {
 	query := w.Client.GraphQL().Get().
 		WithClassName("Image").
 		WithFields(
@@ -1208,7 +1110,7 @@ func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[
 	return knownPaths, nil
 }
 
-func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (Image, error) {
+func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (WImage, error) {
 	result, err := w.Client.GraphQL().Get().
 		WithClassName("Image").
 		WithFields(
@@ -1253,12 +1155,12 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (Image, er
 		WithLimit(1).
 		Do(ctx)
 	if err != nil {
-		return Image{}, err
+		return WImage{}, err
 	}
 
 	data := w.getData(result)
 	if len(data) == 0 {
-		return Image{}, fmt.Errorf("image not found")
+		return WImage{}, fmt.Errorf("image not found")
 	}
 	return data[0], nil
 }

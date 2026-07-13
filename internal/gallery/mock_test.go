@@ -168,7 +168,7 @@ func (m *MockwService) EXPECT() *MockwServiceMockRecorder {
 }
 
 // ChangeGallery mocks base method.
-func (m *MockwService) ChangeGallery(ctx context.Context, newID int, images []db.Image) error {
+func (m *MockwService) ChangeGallery(ctx context.Context, newID int, images []db.WImage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ChangeGallery", ctx, newID, images)
 	ret0, _ := ret[0].(error)
@@ -182,7 +182,7 @@ func (mr *MockwServiceMockRecorder) ChangeGallery(ctx, newID, images any) *gomoc
 }
 
 // CopyToGallery mocks base method.
-func (m *MockwService) CopyToGallery(ctx context.Context, newGalleryID int, images []db.Image) error {
+func (m *MockwService) CopyToGallery(ctx context.Context, newGalleryID int, images []db.WImage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CopyToGallery", ctx, newGalleryID, images)
 	ret0, _ := ret[0].(error)
@@ -196,10 +196,10 @@ func (mr *MockwServiceMockRecorder) CopyToGallery(ctx, newGalleryID, images any)
 }
 
 // FindDublicates mocks base method.
-func (m *MockwService) FindDublicates(ctx context.Context, imageID string, galleryID, page, imagesPerPage int, threshold float32) ([]db.Image, error) {
+func (m *MockwService) FindDublicates(ctx context.Context, imageID string, galleryID, page, imagesPerPage int, threshold float32) ([]db.WImage, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindDublicates", ctx, imageID, galleryID, page, imagesPerPage, threshold)
-	ret0, _ := ret[0].([]db.Image)
+	ret0, _ := ret[0].([]db.WImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -211,10 +211,10 @@ func (mr *MockwServiceMockRecorder) FindDublicates(ctx, imageID, galleryID, page
 }
 
 // GetAll mocks base method.
-func (m *MockwService) GetAll(ctx context.Context, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, flagFilter, folderFilter string) ([]db.Image, error) {
+func (m *MockwService) GetAll(ctx context.Context, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, flagFilter, folderFilter string) ([]db.WImage, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAll", ctx, galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
-	ret0, _ := ret[0].([]db.Image)
+	ret0, _ := ret[0].([]db.WImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -241,10 +241,10 @@ func (mr *MockwServiceMockRecorder) GetGalleryCount(ctx, galleryID any) *gomock.
 }
 
 // GetInfo mocks base method.
-func (m *MockwService) GetInfo(ctx context.Context, imageID string) (db.Image, error) {
+func (m *MockwService) GetInfo(ctx context.Context, imageID string) (db.WImage, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInfo", ctx, imageID)
-	ret0, _ := ret[0].(db.Image)
+	ret0, _ := ret[0].(db.WImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -312,7 +312,7 @@ func (mr *MockwServiceMockRecorder) RemoveGalleryImages(ctx, galleryID any) *gom
 }
 
 // RemoveImage mocks base method.
-func (m *MockwService) RemoveImage(ctx context.Context, image db.Image) error {
+func (m *MockwService) RemoveImage(ctx context.Context, image db.WImage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveImage", ctx, image)
 	ret0, _ := ret[0].(error)
@@ -326,7 +326,7 @@ func (mr *MockwServiceMockRecorder) RemoveImage(ctx, image any) *gomock.Call {
 }
 
 // RemoveImages mocks base method.
-func (m *MockwService) RemoveImages(ctx context.Context, images []db.Image) error {
+func (m *MockwService) RemoveImages(ctx context.Context, images []db.WImage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveImages", ctx, images)
 	ret0, _ := ret[0].(error)
@@ -354,10 +354,10 @@ func (mr *MockwServiceMockRecorder) ResetDatabase(ctx any) *gomock.Call {
 }
 
 // SearchImage mocks base method.
-func (m *MockwService) SearchImage(ctx context.Context, search string, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, threshold float32, flagFilter string) ([]db.Image, error) {
+func (m *MockwService) SearchImage(ctx context.Context, search string, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, threshold float32, flagFilter string) ([]db.WImage, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SearchImage", ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
-	ret0, _ := ret[0].([]db.Image)
+	ret0, _ := ret[0].([]db.WImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -369,10 +369,10 @@ func (mr *MockwServiceMockRecorder) SearchImage(ctx, search, galleryID, sortBy, 
 }
 
 // SearchImage64 mocks base method.
-func (m *MockwService) SearchImage64(ctx context.Context, image string, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, threshold float32, flagFilter string) ([]db.Image, error) {
+func (m *MockwService) SearchImage64(ctx context.Context, image string, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, threshold float32, flagFilter string) ([]db.WImage, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SearchImage64", ctx, image, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
-	ret0, _ := ret[0].([]db.Image)
+	ret0, _ := ret[0].([]db.WImage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

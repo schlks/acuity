@@ -23,5 +23,4 @@ WORKDIR /app
 COPY --from=build-stage /app/bin/acuity .
 COPY --from=build-stage /app/web ./web
 
-EXPOSE 3000
 ENTRYPOINT ["./acuity"]

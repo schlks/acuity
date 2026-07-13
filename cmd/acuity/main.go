@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
+	"image/jpeg"
 	"log/slog"
 	"math"
 	"net/http"
@@ -13,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/buckket/go-blurhash"
 
 	"acuity/internal/config"
 	"acuity/pkg/db"
@@ -199,6 +204,20 @@ func main() {
 		"formatLens":        formatLens,
 		"formatFocalLength": formatFocalLength,
 		"formatIso":         formatIso,
+		"blurhashDataURI": func(hash string) template.CSS {
+			if hash == "" {
+				return ""
+			}
+			img, err := blurhash.Decode(hash, 32, 32, 1)
+			if err != nil {
+				return ""
+			}
+			var buf bytes.Buffer
+			if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
+				return ""
+			}
+			return template.CSS("url('data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()) + "')")
+		},
 		"formatDeepest": func(path string) string {
 			if path == "" {
 				return ""

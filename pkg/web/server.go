@@ -86,6 +86,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /gallery/{name}/scan", s.cancelScan)
 	mux.HandleFunc("POST /gallery/{name}/edit", s.editGallery)
 	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
+	mux.HandleFunc("GET	/gallery/{name}/count", s.handleGalleryCount)
 	mux.HandleFunc("GET	/gallery/{name}/images", s.getGalleryImages)
 	mux.HandleFunc("GET /api/progress", s.getGlobalProgress)
 	mux.HandleFunc("POST	/gallery", s.createGallery)
@@ -174,7 +175,12 @@ func (s *Server) resetDatabase(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	imageID := r.PathValue("id")
+	imageIDStr := r.PathValue("id")
+	imageID, err := strconv.Atoi(imageIDStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
 	flagStr := r.FormValue("flag")
 	flag, _ := strconv.Atoi(flagStr)
 
@@ -188,7 +194,7 @@ func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		ID   string
 		Flag int
-	}{ID: imageID, Flag: flag}
+	}{ID: imageIDStr, Flag: flag}
 	if err := s.Template.ExecuteTemplate(w, "flag-set", data); err != nil {
 		message := "Failed to update Flag"
 		slog.Error(message, slog.Any("error", err))
@@ -507,7 +513,7 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		var hasAct bool
 		var refresh bool
 		for _, g := range galleries {
-			expected := s.Service.ExpectedCount[g.ID]
+			expected := s.Service.GetExpectedCount(g.ID)
 			if expected > 0 {
 				hasAct = true
 				current, _ := s.Service.GetGalleryCount(ctx, g.ID)
@@ -634,15 +640,21 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	imageID := r.FormValue("imageID")
+	imageIDStr := r.FormValue("imageID")
 	name := r.PathValue("name")
-	if imageID == "" {
+	if imageIDStr == "" {
 		if name == "global" {
 			s.handleGlobalDuplicates(w, r)
 			return
 		} else {
 			http.Error(w, "Failed to get Image ID", http.StatusBadRequest)
 		}
+	}
+
+	imageID, err := strconv.Atoi(imageIDStr)
+	if err != nil {
+		http.Error(w, "Invalid Image ID", http.StatusBadRequest)
+		return
 	}
 
 	page := query.Int(r, "page", 1)
@@ -737,7 +749,7 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var image db.Image
+	var image db.WImage
 	image.ID = r.PathValue("id")
 	if image.ID == "" {
 		image.ID = r.FormValue("id")
@@ -778,28 +790,25 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}*/
 
-	imageIDsStr := r.FormValue("image_id")
-	var imageIDs []string
-	if imageIDsStr != "" {
-		imageIDs = strings.Split(imageIDsStr, ",")
-	}
+	if r.Method == http.MethodPost {
+		imageIDsStr := r.FormValue("image_id")
+		deleteDisk := r.FormValue("delete_disk") == "true"
+		var images []db.SImage
 
-	deleteDiskStr := r.FormValue("delete_disk")
-	deleteDisk := deleteDiskStr == "true"
-
-	var images []db.Image
-	for _, id := range imageIDs {
-		id = strings.TrimSpace(id)
-		if id != "" {
-			images = append(images, db.Image{ID: id})
+		for _, id := range strings.Split(imageIDsStr, ",") {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				idInt, _ := strconv.Atoi(id)
+				images = append(images, db.SImage{ID: idInt})
+			}
 		}
-	}
 
-	if err := s.Service.DeleteImages(ctx, images, deleteDisk); err != nil {
-		message := "Failed to delete Image"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
+		if err := s.Service.DeleteImages(ctx, images, deleteDisk); err != nil {
+			message := "Failed to delete Image"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": ""}`)
@@ -880,7 +889,9 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 
 	flagFilter := r.FormValue("flagFilter")
 	folderFilter := r.FormValue("folder")
+	start := time.Now()
 	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, flagFilter, folderFilter)
+	slog.Info("GetAllImages took", slog.Duration("duration", time.Since(start)))
 	if err != nil {
 		http.Error(w, "Images not found", http.StatusNotFound)
 		return
@@ -891,18 +902,22 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		nextPage = page + 1
 	}
 
-	count, _ := s.Service.GetGalleryCount(ctx, galleryID)
-	lastPage := count / s.Config.ImagesPerPage
-	if count%s.Config.ImagesPerPage != 0 {
-		lastPage++
-	}
-	if lastPage == 0 {
-		lastPage = 1
+	count := -1
+	lastPage := 1
+	if !s.Config.InfiniteScroll {
+		count, _ = s.Service.GetGalleryCount(ctx, galleryID)
+		lastPage = count / s.Config.ImagesPerPage
+		if count%s.Config.ImagesPerPage != 0 {
+			lastPage++
+		}
+		if lastPage == 0 {
+			lastPage = 1
+		}
 	}
 
 	data := struct {
 		GalleryName      string
-		Images           []db.Image
+		Images           []db.SImage
 		CurrentPage      int
 		PrevPage         int
 		NextPage         int
@@ -931,6 +946,26 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+
+	galleryID, err, ok := s.Service.GetGalleryID(name)
+	if err != nil && !ok {
+		if name == "Global" {
+			galleryID = 0
+		} else if name == "duplicates" {
+			galleryID = -1
+		} else {
+			http.Error(w, "Gallery not found", http.StatusNotFound)
+			return
+		}
+	}
+
+	count, _ := s.Service.GetGalleryCount(ctx, galleryID)
+	w.Write([]byte(fmt.Sprintf("%d Images", count)))
+}
+
 func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -946,13 +981,17 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	action := r.FormValue("batch_action")
 	sourceGalleryName := r.FormValue("source_gallery")
 
-	var images []db.Image
+	var images []db.SImage
 
 	if criteria == "selected" {
 		imageIDsStr := r.FormValue("image_ids")
 		if imageIDsStr != "" {
 			for _, id := range strings.Split(imageIDsStr, ",") {
-				images = append(images, db.Image{ID: id})
+				id = strings.TrimSpace(id)
+				if id != "" {
+					idInt, _ := strconv.Atoi(id)
+					images = append(images, db.SImage{ID: idInt})
+				}
 			}
 		}
 	} else {
@@ -1241,7 +1280,12 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := r.PathValue("id")
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
 	imageInfo, err := s.Service.GetImageInfo(ctx, id)
 	if err != nil {
 		message := "Failed to get Image Info"
@@ -1259,7 +1303,12 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	imageID := r.PathValue("id")
+	imageIDStr := r.PathValue("id")
+	imageID, err := strconv.Atoi(imageIDStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
 
 	ratingString := r.FormValue("rating")
 	rating, err := strconv.Atoi(ratingString)
@@ -1281,7 +1330,7 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 		ID     string
 		Rating int
 	}{
-		ID:     imageID,
+		ID:     imageIDStr,
 		Rating: rating,
 	}
 

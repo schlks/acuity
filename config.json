@@ -3,8 +3,9 @@
   "default_sort_by": "name",
   "default_sort_order": "asc",
   "grid_size": "medium",
-  "images_per_page": 1000,
-  "port": "3000",
+  "images_per_page": 50,
+  "infinite_scroll": true,
+  "port": "4000",
   "weaviate_host": "weaviate",
   "weaviate_port": ":50050"
 }

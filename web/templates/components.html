@@ -174,7 +174,7 @@
 		<span class="material-symbols-outlined" x-text="selectedImages.includes('{{.ID}}') ? 'check_circle' : 'radio_button_unchecked'"></span>
 	</button>-->
 	
-	<img src="/image?path={{.Path}}" data-id="{{.ID}}" data-rating="{{.Rating}}" data-flag="{{.Flag}}" alt="Gallery Image" loading="lazy">
+	<img src="/image?path={{.FilePath}}" data-id="{{.ID}}" :data-rating="rating" :data-flag="flag" data-rating="{{.Rating}}" data-flag="{{.Flag}}" alt="Gallery Image" loading="lazy" style="background-image: {{blurhashDataURI .Blurhash}}; background-size: cover; background-position: center;">
 	
 	<div class="rating-badge" x-show="rating > 0" x-transition style="{{if eq .Rating 0}}display: none;{{end}}">
 		<span class="material-symbols-outlined icon-filled">star</span>
@@ -208,11 +208,11 @@
 	</div>
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Folder</div>
-		<div style="word-break: break-all; font-family: monospace; font-size: 0.9rem;">{{formatDeepest .Path}}</div>
+		<div style="word-break: break-all; font-family: monospace; font-size: 0.9rem;">{{formatDeepest .FilePath}}</div>
 	</div>
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Path</div>
-		<div style="word-break: break-all; font-family: monospace; font-size: 0.8rem;">{{.Path}}</div>
+		<div style="word-break: break-all; font-family: monospace; font-size: 0.8rem;">{{.FilePath}}</div>
 	</div>
 	<div>
 		<div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">Size</div>

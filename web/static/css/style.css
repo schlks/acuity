@@ -477,13 +477,44 @@ body:not(.keyboard-navigating) .image-card:hover img {
     margin: auto;
 }
 .carousel-fade-active {
-    transition: opacity 0.2s ease-in-out !important;
+    transition: all 0.3s cubic-bezier(0.2, 0, 0, 1) !important;
 }
 .carousel-fade-from {
     opacity: 0 !important;
+    transform: scale(0.97) !important;
 }
 .carousel-fade-to {
     opacity: 1 !important;
+    transform: scale(1) !important;
+}
+
+.carousel-swipe-active {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.slide-forward .carousel-swipe-from {
+    opacity: 0 !important;
+    transform: translateX(100px) !important;
+}
+.slide-forward .carousel-swipe-to {
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+}
+.slide-forward .carousel-swipe-end {
+    opacity: 0 !important;
+    transform: translateX(-100px) !important;
+}
+
+.slide-backward .carousel-swipe-from {
+    opacity: 0 !important;
+    transform: translateX(-100px) !important;
+}
+.slide-backward .carousel-swipe-to {
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+}
+.slide-backward .carousel-swipe-end {
+    opacity: 0 !important;
+    transform: translateX(100px) !important;
 }
 .carousel-nav {
     position: absolute;

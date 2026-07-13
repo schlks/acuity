@@ -1,4 +1,12 @@
+let lastInputMethod = 'mouse';
+window.addEventListener('mousemove', () => lastInputMethod = 'mouse');
+
 window.addEventListener('keydown', (e) => {
+	// Track if user is navigating with keyboard
+	if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'h', 'j', 'k', 'l', 'H', 'J', 'K', 'L', 'Tab'].includes(e.key)) {
+		lastInputMethod = 'keyboard';
+	}
+
 	// If typing in an input, only allow Escape to blur it
 	if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
 		if (e.key === 'Escape') {
@@ -9,7 +17,16 @@ window.addEventListener('keydown', (e) => {
 	}
 
 	const isCarouselOpen = document.querySelector('.carousel-modal[open], #culling-modal[open]') !== null;
-	const targetCard = document.querySelector('.image-card:hover') || (document.activeElement && document.activeElement.classList.contains('image-card') ? document.activeElement : null);
+	
+	let targetCard = null;
+	const activeEl = document.activeElement && document.activeElement.classList.contains('image-card') ? document.activeElement : null;
+	const hoverEl = document.querySelector('.image-card:hover');
+	
+	if (lastInputMethod === 'keyboard' && activeEl) {
+		targetCard = activeEl;
+	} else {
+		targetCard = hoverEl || activeEl;
+	}
 	
 	switch(e.key) {
         case 'h': case 'H': case 'ArrowRight':
@@ -177,9 +194,7 @@ window.addEventListener('keydown', (e) => {
 				if (img && img.dataset.id) {
 					const id = img.dataset.id;
 					const badge = document.getElementById('flag-badge-' + id);
-					let currentFlag = 0;
-					if (badge && badge.innerHTML.includes('check_circle')) currentFlag = 1;
-					else if (badge && badge.innerHTML.includes('cancel')) currentFlag = -1;
+					let currentFlag = parseInt(img.dataset.flag) || 0;
 					
 					let newFlag = currentFlag === 1 ? 0 : 1;
 					
@@ -199,9 +214,7 @@ window.addEventListener('keydown', (e) => {
 				if (img && img.dataset.id) {
 					const id = img.dataset.id;
 					const badge = document.getElementById('flag-badge-' + id);
-					let currentFlag = 0;
-					if (badge && badge.innerHTML.includes('check_circle')) currentFlag = 1;
-					else if (badge && badge.innerHTML.includes('cancel')) currentFlag = -1;
+					let currentFlag = parseInt(img.dataset.flag) || 0;
 					
 					let newFlag = currentFlag === -1 ? 0 : -1;
 					fetch(`/image/${id}/flag`, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: `flag=${newFlag}`})
