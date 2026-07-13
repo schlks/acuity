@@ -20,6 +20,7 @@ type Config struct {
 	DefaultSortBy    string `mapstructure:"default_sort_by"`
 	DefaultSortOrder string `mapstructure:"default_sort_order"`
 	GridSize         string `mapstructure:"grid_size"`
+	InfiniteScroll   bool   `mapstructure:"infinite_scroll"`
 }
 
 func Load() (*Config, error) {
@@ -31,6 +32,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("default_sort_by", "name")
 	viper.SetDefault("default_sort_order", "desc")
 	viper.SetDefault("grid_size", "medium")
+	viper.SetDefault("infinite_scroll", false)
 
 	configDir := os.Getenv("CONFIG_DIR")
 	if configDir == "" {
@@ -67,6 +69,7 @@ func Save(cfg *Config) error {
 	viper.Set("images_per_page", cfg.ImagesPerPage)
 	viper.Set("default_sort_by", cfg.DefaultSortBy)
 	viper.Set("default_sort_order", cfg.DefaultSortOrder)
+	viper.Set("infinite_scroll", cfg.InfiniteScroll)
 
 	return viper.WriteConfig()
 }

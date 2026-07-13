@@ -211,18 +211,18 @@ func (mr *MockwServiceMockRecorder) FindDublicates(ctx, imageID, galleryID, page
 }
 
 // GetAll mocks base method.
-func (m *MockwService) GetAll(ctx context.Context, galleryID int, sortBy, sortOrder string, page, imagesPerPage int) ([]db.Image, error) {
+func (m *MockwService) GetAll(ctx context.Context, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, flagFilter, folderFilter string) ([]db.Image, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAll", ctx, galleryID, sortBy, sortOrder, page, imagesPerPage)
+	ret := m.ctrl.Call(m, "GetAll", ctx, galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
 	ret0, _ := ret[0].([]db.Image)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetAll indicates an expected call of GetAll.
-func (mr *MockwServiceMockRecorder) GetAll(ctx, galleryID, sortBy, sortOrder, page, imagesPerPage any) *gomock.Call {
+func (mr *MockwServiceMockRecorder) GetAll(ctx, galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAll", reflect.TypeOf((*MockwService)(nil).GetAll), ctx, galleryID, sortBy, sortOrder, page, imagesPerPage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAll", reflect.TypeOf((*MockwService)(nil).GetAll), ctx, galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
 }
 
 // GetGalleryCount mocks base method.
@@ -271,30 +271,30 @@ func (mr *MockwServiceMockRecorder) GetKnownPaths(ctx, galleryID any) *gomock.Ca
 }
 
 // GetVectors mocks base method.
-func (m *MockwService) GetVectors(ctx context.Context) ([]db.ImageVector, error) {
+func (m *MockwService) GetVectors(ctx context.Context, galleryIDs []int) ([]db.ImageVector, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVectors", ctx)
+	ret := m.ctrl.Call(m, "GetVectors", ctx, galleryIDs)
 	ret0, _ := ret[0].([]db.ImageVector)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetVectors indicates an expected call of GetVectors.
-func (mr *MockwServiceMockRecorder) GetVectors(ctx any) *gomock.Call {
+func (mr *MockwServiceMockRecorder) GetVectors(ctx, galleryIDs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVectors", reflect.TypeOf((*MockwService)(nil).GetVectors), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVectors", reflect.TypeOf((*MockwService)(nil).GetVectors), ctx, galleryIDs)
 }
 
 // ImportImages mocks base method.
-func (m *MockwService) ImportImages(ctx context.Context, filePaths []string, galleryID int) {
+func (m *MockwService) ImportImages(ctx context.Context, filePaths []string, galleryID int, progressCallback func(int)) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ImportImages", ctx, filePaths, galleryID)
+	m.ctrl.Call(m, "ImportImages", ctx, filePaths, galleryID, progressCallback)
 }
 
 // ImportImages indicates an expected call of ImportImages.
-func (mr *MockwServiceMockRecorder) ImportImages(ctx, filePaths, galleryID any) *gomock.Call {
+func (mr *MockwServiceMockRecorder) ImportImages(ctx, filePaths, galleryID, progressCallback any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportImages", reflect.TypeOf((*MockwService)(nil).ImportImages), ctx, filePaths, galleryID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImportImages", reflect.TypeOf((*MockwService)(nil).ImportImages), ctx, filePaths, galleryID, progressCallback)
 }
 
 // RemoveGalleryImages mocks base method.
@@ -354,33 +354,47 @@ func (mr *MockwServiceMockRecorder) ResetDatabase(ctx any) *gomock.Call {
 }
 
 // SearchImage mocks base method.
-func (m *MockwService) SearchImage(ctx context.Context, search string, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, threshold float32) ([]db.Image, error) {
+func (m *MockwService) SearchImage(ctx context.Context, search string, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, threshold float32, flagFilter string) ([]db.Image, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SearchImage", ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold)
+	ret := m.ctrl.Call(m, "SearchImage", ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
 	ret0, _ := ret[0].([]db.Image)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SearchImage indicates an expected call of SearchImage.
-func (mr *MockwServiceMockRecorder) SearchImage(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold any) *gomock.Call {
+func (mr *MockwServiceMockRecorder) SearchImage(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchImage", reflect.TypeOf((*MockwService)(nil).SearchImage), ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchImage", reflect.TypeOf((*MockwService)(nil).SearchImage), ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
 }
 
 // SearchImage64 mocks base method.
-func (m *MockwService) SearchImage64(ctx context.Context, image string, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, threshold float32) ([]db.Image, error) {
+func (m *MockwService) SearchImage64(ctx context.Context, image string, galleryID int, sortBy, sortOrder string, page, imagesPerPage int, threshold float32, flagFilter string) ([]db.Image, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SearchImage64", ctx, image, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold)
+	ret := m.ctrl.Call(m, "SearchImage64", ctx, image, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
 	ret0, _ := ret[0].([]db.Image)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SearchImage64 indicates an expected call of SearchImage64.
-func (mr *MockwServiceMockRecorder) SearchImage64(ctx, image, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold any) *gomock.Call {
+func (mr *MockwServiceMockRecorder) SearchImage64(ctx, image, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchImage64", reflect.TypeOf((*MockwService)(nil).SearchImage64), ctx, image, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchImage64", reflect.TypeOf((*MockwService)(nil).SearchImage64), ctx, image, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
+}
+
+// SetFlag mocks base method.
+func (m *MockwService) SetFlag(ctx context.Context, imageID string, flag int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetFlag", ctx, imageID, flag)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetFlag indicates an expected call of SetFlag.
+func (mr *MockwServiceMockRecorder) SetFlag(ctx, imageID, flag any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFlag", reflect.TypeOf((*MockwService)(nil).SetFlag), ctx, imageID, flag)
 }
 
 // SetRating mocks base method.
@@ -398,9 +412,11 @@ func (mr *MockwServiceMockRecorder) SetRating(ctx, imageID, rating any) *gomock.
 }
 
 // WriteBatchDB mocks base method.
-func (m *MockwService) WriteBatchDB(ctx context.Context, batch []*models.Object) {
+func (m *MockwService) WriteBatchDB(ctx context.Context, batch []*models.Object) int {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "WriteBatchDB", ctx, batch)
+	ret := m.ctrl.Call(m, "WriteBatchDB", ctx, batch)
+	ret0, _ := ret[0].(int)
+	return ret0
 }
 
 // WriteBatchDB indicates an expected call of WriteBatchDB.

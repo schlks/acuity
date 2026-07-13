@@ -289,6 +289,7 @@ func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
 	s.Config.DefaultSortBy = r.FormValue("sort_by")
 	s.Config.DefaultSortOrder = r.FormValue("sort_order")
 	s.Config.GridSize = r.FormValue("grid_size")
+	s.Config.InfiniteScroll = r.FormValue("infinite_scroll") == "true"
 
 	if err := config.Save(s.Config); err != nil {
 		slog.Error("Failed to save config", slog.Any("error", err))
@@ -900,25 +901,27 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		GalleryName string
-		Images      []db.Image
-		CurrentPage int
-		PrevPage    int
-		NextPage    int
-		HasNext     bool
-		LastPage    int
-		Count       int
-		Folder      string
+		GalleryName      string
+		Images           []db.Image
+		CurrentPage      int
+		PrevPage         int
+		NextPage         int
+		HasNext          bool
+		LastPage         int
+		Count            int
+		Folder           string
+		IsInfiniteAppend bool
 	}{
-		GalleryName: name,
-		Images:      images,
-		CurrentPage: page,
-		PrevPage:    page - 1,
-		NextPage:    nextPage,
-		HasNext:     nextPage != -1,
-		LastPage:    lastPage,
-		Count:       count,
-		Folder:      folderFilter,
+		GalleryName:      name,
+		Images:           images,
+		CurrentPage:      page,
+		PrevPage:         page - 1,
+		NextPage:         nextPage,
+		HasNext:          nextPage != -1,
+		LastPage:         lastPage,
+		Count:            count,
+		Folder:           folderFilter,
+		IsInfiniteAppend: s.Config.InfiniteScroll && r.URL.Query().Get("infinite") == "true",
 	}
 
 	// Rendert nur die Bilder-Kacheln aus dem neuen Template

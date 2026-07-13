@@ -34,10 +34,10 @@ type sService interface {
 }
 
 type wService interface {
-	ImportImages(ctx context.Context, filePaths []string, galleryID int)
+	ImportImages(ctx context.Context, filePaths []string, galleryID int, progressCallback func(count int))
 	RemoveGalleryImages(ctx context.Context, galleryID int) error
 	RemoveImage(ctx context.Context, image db.Image) error
-	WriteBatchDB(ctx context.Context, batch []*models.Object)
+	WriteBatchDB(ctx context.Context, batch []*models.Object) int
 	SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.Image, error)
 	SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.Image, error)
 	FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.Image, error)
@@ -58,6 +58,7 @@ type GalleryService struct {
 	sDB           sService
 	wDB           wService
 	ExpectedCount map[int]int
+	CurrentCount  map[int]int
 	cancelFuncs   map[int]context.CancelFunc
 	mu            sync.Mutex
 }
@@ -67,6 +68,7 @@ func NewService(sDB *db.SQLiteClient, wDB *db.WeaviateClient) *GalleryService {
 		sDB:           sDB,
 		wDB:           wDB,
 		ExpectedCount: make(map[int]int),
+		CurrentCount:  make(map[int]int),
 		cancelFuncs:   make(map[int]context.CancelFunc),
 	}
 }
@@ -174,6 +176,7 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 	importCtx, cancel := context.WithCancel(context.Background())
 	g.mu.Lock()
 	g.cancelFuncs[gallery.ID] = cancel
+	g.CurrentCount[gallery.ID] = currentCount
 	g.mu.Unlock()
 
 	go func() {
@@ -193,7 +196,13 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 			_ = g.DeleteImages(importCtx, imagesToDelete, false)
 		}
 		if len(filePaths) > 0 {
-			g.wDB.ImportImages(importCtx, filePaths, gallery.ID)
+			g.wDB.ImportImages(importCtx, filePaths, gallery.ID, func(count int) {
+				g.mu.Lock()
+				if _, ok := g.CurrentCount[gallery.ID]; ok {
+					g.CurrentCount[gallery.ID] += count
+				}
+				g.mu.Unlock()
+			})
 		}
 	}()
 	return nil
@@ -433,6 +442,14 @@ func (g *GalleryService) ResetDatabase(ctx context.Context) error {
 }
 
 func (g *GalleryService) GetGalleryCount(ctx context.Context, galleryID int) (int, error) {
+	g.mu.Lock()
+	expected := g.ExpectedCount[galleryID]
+	current, hasCurrent := g.CurrentCount[galleryID]
+	g.mu.Unlock()
+
+	if expected > 0 && hasCurrent {
+		return current, nil
+	}
 	return g.wDB.GetGalleryCount(ctx, galleryID)
 }
 

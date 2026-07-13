@@ -33,8 +33,9 @@ type WeaviateClient struct {
 }
 
 type BatchRequest struct {
-	Objects []*models.Object
-	Wg      *sync.WaitGroup
+	Objects  []*models.Object
+	Wg       *sync.WaitGroup
+	Callback func(successCount int)
 }
 
 type ImageVector struct {
@@ -226,12 +227,15 @@ func (w *WeaviateClient) InitSchema() error {
 func (w *WeaviateClient) batchWriterLoop() {
 	ctx := context.Background()
 	for req := range w.Chan {
-		w.WriteBatchDB(ctx, req.Objects)
+		successCount := w.WriteBatchDB(ctx, req.Objects)
+		if req.Callback != nil {
+			req.Callback(successCount)
+		}
 		req.Wg.Done()
 	}
 }
 
-func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, galleryID int) {
+func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, galleryID int, progressCallback func(count int)) {
 	batchSize := 43
 	threads := runtime.NumCPU()
 	maxWorkers := max(1, threads-2)
@@ -267,13 +271,29 @@ func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, g
 			batch = append(batch, obj)
 			if len(batch) >= batchSize {
 				importWg.Add(1)
-				w.Chan <- BatchRequest{Objects: batch, Wg: &importWg}
+				w.Chan <- BatchRequest{
+					Objects: batch,
+					Wg:      &importWg,
+					Callback: func(count int) {
+						if progressCallback != nil {
+							progressCallback(count)
+						}
+					},
+				}
 				batch = make([]*models.Object, 0, batchSize)
 			}
 		}
 		if len(batch) > 0 {
 			importWg.Add(1)
-			w.Chan <- BatchRequest{Objects: batch, Wg: &importWg}
+			w.Chan <- BatchRequest{
+				Objects: batch,
+				Wg:      &importWg,
+				Callback: func(count int) {
+					if progressCallback != nil {
+						progressCallback(count)
+					}
+				},
+			}
 		}
 		importWg.Wait()
 		close(done)
@@ -633,7 +653,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []Image {
 	return images
 }
 
-func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) {
+func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) int {
 	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	res, err := w.Client.Batch().
@@ -642,6 +662,7 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 		Do(ctxTimeout)
 	if err != nil {
 		slog.Error("Error during batch write to Weaviate", slog.Any("error", err))
+		return 0
 	} else {
 		successCount := 0
 		failedCount := 0
@@ -660,6 +681,7 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 			}
 		}
 		slog.Info("Batch write to Weaviate completed", slog.Int("success", successCount), slog.Int("failed", failedCount))
+		return successCount
 	}
 }
 
