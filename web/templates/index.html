@@ -559,7 +559,7 @@
 						@mousedown="startDrag"
 						@mousemove.window="doDrag"
 						@mouseup.window="stopDrag"
-						:style="`transform: translate(${panX}px, ${panY}px) scale(${scale}); cursor: ${scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'}; transition: ${isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0, 0.2, 1)'};`">
+						:style="{ transform: `translate(${panX}px, ${panY}px) scale(${scale})`, cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default', transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0, 0.2, 1)' }">
 				</template>
 				
 				<div x-show="isLoading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 5;">
