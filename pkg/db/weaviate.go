@@ -720,54 +720,6 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (WImage, e
 	return data[0], nil
 }
 
-func (w *WeaviateClient) GetGalleryCount(ctx context.Context, galleryID int) (int, error) {
-	result, err := w.Client.GraphQL().Aggregate().
-		WithClassName("Image").
-		WithFields(
-			graphql.Field{
-				Name: "meta", Fields: []graphql.Field{
-					{Name: "count"},
-				},
-			},
-		).
-		WithWhere(
-			filters.Where().
-				WithPath([]string{"gallery_id"}).
-				WithOperator(filters.Equal).
-				WithValueInt(int64(galleryID)),
-		).
-		Do(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	aggMap, ok := result.Data["Aggregate"].(map[string]any)
-	if !ok {
-		return 0, fmt.Errorf("missing Aggregate in response")
-	}
-
-	imageArr, ok := aggMap["Image"].([]any)
-	if !ok || len(imageArr) == 0 {
-		return 0, nil
-	}
-
-	imgObj, ok := imageArr[0].(map[string]any)
-	if !ok {
-		return 0, fmt.Errorf("invalid Image object format")
-	}
-
-	metaObj, ok := imgObj["meta"].(map[string]any)
-	if !ok {
-		return 0, fmt.Errorf("missing meta in response")
-	}
-
-	countFloat, ok := metaObj["count"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("missing count in meta")
-	}
-
-	return int(countFloat), nil
-}
 
 func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]ImageVector, error) {
 	var images []ImageVector

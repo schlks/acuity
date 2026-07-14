@@ -130,8 +130,10 @@ func formatIso(iso string) string {
 	return iso
 }
 
-var lensMetaRegex = regexp.MustCompile(`(?i)\b\d+(\.\d+)?mm\b|\bf/\d+(\.\d+)?\b`)
-var spaceRegex = regexp.MustCompile(`\s+`)
+var (
+	lensMetaRegex = regexp.MustCompile(`(?i)\b\d+(\.\d+)?mm\b|\bf/\d+(\.\d+)?\b`)
+	spaceRegex    = regexp.MustCompile(`\s+`)
+)
 
 func formatLens(make, model string) string {
 	make = strings.TrimSpace(make)
@@ -152,17 +154,18 @@ func formatLens(make, model string) string {
 }
 
 func main() {
-	// Logger so konfigurieren, dass Datei und Funktion ausgegeben werden
-	opts := &slog.HandlerOptions{
-		AddSource: true,
-	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, opts))
-	slog.SetDefault(logger)
-
 	Config, err := config.Load()
 	if err != nil {
-		slog.Error("Failed to load config", slog.Any("error", err))
+		fmt.Println("Failed to load config")
 		os.Exit(1)
+	}
+
+	if Config.Debug {
+		opts := &slog.HandlerOptions{
+			AddSource: true,
+		}
+		logger := slog.New(slog.NewTextHandler(os.Stdout, opts))
+		slog.SetDefault(logger)
 	}
 
 	wClient, err := db.NewWeaviateClient(Config.WeaviateHost + Config.WeaviatePort)

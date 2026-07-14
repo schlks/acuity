@@ -21,6 +21,7 @@ type Config struct {
 	DefaultSortOrder string `mapstructure:"default_sort_order"`
 	GridSize         string `mapstructure:"grid_size"`
 	InfiniteScroll   bool   `mapstructure:"infinite_scroll"`
+	Debug			 bool   `mapstructure:"debug"`
 }
 
 func Load() (*Config, error) {
@@ -33,6 +34,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("default_sort_order", "desc")
 	viper.SetDefault("grid_size", "medium")
 	viper.SetDefault("infinite_scroll", false)
+	viper.SetDefault("debug", false)
+
 
 	configDir := os.Getenv("CONFIG_DIR")
 	if configDir == "" {

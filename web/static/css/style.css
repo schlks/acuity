@@ -172,10 +172,10 @@ dialog.closing::backdrop {
 }
 .nav-item:hover {
 	color: var(--text);
-    box-shadow: 0 0 15px rgba(64, 124, 245, 0.3);
+	background: color-mix(in srgb, var(--secondary) 30%, transparent);
 }
 .nav-item.active {
-	background-color: color-mix(in srgb, var(--primary-hover) 20%, transparent);
+	background-color: color-mix(in srgb, var(--primary) 70%, transparent);
 	color: var(--text);
 }
 
@@ -213,6 +213,7 @@ dialog.closing::backdrop {
 }
 .btn-icon:hover {
 	color: var(--text);
+	background: var(--primary-hover);
     box-shadow: 0 0 15px rgba(64, 124, 245, 0.3);
 }
 

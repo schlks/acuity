@@ -4,7 +4,6 @@
 package gallery
 
 import (
-	"acuity/pkg/db"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -21,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"acuity/pkg/db"
+
 	"github.com/buckket/go-blurhash"
 	"github.com/evanoberholster/imagemeta"
 	"github.com/go-openapi/strfmt"
@@ -35,7 +36,7 @@ type sService interface {
 	InitTable() error
 	InsertGallery(path string, name string) error
 	RemoveGallery(id int) error
-	RemoveImage(id int) error 
+	RemoveImage(id int) error
 	GetGalleryByName(name string) (db.Gallery, error)
 	GetGalleryByID(id int) (db.Gallery, error)
 	GetAllGalleries() ([]db.Gallery, error)
@@ -62,7 +63,6 @@ type wService interface {
 	GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.WImage, error)
 	GetKnownPaths(ctx context.Context, galleryID int) (map[string]string, error)
 	GetInfo(ctx context.Context, imageID string) (db.WImage, error)
-	GetGalleryCount(ctx context.Context, galleryID int) (int, error)
 	GetVectors(ctx context.Context, galleryIDs []int) ([]db.ImageVector, error)
 	ResetDatabase(ctx context.Context) error
 	SetRating(ctx context.Context, imageID string, rating int) error
@@ -185,7 +185,7 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 		return err
 	}
 
-	currentCount, _ := g.wDB.GetGalleryCount(ctx, gallery.ID)
+	currentCount, _ := g.sDB.GetGalleryCount(gallery.ID)
 	importCtx, cancel := context.WithCancel(context.Background())
 	g.mu.Lock()
 	g.ExpectedCount[gallery.ID] = currentCount + len(filePaths) - len(missingPaths)
@@ -412,7 +412,7 @@ func (g *GalleryService) SearchImages(ctx context.Context, search string, galler
 		if err != nil {
 			return nil, err
 		}
-    	sImages = append(sImages, sImage)
+		sImages = append(sImages, sImage)
 	}
 	return sImages, nil
 }
@@ -428,7 +428,7 @@ func (g *GalleryService) SearchImages64(ctx context.Context, search string, gall
 		if err != nil {
 			return nil, err
 		}
-    	sImages = append(sImages, sImage)
+		sImages = append(sImages, sImage)
 	}
 	return sImages, nil
 }
@@ -452,11 +452,9 @@ func (g *GalleryService) ConvertImage(file []byte) (string, error) {
 func (g *GalleryService) DeleteImage(ctx context.Context, image db.SImage, deleteDisk bool) error {
 	message := fmt.Sprintf("Deleting: %s", image.FilePath)
 	slog.Info(message)
-	
-	
+
 	uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(image.FilePath+strconv.Itoa(image.GalleryID))).String()
 	wImage := db.WImage{ID: uuidStr, Path: image.FilePath}
-
 
 	if err := g.wDB.RemoveImage(ctx, wImage); err != nil {
 		return err
@@ -529,7 +527,7 @@ func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []
 			fileName := filepath.Base(img.FilePath)
 			newPath := filepath.Join(targetGallery.Path, fileName)
 
-			os.MkdirAll(targetGallery.Path, 0755)
+			os.MkdirAll(targetGallery.Path, 0o755)
 
 			if err := os.Rename(img.FilePath, newPath); err == nil {
 				img.FilePath = newPath
@@ -537,7 +535,7 @@ func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []
 				// cross-device fallback
 				input, err := os.ReadFile(img.FilePath)
 				if err == nil {
-					if err := os.WriteFile(newPath, input, 0644); err == nil {
+					if err := os.WriteFile(newPath, input, 0o644); err == nil {
 						os.Remove(img.FilePath)
 						img.FilePath = newPath
 					} else {
@@ -567,11 +565,11 @@ func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, images []
 			fileName := filepath.Base(img.FilePath)
 			newPath := filepath.Join(targetGallery.Path, fileName)
 
-			os.MkdirAll(targetGallery.Path, 0755)
+			os.MkdirAll(targetGallery.Path, 0o755)
 
 			input, err := os.ReadFile(img.FilePath)
 			if err == nil {
-				if err := os.WriteFile(newPath, input, 0644); err == nil {
+				if err := os.WriteFile(newPath, input, 0o644); err == nil {
 					img.FilePath = newPath
 				} else {
 					return fmt.Errorf("failed to write copy %s: %w", newPath, err)
