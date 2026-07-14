@@ -42,18 +42,18 @@ type sService interface {
 	InsertImage(image []db.SImage) error
 	GetAllImages(galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.SImage, error)
 	GetImageByID(id int) (db.SImage, error)
+	GetImageByPath(path string) (db.SImage, error)
 	GetGalleryCount(galleryID int) (int, error)
 	UpdateImageFlag(id int, flag int) error
 	UpdateImageRating(id int, rating int) error
 }
 
 type wService interface {
-	ImportImages(ctx context.Context, filePaths []string, galleryID int, progressCallback func(count int))
 	RemoveGalleryImages(ctx context.Context, galleryID int) error
 	RemoveImage(ctx context.Context, image db.WImage) error
 	WriteBatchDB(ctx context.Context, batch []*models.Object) int
-	SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.WImage, error)
-	SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.WImage, error)
+	SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]db.WImage, error)
+	SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]db.WImage, error)
 	FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.WImage, error)
 	ChangeGallery(ctx context.Context, newID int, images []db.WImage) error
 	CopyToGallery(ctx context.Context, newGalleryID int, images []db.WImage) error
@@ -226,7 +226,7 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 		Weaviate db.WImage
 		SQLite   db.SImage
 	}
-	batchSize := 43
+	batchSize := 50
 	threads := runtime.NumCPU()
 	maxWorkers := max(1, threads-2)
 
@@ -321,8 +321,8 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 
 			// Generate Blurhash
 			smallImgOptions := bimg.Options{
-				Width:  64,
-				Height: 64,
+				Width:  128,
+				Height: 128,
 				Crop:   false,
 			}
 			smallBuffer, err := bimgImg.Process(smallImgOptions)
@@ -400,12 +400,36 @@ func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string, sortB
 	return files, nil
 }
 
-func (g *GalleryService) SearchImages(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.WImage, error) {
-	return g.wDB.SearchImage(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
+func (g *GalleryService) SearchImages(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.SImage, error) {
+	images, err := g.wDB.SearchImage(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold)
+	if err != nil {
+		return nil, err
+	}
+	var sImages []db.SImage
+	for _, img := range images {
+		sImage, err := g.sDB.GetImageByPath(img.Path)
+		if err != nil {
+			return nil, err
+		}
+    	sImages = append(sImages, sImage)
+	}
+	return sImages, nil
 }
 
-func (g *GalleryService) SearchImages64(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.WImage, error) {
-	return g.wDB.SearchImage64(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold, flagFilter)
+func (g *GalleryService) SearchImages64(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.SImage, error) {
+	images, err := g.wDB.SearchImage64(ctx, search, galleryID, sortBy, sortOrder, page, imagesPerPage, threshold)
+	if err != nil {
+		return nil, err
+	}
+	var sImages []db.SImage
+	for _, img := range images {
+		sImage, err := g.sDB.GetImageByPath(img.Path)
+		if err != nil {
+			return nil, err
+		}
+    	sImages = append(sImages, sImage)
+	}
+	return sImages, nil
 }
 
 func (g *GalleryService) GetAllImages(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.SImage, error) {
@@ -646,13 +670,13 @@ func (g *GalleryService) EditGalleryName(id int, newName string) error {
 	return g.sDB.UpdateGallery(id, newName)
 }
 
-func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold float64, galleryIDs []int) ([][]db.ImageVector, error) {
+func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold float64, galleryIDs []int) ([][]db.SImage, error) {
 	allImages, err := g.wDB.GetVectors(ctx, galleryIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	var groups [][]db.ImageVector
+	var groups [][]db.SImage
 	visited := make(map[string]bool)
 
 	for i, imgA := range allImages {
@@ -660,7 +684,7 @@ func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold flo
 			continue
 		}
 
-		var currentGroup []db.ImageVector
+		var currentGroup []db.SImage
 
 		for j := i + 1; j < len(allImages); j++ {
 			imgB := allImages[j]
@@ -671,9 +695,17 @@ func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold flo
 			distance := 1.0 - cosineSimilarity(imgA.Vector, imgB.Vector)
 			if distance <= threshold {
 				if len(currentGroup) == 0 {
-					currentGroup = append(currentGroup, imgA)
+					sImageA, err := g.sDB.GetImageByPath(imgA.Path)
+					if err != nil {
+						return nil, err
+					}
+					currentGroup = append(currentGroup, sImageA)
 				}
-				currentGroup = append(currentGroup, imgB)
+				sImageB, err := g.sDB.GetImageByPath(imgB.Path)
+				if err != nil {
+					return nil, err
+				}
+				currentGroup = append(currentGroup, sImageB)
 				visited[imgB.ID] = true
 			}
 		}

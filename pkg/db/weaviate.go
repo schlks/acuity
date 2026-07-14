@@ -1,13 +1,10 @@
+// TODO: fix image import and other retrieval funktions
 package db
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,10 +18,7 @@ import (
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
 
-	"github.com/evanoberholster/imagemeta"
-	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
-	"github.com/h2non/bimg"
 )
 
 type WeaviateClient struct {
@@ -50,6 +44,8 @@ type WImage struct {
 	Path      string
 	Base64    string
 	GalleryID string
+	Distance  float64
+	Flag 	  int
 }
 
 func NewWeaviateClient(host string) (*WeaviateClient, error) {
@@ -149,273 +145,6 @@ func (w *WeaviateClient) batchWriterLoop() {
 	}
 }
 
-func (w *WeaviateClient) ImportImages(ctx context.Context, filePaths []string, galleryID int, progressCallback func(count int)) {
-	batchSize := 43
-	threads := runtime.NumCPU()
-	maxWorkers := max(1, threads-2)
-
-	resultChan := make(chan WImage, batchSize)
-	done := make(chan struct{})
-
-	go func() {
-		var batch []*models.Object
-		var importWg sync.WaitGroup
-
-		for result := range resultChan {
-			id := uuid.NewMD5(uuid.NameSpaceURL, []byte(result.Path+strconv.Itoa(galleryID))).String()
-			obj := &models.Object{
-				ID:    strfmt.UUID(id),
-				Class: "Image",
-				Properties: map[string]any{
-					"filepath":   result.Path,
-					"image":      result.Base64,
-					"gallery_id": galleryID,
-				},
-			}
-			batch = append(batch, obj)
-			if len(batch) >= batchSize {
-				importWg.Add(1)
-				w.Chan <- BatchRequest{
-					Objects: batch,
-					Wg:      &importWg,
-					Callback: func(count int) {
-						if progressCallback != nil {
-							progressCallback(count)
-						}
-					},
-				}
-				batch = make([]*models.Object, 0, batchSize)
-			}
-		}
-		if len(batch) > 0 {
-			importWg.Add(1)
-			w.Chan <- BatchRequest{
-				Objects: batch,
-				Wg:      &importWg,
-				Callback: func(count int) {
-					if progressCallback != nil {
-						progressCallback(count)
-					}
-				},
-			}
-		}
-		importWg.Wait()
-		close(done)
-	}()
-
-	isSpecialExt := func(ext string) bool {
-		rawExts := map[string]bool{
-			".nef": true, ".cr2": true, ".cr3": true, ".arw": true,
-			".dng": true, ".raf": true, ".orf": true, ".rw2": true, ".srw": true,
-			".avif": true, ".avifs": true, ".avis": true, ".heic": true, ".heif": true,
-			".mp4": true, ".webm": true, ".gif": true,
-		}
-		return rawExts[strings.ToLower(ext)]
-	}
-
-	g := new(errgroup.Group)
-	g.SetLimit(maxWorkers)
-
-	for _, path := range filePaths {
-		g.Go(func() error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-
-			cameraDetails := map[string]any{}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				slog.Error("Error decoding image", slog.String("path", path), slog.Any("error", err))
-				return err
-			}
-
-			bimgImg := bimg.NewImage(data)
-
-			var width, height int
-
-			if isSpecialExt(filepath.Ext(path)) {
-				ctxCmd, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				cmd := exec.CommandContext(ctxCmd, "exiftool", "-ImageWidth", "-ImageHeight", "-Make", "-LensMake", "-LensModel", "-ISO", "-FocalLength", "-ShutterSpeed", "-Flash", "-Aperture", "-DateTimeOriginal", "-S", "-n", path)
-				if out, err := cmd.Output(); err == nil {
-					lines := strings.Split(string(out), "\n")
-					for _, line := range lines {
-						parts := strings.SplitN(line, ":", 2)
-						if len(parts) != 2 {
-							continue
-						}
-						key := strings.TrimSpace(parts[0])
-						val := strings.TrimSpace(parts[1])
-						switch key {
-						case "ImageWidth":
-							width, _ = strconv.Atoi(val)
-						case "ImageHeight":
-							height, _ = strconv.Atoi(val)
-						case "Make":
-							cameraDetails["make"] = val
-						case "LensMake":
-							cameraDetails["lens_make"] = val
-						case "LensModel":
-							cameraDetails["lens_model"] = val
-						case "ISO":
-							cameraDetails["iso"] = val
-						case "FocalLength":
-							cameraDetails["focal_length"] = val
-						case "ShutterSpeed":
-							cameraDetails["shutter_speed"] = val
-						case "Flash":
-							cameraDetails["flash"] = val != "0"
-						case "Aperture":
-							cameraDetails["aperture"] = val
-						case "DateTimeOriginal":
-							cameraDetails["date_time_original"] = val
-						}
-					}
-				}
-			}
-
-			if width == 0 || height == 0 {
-				bimgSize, err := bimgImg.Size()
-				if err == nil {
-					width = bimgSize.Width
-					height = bimgSize.Height
-				}
-			}
-
-			var resolution int
-			var aspectRatio float64
-
-			if width > 0 && height > 0 {
-				resolution = width * height
-				aspectRatio = float64(width) / float64(height)
-			}
-
-			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
-			if err != nil {
-				// Fallback to calling vips via exec if bimg fails (e.g., for some AVIF/HEIC files)
-				tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("acuity_conv_%d.jpg", time.Now().UnixNano()))
-				ctxCmd, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-				cmd := exec.CommandContext(ctxCmd, "vips", "copy", path, tmpFile)
-				if vipsErr := cmd.Run(); vipsErr == nil {
-					jpegBuffer, err = os.ReadFile(tmpFile)
-					os.Remove(tmpFile)
-				}
-				if err != nil {
-					// Fallback for videos/animations via ffmpeg
-					cmdFfmpeg := exec.CommandContext(ctxCmd, "ffmpeg", "-y", "-i", path, "-vframes", "1", "-q:v", "2", tmpFile)
-					if ffmpegErr := cmdFfmpeg.Run(); ffmpegErr == nil {
-						jpegBuffer, err = os.ReadFile(tmpFile)
-						os.Remove(tmpFile)
-					}
-				}
-				if err != nil {
-					slog.Error("Error converting image/video to JPEG preview", slog.String("path", path), slog.Any("error", err))
-					return nil
-				}
-			}
-
-			stat, err := os.Stat(path)
-			var modTime time.Time
-			var imgSize float64
-			if err == nil {
-				modTime = stat.ModTime()
-				imgSize = float64(stat.Size())
-			} else {
-				modTime = time.Now()
-				imgSize = float64(stat.Size())
-			}
-
-			fileDate := modTime.Format(time.RFC3339)
-			takenDate := fileDate
-
-			if val, ok := cameraDetails["date_time_original"].(string); ok {
-				tm, err := time.Parse("2006:01:02 15:04:05-07:00", val)
-				if err != nil {
-					tm, err = time.Parse("2006:01:02 15:04:05", val)
-				}
-				if err == nil {
-					takenDate = tm.Format(time.RFC3339)
-				}
-				delete(cameraDetails, "date_time_original")
-			}
-
-			file, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer func(file *os.File) {
-				err := file.Close()
-				if err != nil {
-					return
-				}
-			}(file)
-			x, err := imagemeta.Decode(file)
-			if err != nil {
-				if !strings.Contains(strings.ToLower(err.Error()), "unsupported") {
-					slog.Warn("No Exif data found", slog.String("path", path), slog.Any("error", err))
-				}
-			} else {
-				tm := x.OriginalDate()
-				if !tm.IsZero() {
-					takenDate = tm.Format(time.RFC3339)
-				}
-				if cameraDetails["make"] == nil {
-					cameraDetails["make"] = x.CameraMake()
-				}
-				if cameraDetails["lens_make"] == nil {
-					cameraDetails["lens_make"] = x.ExifIFD.LensMake
-				}
-				if cameraDetails["lens_model"] == nil {
-					cameraDetails["lens_model"] = x.ExifIFD.LensModel
-				}
-				if cameraDetails["iso"] == nil {
-					cameraDetails["iso"] = fmt.Sprintf("%v", x.ExifIFD.ISOSpeedRatings)
-				}
-				if cameraDetails["focal_length"] == nil {
-					cameraDetails["focal_length"] = x.ExifIFD.FocalLength.String()
-				}
-				if cameraDetails["shutter_speed"] == nil {
-					cameraDetails["shutter_speed"] = x.ExifIFD.ShutterSpeedValue.String()
-				}
-				if cameraDetails["flash"] == nil {
-					cameraDetails["flash"] = x.ExifIFD.Flash.Fired()
-				}
-				if cameraDetails["aperture"] == nil {
-					cameraDetails["aperture"] = x.ExifIFD.ApertureValue.String()
-				}
-			}
-
-			base64Image := base64.StdEncoding.EncodeToString(jpegBuffer)
-
-			// Bypass unused variable errors during migration
-			_ = resolution
-			_ = aspectRatio
-			_ = imgSize
-			_ = takenDate
-			_ = fileDate
-			_ = cameraDetails
-
-			resultChan <- WImage{
-				Path:   path,
-				Base64: base64Image,
-				// NOTE: EXIF metadata variables are available here (fileDate, imgSize, etc.)
-				// ready to be inserted into SQLite!
-			}
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		slog.Error("Errors occurred while importing images", slog.Any("error", err))
-	}
-
-	close(resultChan)
-	<-done
-}
-
 func (w *WeaviateClient) RemoveGalleryImages(ctx context.Context, galleryID int) error {
 	filter := filters.Where().
 		WithPath([]string{"gallery_id"}).
@@ -504,30 +233,6 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 				var size, aspectRatio float64
 				var cameraDetails map[string]any
 
-				if val, ok := imgProps["rating"].(float64); ok {
-					rating = int(val)
-				}
-				if val, ok := imgProps["extension"].(string); ok {
-					extension = val
-				}
-				if val, ok := imgProps["date"].(string); ok {
-					date = val
-				}
-				if val, ok := imgProps["taken"].(string); ok {
-					taken = val
-				}
-				if val, ok := imgProps["size"].(float64); ok {
-					size = float64(val)
-				}
-				if val, ok := imgProps["resolution"].(float64); ok {
-					resolution = int(val)
-				}
-				if val, ok := imgProps["aspectRatio"].(float64); ok {
-					aspectRatio = val
-				}
-				if val, ok := imgProps["aspect_ratio"].(float64); ok {
-					aspectRatio = val
-				}
 				if val, ok := imgProps["flag"].(float64); ok {
 					flag = int(val)
 				}
@@ -555,7 +260,6 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 					ID:     id,
 					Path:   filePath,
 					Base64: image,
-					// TODO: Other metadata now comes from SQLite
 				})
 			}
 		}
@@ -596,7 +300,7 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 	}
 }
 
-func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]WImage, error) {
+func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
 	nearText := w.Client.GraphQL().
 		NearTextArgBuilder().
 		WithConcepts([]string{search}).
@@ -607,26 +311,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 		WithFields(
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "rating"},
-			graphql.Field{Name: "extension"},
-			graphql.Field{Name: "date"},
-			graphql.Field{Name: "taken"},
-			graphql.Field{Name: "size"},
-			graphql.Field{Name: "resolution"},
-			graphql.Field{Name: "aspect_ratio"},
-			graphql.Field{
-				Name: "camera_details",
-				Fields: []graphql.Field{
-					{Name: "make"},
-					{Name: "lens_make"},
-					{Name: "lens_model"},
-					{Name: "iso"},
-					{Name: "focal_length"},
-					{Name: "shutter_speed"},
-					{Name: "flash"},
-					{Name: "aperture"},
-				},
-			},
+			graphql.Field{Name: "image"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -643,24 +328,6 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
 			WithValueInt(int64(galleryID))
-	}
-
-	if flagFilter != "" && flagFilter != "any" {
-		flagVal, err := strconv.Atoi(flagFilter)
-		if err == nil {
-			flagCond := filters.Where().
-				WithPath([]string{"flag"}).
-				WithOperator(filters.Equal).
-				WithValueNumber(float64(flagVal))
-
-			if whereFilter != nil {
-				whereFilter = filters.Where().
-					WithOperator(filters.And).
-					WithOperands([]*filters.WhereBuilder{whereFilter, flagCond})
-			} else {
-				whereFilter = flagCond
-			}
-		}
 	}
 
 	if whereFilter != nil {
@@ -676,20 +343,6 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 			WithOffset(page * imagesPerPage)
 	}
 
-	var order graphql.SortOrder
-
-	switch strings.ToLower(sortOrder) {
-	case "desc":
-		order = graphql.Desc
-	case "asc":
-		order = graphql.Asc
-	}
-	sort := graphql.Sort{
-		Path:  []string{sortBy},
-		Order: order,
-	}
-	query = query.WithSort(sort)
-
 	result, err := query.Do(ctx)
 	if err != nil {
 		return nil, err
@@ -699,7 +352,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 	return images, nil
 }
 
-func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]WImage, error) {
+func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
 	nearImage := w.Client.GraphQL().
 		NearImageArgBuilder().
 		WithImage(image).
@@ -710,26 +363,7 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 		WithFields(
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "rating"},
-			graphql.Field{Name: "extension"},
-			graphql.Field{Name: "date"},
-			graphql.Field{Name: "taken"},
-			graphql.Field{Name: "size"},
-			graphql.Field{Name: "resolution"},
-			graphql.Field{Name: "aspect_ratio"},
-			graphql.Field{
-				Name: "camera_details",
-				Fields: []graphql.Field{
-					{Name: "make"},
-					{Name: "lens_make"},
-					{Name: "lens_model"},
-					{Name: "iso"},
-					{Name: "focal_length"},
-					{Name: "shutter_speed"},
-					{Name: "flash"},
-					{Name: "aperture"},
-				},
-			},
+			graphql.Field{Name: "image"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -746,24 +380,6 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 			WithPath([]string{"gallery_id"}).
 			WithOperator(filters.Equal).
 			WithValueInt(int64(galleryID))
-	}
-
-	if flagFilter != "" && flagFilter != "any" {
-		flagVal, err := strconv.Atoi(flagFilter)
-		if err == nil {
-			flagCond := filters.Where().
-				WithPath([]string{"flag"}).
-				WithOperator(filters.Equal).
-				WithValueNumber(float64(flagVal))
-
-			if whereFilter != nil {
-				whereFilter = filters.Where().
-					WithOperator(filters.And).
-					WithOperands([]*filters.WhereBuilder{whereFilter, flagCond})
-			} else {
-				whereFilter = flagCond
-			}
-		}
 	}
 
 	if whereFilter != nil {
@@ -798,26 +414,7 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, gal
 		WithFields(
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "rating"},
-			graphql.Field{Name: "extension"},
-			graphql.Field{Name: "date"},
-			graphql.Field{Name: "taken"},
-			graphql.Field{Name: "size"},
-			graphql.Field{Name: "resolution"},
-			graphql.Field{Name: "aspect_ratio"},
-			graphql.Field{
-				Name: "camera_details",
-				Fields: []graphql.Field{
-					{Name: "make"},
-					{Name: "lens_make"},
-					{Name: "lens_model"},
-					{Name: "iso"},
-					{Name: "focal_length"},
-					{Name: "shutter_speed"},
-					{Name: "flash"},
-					{Name: "aperture"},
-				},
-			},
+			graphql.Field{Name: "image"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -879,7 +476,6 @@ func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []
 				WithMerge().
 				WithID(img.ID).
 				WithClassName("Image").
-				WithProperties(props).
 				Do(ctx)
 		})
 	}
@@ -948,27 +544,7 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 		WithFields(
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "rating"},
-			graphql.Field{Name: "extension"},
-			graphql.Field{Name: "date"},
-			graphql.Field{Name: "taken"},
-			graphql.Field{Name: "size"},
-			graphql.Field{Name: "resolution"},
-			graphql.Field{Name: "aspect_ratio"},
-			graphql.Field{
-				Name: "camera_details",
-				Fields: []graphql.Field{
-					{Name: "make"},
-					{Name: "lens_make"},
-					{Name: "lens_model"},
-					{Name: "iso"},
-					{Name: "focal_length"},
-					{Name: "shutter_speed"},
-					{Name: "flash"},
-					{Name: "aperture"},
-				},
-			},
-			graphql.Field{Name: "flag"},
+			graphql.Field{Name: "image"},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -1117,27 +693,6 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (WImage, e
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "image"},
 			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "name"},
-			graphql.Field{Name: "rating"},
-			graphql.Field{Name: "extension"},
-			graphql.Field{Name: "date"},
-			graphql.Field{Name: "taken"},
-			graphql.Field{Name: "size"},
-			graphql.Field{Name: "resolution"},
-			graphql.Field{Name: "aspect_ratio"},
-			graphql.Field{
-				Name: "camera_details",
-				Fields: []graphql.Field{
-					{Name: "make"},
-					{Name: "lens_make"},
-					{Name: "lens_model"},
-					{Name: "iso"},
-					{Name: "focal_length"},
-					{Name: "shutter_speed"},
-					{Name: "flash"},
-					{Name: "aperture"},
-				},
-			},
 			graphql.Field{Name: "flag"},
 			graphql.Field{
 				Name: "_additional",
@@ -1220,20 +775,6 @@ func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]Im
 		WithClassName("Image").
 		WithFields(
 			graphql.Field{Name: "filepath"},
-			graphql.Field{Name: "aspect_ratio"},
-			graphql.Field{
-				Name: "camera_details",
-				Fields: []graphql.Field{
-					{Name: "make"},
-					{Name: "lens_make"},
-					{Name: "lens_model"},
-					{Name: "iso"},
-					{Name: "focal_length"},
-					{Name: "shutter_speed"},
-					{Name: "flash"},
-					{Name: "aperture"},
-				},
-			},
 			graphql.Field{
 				Name: "_additional",
 				Fields: []graphql.Field{
@@ -1274,11 +815,6 @@ func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]Im
 				item := obj.(map[string]any)
 				path := item["filepath"].(string)
 
-				var aspectRatio float64
-				if ar, ok := item["aspect_ratio"].(float64); ok {
-					aspectRatio = ar
-				}
-
 				additional := item["_additional"].(map[string]any)
 				id := additional["id"].(string)
 				vectorAny := additional["vector"].([]any)
@@ -1291,7 +827,6 @@ func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]Im
 					ID:          id,
 					Path:        path,
 					Vector:      vector,
-					AspectRatio: aspectRatio,
 				})
 			}
 		}

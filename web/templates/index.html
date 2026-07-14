@@ -133,7 +133,6 @@
 					<div id="sidebar-progress-ui" x-data="{ imports: [] }" @update-imports.window="imports = $event.detail" style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;">
 						<template x-if="imports.length > 0">
 							<div>
-								<h3 style="color: var(--text-muted)">Imports</h3>
 								<hr>
 							</div>
 						</template>
@@ -237,7 +236,16 @@
 			isLoading: false,
 			
 			init() {
-				this.$watch('currentIndex', () => { this.isLoading = true; });
+				//this.$watch('currentIndex', () => { this.isLoading = true; });
+				this.$watch('currentIndex', () => {
+					this.isLoading = true;
+					this.$nextTick(() => {
+						let currentImg = this.$el.querySelector(`img[src='${this.images[this.currentIndex]?.src}']`);
+						if (currentImg && currentImg.complete) {
+							this.isLoading = false;
+						}
+					});
+				});
 			},
 			
 			resetZoom() {
@@ -483,6 +491,25 @@
 				if (td) { document.getElementById('transferAction').value = 'copy'; td.showModal(); }
 			}
 		"
+		@acuity-clipboard-copy.window="
+			let imgUrl = null;
+			if (document.querySelector('.carousel-modal').open && images[currentIndex]) {
+				imgUrl = images[currentIndex].src;
+			} else if (document.activeElement && document.activeElement.classList.contains('image-card')) {
+				let img = document.activeElement.querySelector('img');
+				if (img) imgUrl = img.src;
+			}
+			if (imgUrl) {
+				fetch(imgUrl)
+					.then(res => res.blob())
+					.then(blob => {
+						const item = new ClipboardItem({ [blob.type]: blob });
+						return navigator.clipboard.write([item]);
+					})
+					.then(() => console.log('Image copied to clipboard!'))
+					.catch(err => console.error('Failed to copy image to clipboard: ', err));
+			}
+		"
 		@acuity-move.window="
 			if (document.querySelector('.carousel-modal').open && images[currentIndex]) {
 				if (!selectedImages.includes(images[currentIndex].id)) selectedImages.push(images[currentIndex].id);
@@ -591,7 +618,16 @@
 		startY: 0,
 		
 		init() {
-			this.$watch('currentIndex', () => { this.isLoading = true; this.resetZoom(); });
+			this.$watch('currentIndex', () => {
+				this.isLoading = true;
+				this.resetZoom();
+				this.$nextTick(() => {
+					let currentImg = this.$el.querySelector(`img[src='${this.images[this.currentIndex]?.src}']`);
+					if (currentImg && currentImg.complete) {
+						this.isLoading = false;
+					}
+				});
+			});
 		},
 		
 		resetZoom() {

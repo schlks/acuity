@@ -276,7 +276,12 @@ window.addEventListener('keydown', (e) => {
 			if (firstGallery) firstGallery.focus();
 			break;
         case 'c': case 'C':
-            window.dispatchEvent(new CustomEvent('acuity-copy'));
+            if (e.ctrlKey || e.metaKey) {
+                window.dispatchEvent(new CustomEvent('acuity-clipboard-copy'));
+                e.preventDefault();
+            } else {
+                window.dispatchEvent(new CustomEvent('acuity-copy'));
+            }
             break;
         case 'm': case 'M':
             window.dispatchEvent(new CustomEvent('acuity-move'));

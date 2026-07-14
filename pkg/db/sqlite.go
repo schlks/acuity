@@ -269,6 +269,18 @@ func (s *SQLiteClient) GetImageByID(id int) (SImage, error) {
 	return image, nil
 }
 
+func (s *SQLiteClient) GetImageByPath(path string) (SImage, error) {
+	query := "SELECT * FROM images WHERE filepath = ?;"
+
+	var image SImage
+	err := s.DB.Get(&image, query, path)
+	if err != nil {
+		return SImage{}, err
+	}
+
+	return image, nil
+}
+
 func (s *SQLiteClient) GetGalleryCount(galleryID int) (int, error) {
 	var count int
 	var err error
