@@ -746,15 +746,32 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// Deprecated
 func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var image db.WImage
-	image.ID = r.PathValue("id")
-	if image.ID == "" {
-		image.ID = r.FormValue("id")
+	var image db.SImage
+	idstr := r.PathValue("id")
+	id, err := strconv.Atoi(idstr)
+	if err != nil {
+		message := "Failed to convert id"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
 	}
-	image.Path = r.FormValue("path")
+	image.ID =id
+	if image.ID > 0 {
+		idstr := r.FormValue("id")
+		id, err := strconv.Atoi(idstr)
+		if err != nil {
+			message := "Failed to convert id"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
+		image.ID = id
+	}
+	image.FilePath = r.FormValue("path")
 
 	deleteDisk := true
 

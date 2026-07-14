@@ -35,6 +35,7 @@ type sService interface {
 	InitTable() error
 	InsertGallery(path string, name string) error
 	RemoveGallery(id int) error
+	RemoveImage(id int) error 
 	GetGalleryByName(name string) (db.Gallery, error)
 	GetGalleryByID(id int) (db.Gallery, error)
 	GetAllGalleries() ([]db.Gallery, error)
@@ -448,39 +449,45 @@ func (g *GalleryService) ConvertImage(file []byte) (string, error) {
 	return base64Image, nil
 }
 
-func (g *GalleryService) DeleteImage(ctx context.Context, file db.WImage, deleteDisk bool) error {
-	if deleteDisk && file.Path == "" {
-		info, err := g.wDB.GetInfo(ctx, file.ID)
-		if err == nil {
-			file.Path = info.Path
-		}
-	}
+func (g *GalleryService) DeleteImage(ctx context.Context, image db.SImage, deleteDisk bool) error {
+	message := fmt.Sprintf("Deleting: %s", image.FilePath)
+	slog.Info(message)
+	
+	
+	uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(image.FilePath+strconv.Itoa(image.GalleryID))).String()
+	wImage := db.WImage{ID: uuidStr, Path: image.FilePath}
 
-	if err := g.wDB.RemoveImage(ctx, file); err != nil {
+
+	if err := g.wDB.RemoveImage(ctx, wImage); err != nil {
 		return err
 	}
 
-	if deleteDisk && file.Path != "" {
-		err := os.Remove(file.Path)
+	if deleteDisk && image.FilePath != "" {
+		err := os.Remove(image.FilePath)
 		if err != nil {
-			slog.Warn("Failed to delete physical file", slog.String("path", file.Path), slog.Any("error", err))
+			slog.Warn("Failed to delete physical file", slog.String("path", image.FilePath), slog.Any("error", err))
 		}
 	}
 	return nil
 }
 
 func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage, deleteDisk bool) error {
-	slog.Info("Deleting from disk: %v", deleteDisk)
 	var paths []string
 	var wImages []db.WImage
 
 	for _, img := range images {
+		message := fmt.Sprintf("Deleting: %s", img.FilePath)
+		slog.Info(message)
 		// Calculate the Weaviate UUID using the original deterministic logic
 		uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(img.FilePath+strconv.Itoa(img.GalleryID))).String()
 		wImages = append(wImages, db.WImage{ID: uuidStr, Path: img.FilePath})
 
 		if deleteDisk && img.FilePath != "" {
 			paths = append(paths, img.FilePath)
+		}
+
+		if err := g.sDB.RemoveImage(img.ID); err != nil {
+			return err
 		}
 	}
 
@@ -490,7 +497,8 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage, d
 
 	if deleteDisk {
 		for _, path := range paths {
-			slog.Info("Deleting physical file: %s", path)
+			message := fmt.Sprintf("Deleting physical file: %s", path)
+			slog.Info(message)
 			err := os.Remove(path)
 			if err != nil {
 				slog.Warn("Failed to delete physical file", slog.String("path", path), slog.Any("error", err))
