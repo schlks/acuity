@@ -48,6 +48,9 @@ func NewSqliteDB(path string) (*SQLiteClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.Exec("PRAGMA journal_mode=WAL;")
+	db.Exec("PRAGMA synchronous=NORMAL;")
+	db.Exec("PRAGMA busy_timeout=5000;")
 
 	return &SQLiteClient{DB: db}, nil
 }

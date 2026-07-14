@@ -141,7 +141,7 @@
 								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px;">
 									<div style="font-weight: 500; color: var(--text); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;" x-text="imp.name" :title="imp.name"></div>
 									<div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
-										<span style="color: var(--text-muted); font-size: 0.8rem;" x-text="imp.current + ' / ' + imp.expected"></span>
+										<span style="color: var(--text-muted); font-size: 0.8rem;" x-text="imp.expected === -1 ? 'Scanning disk...' : (imp.current + ' / ' + imp.expected)"></span>
 										<button style="background: none; border: none; padding: 2px; cursor: pointer; color: var(--error); display: flex; align-items: center;" 
 												@click="fetch('/gallery/' + imp.name + '/scan', { method: 'DELETE' })" title="Cancel Import">
 											<span class="material-symbols-outlined" style="font-size: 1.1rem;">cancel</span>
@@ -550,10 +550,10 @@
 					<span class="material-symbols-outlined icon-filled" style="color: var(--primary); font-size: 1.2rem;">star</span>
 					<span x-text="images[currentIndex]?.rating"></span>
 				</div>
-				<button class="carousel-action" title="Select image" @click="let id = images[currentIndex].id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) }" :style="selectedImages.includes(images[currentIndex].id) ? 'color: var(--primary);' : ''">
-					<span class="material-symbols-outlined" x-text="selectedImages.includes(images[currentIndex].id) ? 'check_circle' : 'radio_button_unchecked'"></span>
+				<button class="carousel-action" title="Select image" @click="let id = images[currentIndex]?.id; if(!id) return; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) }" :style="selectedImages.includes(images[currentIndex]?.id) ? 'color: var(--primary);' : ''">
+					<span class="material-symbols-outlined" x-text="selectedImages.includes(images[currentIndex]?.id) ? 'check_circle' : 'radio_button_unchecked'"></span>
 				</button>
-				<button class="carousel-action" title="Details" @click="showInfo = !showInfo; if(showInfo) { htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'}) }">
+				<button class="carousel-action" title="Details" @click="showInfo = !showInfo; if(showInfo && images[currentIndex]) { htmx.ajax('GET', '/image/' + images[currentIndex].id, {target: '#carousel-info-container'}) }">
 					<span class="material-symbols-outlined">info</span>
 				</button>
 				<button class="carousel-action" title="Close fullscreen" @click="close()">

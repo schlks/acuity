@@ -1,6 +1,6 @@
-{{if .}}
-<div style="display:none;" x-data x-init="$dispatch('update-imports', [
-    {{range $index, $element := .}}
+{{if .Progresses}}
+<div style="display:none;" hx-get="/api/progress?last={{.LastStr}}" hx-trigger="load" hx-target="#sidebar-progress" x-data x-init="$dispatch('update-imports', [
+    {{range $index, $element := .Progresses}}
     { name: '{{$element.GalleryName}}', current: {{$element.Current}}, expected: {{$element.Expected}} },
     {{end}}
 ])"></div>

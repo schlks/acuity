@@ -7,6 +7,8 @@ import (
 	"acuity/internal/gallery"
 	"acuity/pkg/db"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -498,15 +500,24 @@ func progressesEqual(p1, p2 []Progress) bool {
 func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+
 	galleries, err := s.Service.GetAllGalleries()
 	if err != nil {
 		http.Error(w, "Failed to get galleries", http.StatusInternalServerError)
 		return
 	}
 
-	var progresses []Progress
-	refreshImages := false
-	hasActive := false
+	lastProgressStr := r.URL.Query().Get("last")
+	var lastProgress []Progress
+	if lastProgressStr != "" {
+		decoded, err := base64.StdEncoding.DecodeString(lastProgressStr)
+		if err == nil {
+			_ = json.Unmarshal(decoded, &lastProgress)
+		}
+	}
 
 	check := func() (bool, []Progress, bool) {
 		var p []Progress
@@ -514,10 +525,17 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		var refresh bool
 		for _, g := range galleries {
 			expected := s.Service.GetExpectedCount(g.ID)
-			if expected > 0 {
+			if expected != 0 {
 				hasAct = true
 				current, _ := s.Service.GetGalleryCount(ctx, g.ID)
-				if current < expected {
+				if expected == -1 {
+					p = append(p, Progress{
+						GalleryName: g.Name,
+						Current:     0,
+						Expected:    -1,
+						Percent:     0,
+					})
+				} else if current < expected {
 					p = append(p, Progress{
 						GalleryName: g.Name,
 						Current:     current,
@@ -533,43 +551,47 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		return hasAct, p, refresh
 	}
 
-	hasActive, progresses, refreshImages = check()
+	hasActive, progresses, refreshImages := check()
 
-	if hasActive {
-		// Long polling: wait up to 10 seconds for a change
-		for i := 0; i < 20; i++ {
-			time.Sleep(500 * time.Millisecond)
-			newActive, newProgresses, newRefresh := check()
-			if !progressesEqual(progresses, newProgresses) || !newActive {
-				// Wenn ein Import gerade abgeschlossen wurde (!newActive),
-				// erzwingen wir ein letztes Refresh der Galerie, damit die neuen Bilder sichtbar sind.
-				if hasActive && !newActive {
-					newRefresh = true
-				}
+	if !hasActive {
+		if err := s.Template.ExecuteTemplate(w, "progress.html", nil); err != nil {
+			slog.Error("progress cannot be loaded", slog.Any("error", err))
+		}
+		return
+	}
 
-				hasActive = newActive
-				progresses = newProgresses
-				refreshImages = newRefresh
-				break
+	// Long Polling Loop
+	for !progressesEqual(progresses, lastProgress) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(1 * time.Second):
+			hasActive, progresses, refreshImages = check()
+			if !hasActive {
+				w.Header().Set("HX-Refresh", "true")
+				w.WriteHeader(http.StatusOK)
+				return
 			}
-		}
-		var triggers []string
-		if hasActive {
-			triggers = append(triggers, "check-progress")
-		}
-		if refreshImages {
-			triggers = append(triggers, "refresh-images")
-		}
-		if len(triggers) > 0 {
-			w.Header().Set("HX-Trigger", strings.Join(triggers, ", "))
-		}
-	} else {
-		if refreshImages {
-			w.Header().Set("HX-Trigger", "refresh-images")
 		}
 	}
 
-	if err := s.Template.ExecuteTemplate(w, "progress.html", progresses); err != nil {
+	var triggers []string
+	if refreshImages {
+		triggers = append(triggers, "refresh-images")
+	}
+	if len(triggers) > 0 {
+		w.Header().Set("HX-Trigger", strings.Join(triggers, ", "))
+	}
+
+	jsonData, _ := json.Marshal(progresses)
+	newLastStr := base64.StdEncoding.EncodeToString(jsonData)
+
+	data := map[string]any{
+		"Progresses": progresses,
+		"LastStr":    newLastStr,
+	}
+
+	if err := s.Template.ExecuteTemplate(w, "progress.html", data); err != nil {
 		slog.Error("progress cannot be loaded", slog.Any("error", err))
 	}
 }
@@ -759,7 +781,7 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	image.ID =id
+	image.ID = id
 	if image.ID > 0 {
 		idstr := r.FormValue("id")
 		id, err := strconv.Atoi(idstr)

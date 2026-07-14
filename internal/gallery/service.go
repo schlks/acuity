@@ -175,22 +175,12 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 		return err
 	}
 
-	known, err := g.wDB.GetKnownPaths(ctx, gallery.ID)
-	if err != nil {
-		return err
-	}
-
-	filePaths, missingPaths, err := g.getKnownFilePaths(known, gallery.Path)
-	if err != nil {
-		return err
-	}
-
-	currentCount, _ := g.sDB.GetGalleryCount(gallery.ID)
-	importCtx, cancel := context.WithCancel(context.Background())
 	g.mu.Lock()
-	g.ExpectedCount[gallery.ID] = currentCount + len(filePaths) - len(missingPaths)
-	g.cancelFuncs[gallery.ID] = cancel
-	g.CurrentCount[gallery.ID] = currentCount - len(missingPaths)
+	if g.ExpectedCount[gallery.ID] != 0 {
+		g.mu.Unlock()
+		return nil
+	}
+	g.ExpectedCount[gallery.ID] = -1
 	g.mu.Unlock()
 
 	go func() {
@@ -199,8 +189,31 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 			g.ExpectedCount[gallery.ID] = 0 // Reset when done to prevent infinite UI polling
 			delete(g.cancelFuncs, gallery.ID)
 			g.mu.Unlock()
-			cancel()
 		}()
+
+		known, err := g.wDB.GetKnownPaths(context.Background(), gallery.ID)
+		if err != nil {
+			slog.Error("Failed to get known paths", slog.Any("error", err))
+			return
+		}
+
+		filePaths, missingPaths, err := g.getKnownFilePaths(known, gallery.Path)
+		if err != nil {
+			slog.Error("Failed to get file paths", slog.Any("error", err))
+			return
+		}
+
+		currentCount, _ := g.sDB.GetGalleryCount(gallery.ID)
+		importCtx, cancel := context.WithCancel(context.Background())
+		
+		g.mu.Lock()
+		g.ExpectedCount[gallery.ID] = currentCount + len(filePaths) - len(missingPaths)
+		g.cancelFuncs[gallery.ID] = cancel
+		g.CurrentCount[gallery.ID] = currentCount - len(missingPaths)
+		g.mu.Unlock()
+
+		defer cancel()
+
 		if len(missingPaths) > 0 {
 			var imagesToDelete []db.SImage
 			for _, path := range missingPaths {

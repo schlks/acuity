@@ -57,7 +57,7 @@
 		</button>
 	</div>
 	
-	<span id="gallery-image-count" hx-get="/gallery/{{.Name}}/count" hx-trigger="load" style="color: var(--text-muted); font-size: 0.9rem;">
+	<span id="gallery-image-count" hx-get="/gallery/{{.Name}}/count" hx-trigger="load, refresh-images from:body" style="color: var(--text-muted); font-size: 0.9rem;">
 		Counting...
 	</span>
 </div>
