@@ -462,12 +462,21 @@ func (g *GalleryService) ConvertImage(file []byte) (string, error) {
 	return base64Image, nil
 }
 
-func (g *GalleryService) DeleteImage(ctx context.Context, image db.SImage, deleteDisk bool) error {
+func (g *GalleryService) DeleteImage(ctx context.Context, inputImg db.SImage, deleteDisk bool) error {
+	image, err := g.sDB.GetImageByID(inputImg.ID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch image: %w", err)
+	}
+
 	message := fmt.Sprintf("Deleting: %s", image.FilePath)
 	slog.Info(message)
 
 	uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(image.FilePath+strconv.Itoa(image.GalleryID))).String()
 	wImage := db.WImage{ID: uuidStr, Path: image.FilePath}
+
+	if err := g.sDB.RemoveImage(image.ID); err != nil {
+		return err
+	}
 
 	if err := g.wDB.RemoveImage(ctx, wImage); err != nil {
 		return err
@@ -486,7 +495,13 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage, d
 	var paths []string
 	var wImages []db.WImage
 
-	for _, img := range images {
+	for _, inputImg := range images {
+		img, err := g.sDB.GetImageByID(inputImg.ID)
+		if err != nil {
+			slog.Warn("Failed to fetch image for deletion, skipping", slog.Int("id", inputImg.ID), slog.Any("error", err))
+			continue
+		}
+
 		message := fmt.Sprintf("Deleting: %s", img.FilePath)
 		slog.Info(message)
 		// Calculate the Weaviate UUID using the original deterministic logic

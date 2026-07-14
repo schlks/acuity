@@ -78,7 +78,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET	/settings", s.getSettings)
 	mux.HandleFunc("POST	/settings", s.setSettings)
 	mux.HandleFunc("GET	/image", s.handleImage)
-	mux.HandleFunc("POST /image/{id}/delete", s.deleteFile)
+	mux.HandleFunc("POST /image/{id}/delete", s.deleteFiles)
 	mux.HandleFunc("GET	/image/{id}", s.getInfo)
 	mux.HandleFunc("POST	/image/{id}", s.setRating)
 	mux.HandleFunc("POST /images", s.deleteFiles)
@@ -452,7 +452,6 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	return
 }
 
 func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
@@ -568,7 +567,7 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		case <-time.After(1 * time.Second):
 			hasActive, progresses, refreshImages = check()
 			if !hasActive {
-				w.Header().Set("HX-Refresh", "true")
+				w.Header().Set("HX-Trigger", "reload-main")
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -768,7 +767,7 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// Deprecated
+//Deprecated
 func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -831,7 +830,7 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		imageIDsStr := r.FormValue("image_id")
-		deleteDisk := r.FormValue("delete_disk") == "true"
+		deleteDisk := true
 		var images []db.SImage
 
 		for _, id := range strings.Split(imageIDsStr, ",") {
@@ -1056,7 +1055,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if action == "delete" || action == "delete_disk" {
-		deleteDisk := action == "delete_disk"
+		deleteDisk := true
 		if err := s.Service.DeleteImages(ctx, images, deleteDisk); err != nil {
 			message := "Failed to delete images in batch"
 			slog.Error(message, slog.Any("error", err))

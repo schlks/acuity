@@ -19,20 +19,11 @@
 			<span style="font-size: 0.95rem; color: var(--info); font-weight: 500; white-space: nowrap;"><span
                     x-text="selectedImages.length"></span> marked</span>
 
-			<!-- Custom Toggle für Festplatten-Löschen -->
-			<button class="btn-icon" 
-				:style="deleteFromDisk ? 'background: var(--danger); color: white; border: 1px solid var(--danger);' : 'background: var(--bg-hover); border: 1px solid var(--border); color: var(--text-muted);'"
-				@click="deleteFromDisk = !deleteFromDisk" 
-				style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box; padding: 0;"
-				title="Also delete from disk">
-				<span class="material-symbols-outlined" style="font-size: 1.2rem;">hard_drive</span>
-			</button>
-
 			<button class="btn-primary" 
 				style="background: var(--danger); border: 1px solid var(--danger); display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 6px; box-sizing: border-box; padding: 0;"
 				hx-post="/images"
-				x-bind:hx-vals="JSON.stringify({image_id: selectedImages.join(','), delete_disk: deleteFromDisk, name: '{{.Name}}'})"
-				hx-confirm="Are you sure you want to delete these images?"
+				x-bind:hx-vals="JSON.stringify({image_id: selectedImages.join(','), delete_disk: 'true', name: '{{.Name}}'})"
+				hx-confirm="Are you sure you want to delete these images? This will also delete the files from your disk!"
 				@click="setTimeout(() => selectedImages = [], 100)"
 				title="Delete Selection">
 				<span class="material-symbols-outlined" style="font-size: 1.2rem; margin: 0;">delete</span>
@@ -126,8 +117,7 @@
                 <select name="batch_action" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;" x-model="action">
                     <option value="move">Move to Gallery</option>
                     <option value="copy">Copy to Gallery</option>
-                    <option value="delete">Delete from Database</option>
-                    <option value="delete_disk">Delete from Database & Disk</option>
+                    <option value="delete">Delete</option>
                 </select>
             </div>
         </div>

@@ -11,10 +11,19 @@
 		<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 		<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
 		<!-- Key Bindings -->
-		<script src="/static/js/keys.js?v=3"></script>
+		<script src="/static/js/keys.js?v=8"></script>
 	</head>
 
-	<body x-data="{ showDetailPanel: false, currentGallery: '', currentFolder: '', path: '', showBrowser: false, selectedImages: [], deleteFromDisk: false }"
+	<body x-data="{ showDetailPanel: false, currentGallery: '', currentFolder: '', path: '', showBrowser: false, selectedImages: [] }"
+		  @reload-main.window="
+			if (currentGallery === 'duplicates') {
+				htmx.ajax('GET', '/gallery/global/duplicates', {target: '#main-content'});
+			} else if (currentGallery) {
+				htmx.ajax('GET', '/gallery/' + currentGallery + (currentFolder ? '?folder=' + encodeURIComponent(currentFolder) : ''), {target: '#main-content'});
+			} else {
+				window.location.reload();
+			}
+		  "
 		  @acuity-clear-selection.window="selectedImages = []"
 		  @acuity-remove-selection.window="
 			selectedImages = selectedImages.filter(x => x !== $event.detail.id);
@@ -32,17 +41,50 @@
 						if (countSpan) countSpan.textContent = remaining;
 					}
 				}
+				
+				const focusId = sessionStorage.getItem('acuity-focus-id');
+				if (focusId) {
+					sessionStorage.removeItem('acuity-focus-id');
+					let nextImg = document.querySelector(`img[data-id='${focusId}']`);
+					if (nextImg && nextImg.closest('.image-card')) {
+						nextImg.closest('.image-card').focus();
+						document.body.classList.add('keyboard-navigating');
+					}
+				}
 			}
 		  "
 		  x-init="let saved = localStorage.getItem('openGallery'); if (saved) { currentGallery = saved; localStorage.removeItem('openGallery'); setTimeout(() => { htmx.ajax('GET', '/gallery/' + saved, {target: '#main-content'}) }, 100); }"
 		  @load-gallery.window="localStorage.setItem('openGallery', $event.detail.value); window.location.reload()"
 		  @acuity-toggle-select.window="let id = $event.detail.id; if(selectedImages.includes(id)) { selectedImages = selectedImages.filter(x => x !== id) } else { selectedImages.push(id) }"
-		  @acuity-toggle-disk-delete.window="deleteFromDisk = !deleteFromDisk"
+		  @acuity-grid-delete.window="
+			  if(selectedImages.length > 0) {
+				  window.dispatchEvent(new CustomEvent('acuity-bulk-delete'));
+			  } else if($event.detail.targetId) {
+				  if(confirm('Are you sure you want to delete this image? This will also delete the file from your disk!')) {
+					  let cards = Array.from(document.querySelectorAll('.image-card'));
+					  let idx = cards.findIndex(c => c.querySelector('img')?.dataset.id === $event.detail.targetId);
+					  if (idx !== -1) {
+						  let nextCard = cards[idx + 1] || cards[idx - 1];
+						  if (nextCard) {
+							  let nextImg = nextCard.querySelector('img');
+							  if (nextImg) sessionStorage.setItem('acuity-focus-id', nextImg.dataset.id);
+						  }
+					  }
+
+					  let qs = new URLSearchParams();
+					  qs.append('image_id', $event.detail.targetId);
+					  qs.append('delete_disk', 'true');
+					  fetch('/images', {method: 'POST', body: qs}).then(() => {
+						  window.dispatchEvent(new CustomEvent('acuity-remove-selection', {detail: {id: $event.detail.targetId}}));
+					  });
+				  }
+			  }
+		  "
 		  @acuity-bulk-delete.window="if(selectedImages.length > 0) {
-			  if(confirm('Are you sure you want to delete these ' + selectedImages.length + ' images?')) {
+			  if(confirm('Are you sure you want to delete these ' + selectedImages.length + ' images? This will also delete the files from your disk!')) {
 				let qs = new URLSearchParams();
 				qs.append('image_id', selectedImages.join(','));
-				qs.append('delete_disk', deleteFromDisk);
+				qs.append('delete_disk', 'true');
 				qs.append('name', currentGallery);
 				fetch('/images', {method: 'POST', body: qs})
 				  .then(() => {
@@ -271,6 +313,21 @@
 			close() {
 				document.querySelector('.carousel-modal').close();
 				document.body.style.overflow = '';
+				
+				if (this.images.length > 0 && this.images[this.currentIndex]) {
+					const currentId = this.images[this.currentIndex].id;
+					setTimeout(() => {
+						const targetImg = document.querySelector(`.image-card img[data-id='${currentId}']`);
+						if (targetImg) {
+							const card = targetImg.closest('.image-card');
+							if (card) {
+								card.scrollIntoView({ behavior: 'instant', block: 'center' });
+								card.focus({ preventScroll: true });
+								document.body.classList.add('keyboard-navigating');
+							}
+						}
+					}, 10);
+				}
 			},
 			
 			next() {
@@ -283,11 +340,44 @@
 					}
 				} else {
 					const nextBtn = document.getElementById('next-page-btn');
+					const infiniteTrigger = document.getElementById('infinite-scroll-trigger');
 					if (nextBtn) {
 						this.isLoading = true;
 						sessionStorage.setItem('acuity-focus', 'first');
 						sessionStorage.setItem('acuity-carousel-reopen', 'first');
 						nextBtn.click();
+					} else if (infiniteTrigger) {
+						this.isLoading = true;
+						htmx.trigger(infiniteTrigger, 'load-more');
+					}
+				}
+			},
+			
+			updateImages() {
+				let imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
+				if (imageEls.length > 0) {
+					let lastId = null;
+					if (this.images.length > 0 && this.images[this.currentIndex]) {
+						lastId = this.images[this.currentIndex].id;
+					}
+					
+					let oldLength = this.images.length;
+					this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, rating: parseInt(img.dataset.rating) || 0, flag: parseInt(img.dataset.flag) || 0 }));
+					
+					if (lastId) {
+						let foundIdx = this.images.findIndex(img => img.id === lastId);
+						if (foundIdx !== -1) {
+							this.currentIndex = foundIdx;
+							
+							// If we were waiting for infinite scroll to load more
+							if (this.isLoading) {
+								if (this.images.length > oldLength && this.currentIndex < this.images.length - 1) {
+									this.$nextTick(() => { this.next(); });
+								} else {
+									this.isLoading = false; // Reached the very end
+								}
+							}
+						}
 					}
 				}
 			},
@@ -376,11 +466,7 @@
 			
 			deleteCurrent() {
 				if(!this.images[this.currentIndex]) return;
-				let isDisk = document.querySelector('body').__x?.$data?.deleteFromDisk;
-				if(!isDisk) {
-					alert('Delete from disk is not enabled');
-					return;
-				}
+				if(!confirm('Are you sure you want to delete this image? This will also delete the file from your disk!')) return;
 				let img = this.images[this.currentIndex];
 				fetch('/image/' + img.id + '/delete', {method: 'POST'}).then(() => {
 					let prevId = img.id;
@@ -535,6 +621,8 @@
 				} else {
 					close();
 				}
+			} else if (document.querySelector('.carousel-modal:not(.culling)').open) {
+				updateImages();
 			}
 		">
 		
@@ -722,9 +810,52 @@
 				document.body.style.overflow = 'hidden';
 			}
 		},
+		updateImages() {
+			let imageEls = Array.from(document.querySelectorAll('.image-card img'));
+			if (imageEls.length > 0) {
+				let lastId = null;
+				if (this.images.length > 0 && this.images[this.currentIndex]) {
+					lastId = this.images[this.currentIndex].id;
+				}
+				
+				let oldLength = this.images.length;
+				this.images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, flag: parseInt(img.dataset.flag) || 0 }));
+				
+				if (lastId) {
+					let foundIdx = this.images.findIndex(img => img.id === lastId);
+					if (foundIdx !== -1) {
+						this.currentIndex = foundIdx;
+						
+						// If we were waiting for infinite scroll to load more
+						if (this.isLoading) {
+							if (this.images.length > oldLength && this.currentIndex < this.images.length - 1) {
+								this.$nextTick(() => { this.next(); });
+							} else {
+								this.isLoading = false; // Reached the very end
+							}
+						}
+					}
+				}
+			}
+		},
 		close() {
 			document.getElementById('culling-modal').close();
 			document.body.style.overflow = '';
+			
+			if (this.images.length > 0 && this.images[this.currentIndex]) {
+				const currentId = this.images[this.currentIndex].id;
+				setTimeout(() => {
+					const targetImg = document.querySelector(`.image-card img[data-id='${currentId}']`);
+					if (targetImg) {
+						const card = targetImg.closest('.image-card');
+						if (card) {
+							card.scrollIntoView({ behavior: 'instant', block: 'center' });
+							card.focus({ preventScroll: true });
+							document.body.classList.add('keyboard-navigating');
+						}
+					}
+				}, 10);
+			}
 		},
 		flag(val) {
 			if(this.images.length === 0) return;
@@ -747,11 +878,15 @@
 				this.currentIndex++;
 			} else {
 				const nextBtn = document.getElementById('next-page-btn');
+				const infiniteTrigger = document.getElementById('infinite-scroll-trigger');
 				if (nextBtn) {
 					this.isLoading = true;
 					sessionStorage.setItem('acuity-focus', 'first');
 					sessionStorage.setItem('acuity-culling-reopen', 'first');
 					nextBtn.click();
+				} else if (infiniteTrigger) {
+					this.isLoading = true;
+					htmx.trigger(infiniteTrigger, 'load-more');
 				}
 			}
 		},
@@ -773,11 +908,7 @@
 		
 		deleteCurrent() {
 			if(!this.images[this.currentIndex]) return;
-			let isDisk = document.querySelector('body').__x?.$data?.deleteFromDisk;
-			if(!isDisk) {
-				alert('Delete from disk is not enabled');
-				return;
-			}
+			if(!confirm('Are you sure you want to delete this image? This will also delete the file from your disk!')) return;
 			let img = this.images[this.currentIndex];
 			fetch('/image/' + img.id + '/delete', {method: 'POST'}).then(() => {
 				let prevId = img.id;
@@ -865,11 +996,13 @@
 			sessionStorage.removeItem('acuity-culling-reopen');
 			const imageEls = Array.from(document.querySelectorAll('#main-content .image-card img'));
 			if (imageEls.length > 0) {
-				images = imageEls.map(img => ({ src: img.src, id: img.dataset.id }));
-				currentIndex = (reopenAction === 'last') ? images.length - 1 : 0;
-			} else {
-				close();
+				images = imageEls.map(img => ({ src: img.src, id: img.dataset.id, flag: parseInt(img.dataset.flag) || 0 }));
+				if (reopenAction === 'first') currentIndex = 0;
+				else if (reopenAction === 'last') currentIndex = images.length - 1;
+				resetZoom();
 			}
+		} else if (document.getElementById('culling-modal').open) {
+			updateImages();
 		}
 	"
 	>

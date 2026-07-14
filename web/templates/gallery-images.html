@@ -3,14 +3,16 @@
 		{{template "image-card" .}}
 	{{end}}
 	{{if .HasNext}}
-		<div x-data="{
+		<div id="infinite-scroll-trigger" x-data="{
 				init() {
 					let observer = new IntersectionObserver((entries) => {
 						if (entries[0].isIntersecting) {
-							htmx.trigger(this.$el, 'load-more');
+							setTimeout(() => {
+								htmx.trigger(this.$el, 'load-more');
+							}, 50);
 							observer.disconnect();
 						}
-					}, { rootMargin: '200px' });
+					}, { root: document.querySelector('.main-area'), rootMargin: '400px' });
 					observer.observe(this.$el);
 				}
 			 }"
@@ -38,7 +40,7 @@
 				{{template "image-card" .}}
 			{{end}}
 			{{if and (getConfig).InfiniteScroll .HasNext}}
-				<div x-data="{
+				<div id="infinite-scroll-trigger" x-data="{
 						init() {
 							let observer = new IntersectionObserver((entries) => {
 								if (entries[0].isIntersecting) {

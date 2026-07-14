@@ -80,12 +80,14 @@ window.addEventListener('keydown', (e) => {
 			if (isCarouselOpen) {
 				window.dispatchEvent(new CustomEvent('acuity-delete-carousel'));
 			} else {
-				const bodyData = document.querySelector('body').__x?.$data;
-				const selectedImages = bodyData?.selectedImages;
-				
-				if (selectedImages && selectedImages.length > 0) {
-					window.dispatchEvent(new CustomEvent('acuity-bulk-delete'));
+				let targetId = null;
+				if (targetCard) {
+					const img = targetCard.querySelector('img');
+					if (img && img.dataset.id) {
+						targetId = img.dataset.id;
+					}
 				}
+				window.dispatchEvent(new CustomEvent('acuity-grid-delete', { detail: { targetId } }));
 			}
 			break;
 		case 'r': case 'R':
@@ -182,8 +184,10 @@ window.addEventListener('keydown', (e) => {
             }
 			break;
 		case 'b': case 'B':
-			if (!isCarouselOpen) {
-				window.dispatchEvent(new CustomEvent('acuity-start-culling'));
+			const batchDialog = document.getElementById('batchActionDialog');
+			if (batchDialog) {
+				e.preventDefault();
+				batchDialog.showModal();
 			}
 			break;
 		case 'n': case 'N':
@@ -279,10 +283,12 @@ window.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
                 window.dispatchEvent(new CustomEvent('acuity-clipboard-copy'));
                 e.preventDefault();
-            } else {
-                window.dispatchEvent(new CustomEvent('acuity-copy'));
-            }
-            break;
+			} else {
+				if (!isCarouselOpen) {
+					window.dispatchEvent(new CustomEvent('acuity-start-culling'));
+				}
+			}
+			break;
         case 'm': case 'M':
             window.dispatchEvent(new CustomEvent('acuity-move'));
             break;
@@ -386,7 +392,19 @@ function moveGridFocus(dx, dy) {
 
 window.addEventListener('htmx:afterSettle', () => {
 	const focusAction = sessionStorage.getItem('acuity-focus');
-	if (focusAction) {
+	const focusId = sessionStorage.getItem('acuity-focus-id');
+	
+	if (focusId) {
+		sessionStorage.removeItem('acuity-focus-id');
+		const targetImg = document.querySelector(`.image-card img[data-id="${focusId}"]`);
+		if (targetImg) {
+			const card = targetImg.closest('.image-card');
+			if (card) {
+				card.focus();
+				document.body.classList.add('keyboard-navigating'); // Ensure hover effects are disabled so focus is visible
+			}
+		}
+	} else if (focusAction) {
 		sessionStorage.removeItem('acuity-focus');
 		const cards = Array.from(document.querySelectorAll('.image-card'));
 		if (cards.length > 0) {

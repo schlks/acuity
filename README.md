@@ -108,3 +108,7 @@ Run [docker-run.bat](docker-run.bat).
 ### Frontend
 
 - [ ] Polishing
+
+---
+
+### AI was used to assist writing code
