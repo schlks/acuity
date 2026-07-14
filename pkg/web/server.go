@@ -931,7 +931,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, flagFilter, folderFilter)
 	slog.Info("GetAllImages took", slog.Duration("duration", time.Since(start)))
 	if err != nil {
-		http.Error(w, "Images not found", http.StatusNotFound)
+		slog.Error("Failed to fetch images", slog.Any("error", err)); http.Error(w, "Images not found", http.StatusNotFound)
 		return
 	}
 

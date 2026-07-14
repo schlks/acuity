@@ -124,7 +124,8 @@
 				<div style="margin-bottom: 12px;">
 					<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Sort by</div>
 					<select name="sortBy" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
-						<option value="name" {{if eq (getConfig).DefaultSortBy "name"}}selected{{end}}>Name</option>
+						<option value="name" {{if eq (getConfig).DefaultSortBy "name"}}selected{{end}}>Natural</option>
+						<option value="name_lex" {{if eq (getConfig).DefaultSortBy "name_lex"}}selected{{end}}>Alphabetical</option>
 						<option value="date" {{if eq (getConfig).DefaultSortBy "date"}}selected{{end}}>Date</option>
 						<option value="size" {{if eq (getConfig).DefaultSortBy "size"}}selected{{end}}>Size</option>
 						<option value="rating" {{if eq (getConfig).DefaultSortBy "rating"}}selected{{end}}>Rating</option>

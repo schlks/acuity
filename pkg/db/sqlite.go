@@ -6,9 +6,11 @@ package db
 import (
 	"database/sql"
 	"strings"
+	"strconv"
+	"unicode"
 
 	"github.com/jmoiron/sqlx"
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 type SQLiteClient struct {
@@ -41,6 +43,55 @@ type Gallery struct {
 	ID   int
 	Name string
 	Path string
+}
+
+func init() {
+	sqlite.MustRegisterCollationUtf8("NATSORT", naturalCompare)
+}
+
+func naturalCompare(a, b string) int {
+	aRunes, bRunes := []rune(strings.ToLower(a)), []rune(strings.ToLower(b))
+	i, j := 0, 0
+
+	for i < len(aRunes) && j < len(bRunes) {
+		aIsDigit := unicode.IsDigit(aRunes[i])
+		bIsDigit := unicode.IsDigit(bRunes[j])
+
+		if aIsDigit && bIsDigit {
+			aStart := i
+			for i < len(aRunes) && unicode.IsDigit(aRunes[i]) { i++ }
+
+			bStart := j
+			for j < len(bRunes) && unicode.IsDigit(bRunes[j]) { j++ }
+
+			aVal, _ := strconv.ParseUint(string(aRunes[aStart:i]), 10, 64)
+			bVal, _ := strconv.ParseUint(string(bRunes[bStart:j]), 10, 64)
+
+			if aVal != bVal {
+				if aVal < bVal {
+					return -1
+				}
+				return 1
+			}
+		} else {
+			if aRunes[i] != bRunes[j] {
+				if aRunes[i] < bRunes[j] {
+					return -1
+				}
+				return 1
+			}
+			i++
+			j++
+		}
+	}
+
+	if len(aRunes) == len(bRunes) {
+		return 0
+	}
+	if len(aRunes) < len(bRunes) {
+		return -1
+	}
+	return 1
 }
 
 func NewSqliteDB(path string) (*SQLiteClient, error) {
@@ -171,6 +222,10 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 		// Map frontend sort fields to db columns
 		column := "id"
 		switch sortBy {
+		case "name":
+			column = "filepath COLLATE NATSORT"
+		case "name_lex":
+			column = "filepath"
 		case "date":
 			column = "date"
 		case "size":
