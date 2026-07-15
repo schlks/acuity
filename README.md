@@ -109,6 +109,7 @@ Run [docker-run.bat](docker-run.bat).
 ### Frontend
 
 - [ ] Polishing
+- [ ] Refactoring to have 0 AI in this project
 
 ---
 
