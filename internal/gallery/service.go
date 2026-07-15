@@ -266,26 +266,34 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 			sBatch = append(sBatch, result.SQLite)
 
 			if len(wBatch) >= batchSize {
-				count := g.wDB.WriteBatchDB(ctx, wBatch)
+				failed := g.wDB.WriteBatchDB(ctx, wBatch)
 				if err := g.sDB.InsertImage(sBatch); err != nil {
 					slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
 				}
 				if progressCallback != nil {
-					progressCallback(count)
+					progressCallback(len(wBatch) - failed)
 				}
 				wBatch = make([]*models.Object, 0, batchSize)
 				sBatch = make([]db.SImage, 0, batchSize)
+				slog.Info("Wrote Images into the Databases", slog.Int("amount", len(wBatch)-failed))
 			}
 		}
 
 		if len(wBatch) > 0 {
-			count := g.wDB.WriteBatchDB(ctx, wBatch)
+			failed := g.wDB.WriteBatchDB(ctx, wBatch)
 			if err := g.sDB.InsertImage(sBatch); err != nil {
 				slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
 			}
 			if progressCallback != nil {
-				progressCallback(count)
+				progressCallback(len(wBatch) - failed)
 			}
+			gallery, err := g.sDB.GetGalleryByID(galleryID)
+			if err != nil {
+				message := "failed to get gallery name"
+				slog.Error(message, slog.Any("error", err))
+			}
+			message := fmt.Sprintf("Wrote %i files into database and finished import for %s", len(wBatch)-failed, gallery)
+			slog.Info(message)
 		}
 		close(done)
 	}()

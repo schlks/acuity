@@ -99,7 +99,7 @@
 				  });
 			  }
 		  }"
-		  @update-imports.window="Alpine.store('imports', $event.detail)">
+		  @update-imports.window="$store.imports.splice(0, $store.imports.length, ...$event.detail)">
 		<div class="layout-wrapper">
 			<aside class="sidebar-left">
 				<a href="/" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; text-decoration: none; cursor: pointer;">

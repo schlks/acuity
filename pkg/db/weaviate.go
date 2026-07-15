@@ -199,9 +199,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 					continue
 				}
 
-				var filePath, gallery, image string
-
-				var name string
+				var filePath, image, id, gallery string
 
 				if val, ok := imgProps["filepath"].(string); ok {
 					filePath = val
@@ -212,54 +210,18 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 				if val, ok := imgProps["image"].(string); ok {
 					image = val
 				}
-				if val, ok := imgProps["name"].(string); ok {
-					name = val
-				}
-
-				var distance float64
-				var id string
 
 				if additional, ok := imgProps["_additional"].(map[string]any); ok {
-					if d, ok := additional["distance"].(float64); ok {
-						distance = d
-					}
 					if i, ok := additional["id"].(string); ok {
 						id = i
 					}
 				}
 
-				var rating, resolution, flag int
-				var extension, date, taken string
-				var size, aspectRatio float64
-				var cameraDetails map[string]any
-
-				if val, ok := imgProps["flag"].(float64); ok {
-					flag = int(val)
-				}
-				if val, ok := imgProps["camera_details"].(map[string]interface{}); ok {
-					cameraDetails = val
-				} else if imgProps["camera_details"] != nil {
-					slog.Warn("Failed to cast camera_details", slog.Any("val", imgProps["camera_details"]), slog.String("type", fmt.Sprintf("%T", imgProps["camera_details"])))
-				}
-
-				// Bypass unused variable errors during migration
-				_ = gallery
-				_ = name
-				_ = distance
-				_ = rating
-				_ = resolution
-				_ = flag
-				_ = extension
-				_ = date
-				_ = taken
-				_ = size
-				_ = aspectRatio
-				_ = cameraDetails
-
 				images = append(images, WImage{
-					ID:     id,
-					Path:   filePath,
-					Base64: image,
+					ID:        id,
+					Path:      filePath,
+					GalleryID: gallery,
+					Base64:    image,
 				})
 			}
 		}
@@ -269,35 +231,34 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 }
 
 func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) int {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 120*time.Second)
-	defer cancel()
 	res, err := w.Client.Batch().
 		ObjectsBatcher().
 		WithObjects(batch...).
-		Do(ctxTimeout)
+		Do(ctx)
 	if err != nil {
 		slog.Error("Error during batch write to Weaviate", slog.Any("error", err))
 		return 0
-	} else {
-		successCount := 0
-		failedCount := 0
-		for _, r := range res {
-			if r.Result != nil && r.Result.Errors != nil && len(r.Result.Errors.Error) > 0 {
-				failedCount++
-				var errMsgs []string
-				for _, e := range r.Result.Errors.Error {
-					if e != nil {
-						errMsgs = append(errMsgs, e.Message)
-					}
-				}
-				slog.Error("Failed to insert object", slog.String("errors", strings.Join(errMsgs, " | ")))
-			} else {
-				successCount++
-			}
-		}
-		slog.Info("Batch write to Weaviate completed", slog.Int("success", successCount), slog.Int("failed", failedCount))
-		return successCount
 	}
+
+	successCount := 0
+	failedCount := 0
+	for _, r := range res {
+		if r.Result != nil && r.Result.Errors != nil && len(r.Result.Errors.Error) > 0 {
+			failedCount++
+			var errMsgs []string
+			for _, e := range r.Result.Errors.Error {
+				if e != nil {
+					errMsgs = append(errMsgs, e.Message)
+				}
+			}
+
+			slog.Error("Failed to insert object", slog.String("errors", strings.Join(errMsgs, " | ")))
+		} else {
+			successCount++
+		}
+	}
+	slog.Info("Batch write to Weaviate completed", slog.Int("success", successCount), slog.Int("failed", failedCount))
+	return failedCount
 }
 
 func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]WImage, error) {

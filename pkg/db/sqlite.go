@@ -5,8 +5,10 @@ package db
 
 import (
 	"database/sql"
-	"strings"
+	"fmt"
+	"log/slog"
 	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/jmoiron/sqlx"
@@ -59,10 +61,14 @@ func naturalCompare(a, b string) int {
 
 		if aIsDigit && bIsDigit {
 			aStart := i
-			for i < len(aRunes) && unicode.IsDigit(aRunes[i]) { i++ }
+			for i < len(aRunes) && unicode.IsDigit(aRunes[i]) {
+				i++
+			}
 
 			bStart := j
-			for j < len(bRunes) && unicode.IsDigit(bRunes[j]) { j++ }
+			for j < len(bRunes) && unicode.IsDigit(bRunes[j]) {
+				j++
+			}
 
 			aVal, _ := strconv.ParseUint(string(aRunes[aStart:i]), 10, 64)
 			bVal, _ := strconv.ParseUint(string(bRunes[bStart:j]), 10, 64)
@@ -116,7 +122,7 @@ func (s *SQLiteClient) InitTable() error {
 	CREATE TABLE IF NOT EXISTS images (
 	    id INTEGER PRIMARY KEY AUTOINCREMENT,
 	    gallery_id INTEGER,
-	    filepath TEXT,
+	    filepath TEXT UNIQUE,
 	    blurhash TEXT NOT NULL,
 	    rating INTEGER DEFAULT 0,
 	    flag INTEGER DEFAULT 0,
@@ -156,7 +162,7 @@ func (s *SQLiteClient) InsertGallery(path string, name string) error {
 	return nil
 }
 
-func (s *SQLiteClient) InsertImage(image []SImage) error {
+func (s *SQLiteClient) InsertImage(images []SImage) error {
 	tx, err := s.DB.Beginx()
 	if err != nil {
 		return err
@@ -174,11 +180,12 @@ iso, flash)
 	}
 	defer query.Close()
 
-	for _, img := range image {
+	for _, img := range images {
 		_, err := query.Exec(img)
 		if err != nil {
 			tx.Rollback()
-			return err
+			message := fmt.Sprintf("failed to insert %s into SQLite", img.FilePath)
+			slog.Error(message, slog.Any("error", err))
 		}
 	}
 	err = tx.Commit()

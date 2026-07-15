@@ -568,7 +568,9 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 			hasActive, progresses, refreshGalleries = check()
 			if !hasActive {
 				w.Header().Set("HX-Trigger", "reload-main")
-				w.WriteHeader(http.StatusOK)
+				if err := s.Template.ExecuteTemplate(w, "progress.html", nil); err != nil {
+					slog.Error("progress cannot be loaded", slog.Any("error", err))
+				}
 				return
 			}
 		}
@@ -772,7 +774,7 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-//Deprecated
+// Deprecated
 func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -936,7 +938,8 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, flagFilter, folderFilter)
 	slog.Info("GetAllImages took", slog.Duration("duration", time.Since(start)))
 	if err != nil {
-		slog.Error("Failed to fetch images", slog.Any("error", err)); http.Error(w, "Images not found", http.StatusNotFound)
+		slog.Error("Failed to fetch images", slog.Any("error", err))
+		http.Error(w, "Images not found", http.StatusNotFound)
 		return
 	}
 
