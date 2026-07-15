@@ -45,7 +45,7 @@ type WImage struct {
 	Base64    string
 	GalleryID string
 	Distance  float64
-	Flag 	  int
+	Flag      int
 }
 
 func NewWeaviateClient(host string) (*WeaviateClient, error) {
@@ -269,7 +269,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 }
 
 func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) int {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctxTimeout, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	res, err := w.Client.Batch().
 		ObjectsBatcher().
@@ -720,7 +720,6 @@ func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (WImage, e
 	return data[0], nil
 }
 
-
 func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]ImageVector, error) {
 	var images []ImageVector
 	query := w.Client.GraphQL().Get().
@@ -776,9 +775,9 @@ func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]Im
 					vector[i] = v.(float64)
 				}
 				images = append(images, ImageVector{
-					ID:          id,
-					Path:        path,
-					Vector:      vector,
+					ID:     id,
+					Path:   path,
+					Vector: vector,
 				})
 			}
 		}

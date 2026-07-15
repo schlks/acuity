@@ -37,49 +37,21 @@
 {{end}}
 
 {{define "search-bar"}}
-<div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+<div style="display: flex; gap: 12px; align-items: center; width: 100%;">
 	<form hx-post="/gallery/{{.}}/search"
 		hx-encoding="multipart/form-data"
 		hx-target="#main-content"
 		hx-include="#search-options-form"
-		style="position: relative; width: 100%;"
-		x-data="{
-			query: '',
-			isDragging: false,
-			imageUrl: null,
-			handleFile(file) {
-				if (!file || !file.type.startsWith('image/')) return;
-				this.imageUrl = URL.createObjectURL(file);
-				const dt = new DataTransfer();
-				dt.items.add(file);
-				this.$refs.fileInput.files = dt.files;
-				this.query = ''; // Suchtext leeren, da jetzt ein Bild da ist
-				this.$nextTick(() => {
-					this.$refs.searchInput.closest('form').requestSubmit();
-				});
-			},
-			handlePaste(event) {
-				const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-				for (let index in items) {
-					const item = items[index];
-					if (item.kind === 'file' && item.type.startsWith('image/')) {
-						this.handleFile(item.getAsFile());
-						return;
-					}
-				}
-			},
-			removeImage() {
-				this.imageUrl = null;
-				this.$refs.fileInput.value = '';
-			}
-		}" 
+		style="width: 100%;"
+		x-data="searchBar()" 
 		@dragover.window.prevent="isDragging = true"
 		@dragleave.window.prevent="isDragging = false"
 		@drop.window.prevent="isDragging = false; handleFile($event.dataTransfer.files[0])"
 		@paste.window="handlePaste($event)"
 		@submit="if (query.trim() === '' && !imageUrl) $event.preventDefault()"
-		:style="isDragging ? 'position: relative; width: 100%; outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 24px;' : 'position: relative; width: 100%;'">
+		:style="isDragging ? 'width: 100%; outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 24px;' : 'width: 100%;'">
 		
+		<div style="position: relative; width: 100%;">
 		<!-- Hidden input for HTMX to pick up the file -->
 		<input type="file" name="file" x-ref="fileInput" style="display: none;">
 
@@ -111,6 +83,7 @@
 			style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); background: var(--bg); border-radius: 50%;">
 			<span class="material-symbols-outlined">close</span>
 		</button>
+		</div>
 	</form>
 
 	<!-- Options Dropdown -->

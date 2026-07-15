@@ -10,7 +10,7 @@
 		<button class="btn-icon" @click="$refs.editGalleryDialog.showModal()" title="Edit Gallery" style="flex-shrink: 0;">
 			<span class="material-symbols-outlined">edit</span>
 		</button>
-		<button class="btn-icon" hx-post="/gallery/{{.Name}}/scan" hx-swap="none" title="Rescan Gallery" style="flex-shrink: 0;" x-data="{ isScanning: false }" @update-imports.window="isScanning = $event.detail.some(i => i.name === '{{.Name}}')" @click="isScanning = true">
+		<button class="btn-icon" hx-post="/gallery/{{.Name}}/scan" hx-swap="none" title="Rescan Gallery" style="flex-shrink: 0;" x-data="{ isScanning: $store.imports.some(i => i.name === '{{.Name}}') }" @update-imports.window="isScanning = $store.imports.some(i => i.name === '{{.Name}}')" @click="isScanning = true">
 			<span class="material-symbols-outlined" :class="isScanning ? 'spin' : ''">refresh</span>
 		</button>
 		
@@ -55,7 +55,7 @@
 
 
 <div x-data="{ loading: true }" 
-     @htmx:before-request.window="if($event.detail.target.id === 'gallery-container') loading = true"
+     @htmx:before-request.window="if($event.detail.target.id === 'gallery-container' || $event.detail.target.id === 'main-content') loading = true"
      @htmx:after-request.window="if($event.detail.target.id === 'gallery-container') loading = false">
     
     <div id="gallery-skeleton" x-show="loading">
@@ -71,7 +71,7 @@
          style="display: none;"
          hx-get="/gallery/{{.Name}}/images?page=1{{if .Folder}}&folder={{urlquery .Folder}}{{end}}" 
          hx-include="#search-options-form" 
-         hx-trigger="load, refresh-images from:body">
+         hx-trigger="load, refresh-images from:body, import-finished-{{.Name}} from:body">
     </div>
 </div>
 
@@ -93,7 +93,7 @@
 </dialog>
 
 <!-- Batch Action Dialog -->
-<dialog id="batchActionDialog" x-ref="batchActionDialog" x-data="{ isNew: false, action: 'move', criteria: 'selected' }" @click="if ($event.target === $el) { $el.classList.add('closing'); setTimeout(() => { $el.close(); $el.classList.remove('closing'); }, 300); }">
+<dialog id="batchActionDialog" x-ref="batchActionDialog" x-data="batchActionDialog()" @click="closeDialog($event, $el)">
 	<h3 style="margin-bottom: 20px;">Batch Actions</h3>
 	<form id="batchActionForm" hx-post="/gallery/batch" hx-target="#main-content" @submit="$el.closest('dialog').close()">
 		
@@ -141,7 +141,7 @@
 				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">New Gallery Name</label>
 				<input class="input-clean" type="text" name="new_name" placeholder="E.g. Wallpapers" x-bind:required="isNew && (action === 'move' || action === 'copy')">
 			</div>
-			<div class="form-group" x-data="{ transferPath: '', showTransferBrowser: false }">
+			<div class="form-group" x-data="transferDialog()">
 				<label style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px; display: block;">Absolute Path</label>
 				<div style="display: flex; gap: 8px;">
 					<input class="input-clean" type="text" name="path" x-model="transferPath" placeholder="/data/images/wallpapers" x-bind:required="isNew && (action === 'move' || action === 'copy')" style="flex-grow: 1;">

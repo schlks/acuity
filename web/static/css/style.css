@@ -646,10 +646,11 @@ body:not(.keyboard-navigating) .image-card:hover img {
 }
 .md3-linear-progress::before {
     animation: md3-linear-1 2.1s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+	animation-delay: var(--animation-delay, 0s)
 }
 .md3-linear-progress::after {
     animation: md3-linear-2 2.1s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
-    animation-delay: 1.15s;
+    animation-delay: calc(1.15s + var(--animation-dely, 0s));
 }
 @keyframes md3-linear-1 {
     0% { left: -35%; right: 100%; }

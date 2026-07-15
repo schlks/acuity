@@ -474,7 +474,7 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("HX-Redirect", "/gallery/"+newName)
+	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"load-gallery": {"value": "%s"}}`, newName))
 }
 
 type Progress struct {
@@ -518,10 +518,10 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	check := func() (bool, []Progress, bool) {
+	check := func() (bool, []Progress, []string) {
 		var p []Progress
 		var hasAct bool
-		var refresh bool
+		var refreshGalleries []string
 		for _, g := range galleries {
 			expected := s.Service.GetExpectedCount(g.ID)
 			if expected != 0 {
@@ -542,15 +542,15 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 						Percent:     int(float64(current) / float64(expected) * 100),
 					})
 					if current > 0 {
-						refresh = true
+						refreshGalleries = append(refreshGalleries, g.Name)
 					}
 				}
 			}
 		}
-		return hasAct, p, refresh
+		return hasAct, p, refreshGalleries
 	}
 
-	hasActive, progresses, refreshImages := check()
+	hasActive, progresses, refreshGalleries := check()
 
 	if !hasActive {
 		if err := s.Template.ExecuteTemplate(w, "progress.html", nil); err != nil {
@@ -560,12 +560,12 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Long Polling Loop
-	for !progressesEqual(progresses, lastProgress) {
+	for progressesEqual(progresses, lastProgress) {
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(1 * time.Second):
-			hasActive, progresses, refreshImages = check()
+			hasActive, progresses, refreshGalleries = check()
 			if !hasActive {
 				w.Header().Set("HX-Trigger", "reload-main")
 				w.WriteHeader(http.StatusOK)
@@ -575,8 +575,8 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var triggers []string
-	if refreshImages {
-		triggers = append(triggers, "refresh-images")
+	for _, Name := range refreshGalleries {
+		triggers = append(triggers, "refresh-images-"+Name)
 	}
 	if len(triggers) > 0 {
 		w.Header().Set("HX-Trigger", strings.Join(triggers, ", "))
@@ -680,6 +680,9 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 
 	page := query.Int(r, "page", 1)
 
+	if formTarget := r.FormValue("target_gallery"); formTarget != "" {
+		name = formTarget
+	}
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
@@ -702,6 +705,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 
 	queryImage, _ := s.Service.GetImageInfo(ctx, imageID)
 	returnTo := query.String(r, "returnTo", name)
+	galleries, _ := s.Service.GetAllGalleries()
 
 	data := map[string]any{
 		"Images":      images,
@@ -715,6 +719,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		"ReturnTo":    returnTo,
 		"SearchType":  "duplicate",
 		"Threshold":   thresholdFloat,
+		"Galleries":   galleries,
 	}
 
 	err = s.Template.ExecuteTemplate(w, "search-results.html", data)
@@ -1161,6 +1166,9 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	// options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
+	if formTarget := r.FormValue("target_gallery"); formTarget != "" {
+		name = formTarget
+	}
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
@@ -1186,6 +1194,7 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	returnTo := query.String(r, "returnTo", name)
+	galleries, _ := s.Service.GetAllGalleries()
 
 	data := map[string]any{
 		"Images":      images,
@@ -1198,6 +1207,7 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 		"GalleryName": name,
 		"ReturnTo":    returnTo,
 		"SearchType":  "text",
+		"Galleries":   galleries,
 	}
 
 	if err := s.Template.ExecuteTemplate(w, "search-results.html", data); err != nil {
@@ -1226,6 +1236,9 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	// options := query.Strings(r, "op")
 
 	name := r.PathValue("name")
+	if formTarget := r.FormValue("target_gallery"); formTarget != "" {
+		name = formTarget
+	}
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
@@ -1296,6 +1309,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	returnTo := query.String(r, "returnTo", name)
+	galleries, _ := s.Service.GetAllGalleries()
 	data := map[string]any{
 		"Images":      images,
 		"Page":        page,
@@ -1305,6 +1319,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 		"GalleryName": name,
 		"ReturnTo":    returnTo,
 		"SearchType":  "duplicate",
+		"Galleries":   galleries,
 	}
 
 	err = s.Template.ExecuteTemplate(w, "search-results.html", data)

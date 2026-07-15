@@ -1,3 +1,5 @@
+<div x-data="{ loading: false }" @htmx:before-request.window="if($event.detail.target.id === 'main-content') loading = true">
+	<div x-show="!loading">
 <div style="margin-bottom: 32px; display: flex; align-items: center; justify-content: space-between;">
 	<div style="display: flex; align-items: center; gap: 16px;">
 		<button class="btn-icon" 
@@ -20,6 +22,19 @@
 				<input type="hidden" name="q" value="{{.Query}}">
 				<input type="hidden" name="returnTo" value="{{.ReturnTo}}">
 				<div style="display: flex; flex-direction: column; gap: 4px;">
+					<div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
+						<span>Search in</span>
+					</div>
+					<select name="target_gallery" class="input-clean" style="width: 100%; margin-bottom: 8px;">
+						<option value="{{.GalleryName}}">Current ({{.GalleryName}})</option>
+						<option value="global">All Galleries</option>
+						{{range .Galleries}}
+							{{if ne .Name $.GalleryName}}
+								<option value="{{.Name}}">{{.Name}}</option>
+							{{end}}
+						{{end}}
+					</select>
+
 					<div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
 						<span>Similarity Threshold</span>
 						<span x-text="Number(threshold).toFixed(2)"></span>
@@ -47,6 +62,19 @@
 				<input type="hidden" name="imageID" value="{{.Query}}">
 				<input type="hidden" name="returnTo" value="{{.ReturnTo}}">
 				<div style="display: flex; flex-direction: column; gap: 4px;">
+					<div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
+						<span>Search in</span>
+					</div>
+					<select name="target_gallery" class="input-clean" style="width: 100%; margin-bottom: 8px;">
+						<option value="{{.GalleryName}}">Current ({{.GalleryName}})</option>
+						<option value="global">All Galleries</option>
+						{{range .Galleries}}
+							{{if ne .Name $.GalleryName}}
+								<option value="{{.Name}}">{{.Name}}</option>
+							{{end}}
+						{{end}}
+					</select>
+
 					<div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
 						<span>Similarity Threshold</span>
 						<span x-text="Number(threshold).toFixed(2)"></span>
@@ -114,4 +142,13 @@
 			Next <span class="material-symbols-outlined">chevron_right</span>
 		</button>
 	{{end}}
+</div>
+	</div>
+	<div x-show="loading" style="display: none; width: 100%;">
+		<div style="display: flex; justify-content: center; align-items: center; min-height: 400px; width: 100%;">
+			<svg class="md3-spinner" viewBox="0 0 48 48">
+				<circle class="md3-spinner-path" cx="24" cy="24" r="18" fill="none" stroke-width="5"></circle>
+			</svg>
+		</div>
+	</div>
 </div>

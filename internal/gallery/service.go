@@ -144,7 +144,7 @@ func (g *GalleryService) getKnownFilePaths(known map[string]string, folderPath s
 }
 
 func (g *GalleryService) CreateGallery(ctx context.Context, name string, folderPath string) error {
-	if err := os.MkdirAll(folderPath, 0755); err != nil {
+	if err := os.MkdirAll(folderPath, 0o755); err != nil {
 		return err
 	}
 
@@ -205,7 +205,7 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 
 		currentCount, _ := g.sDB.GetGalleryCount(gallery.ID)
 		importCtx, cancel := context.WithCancel(context.Background())
-		
+
 		g.mu.Lock()
 		g.ExpectedCount[gallery.ID] = currentCount + len(filePaths) - len(missingPaths)
 		g.cancelFuncs[gallery.ID] = cancel
@@ -240,7 +240,7 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 		Weaviate db.WImage
 		SQLite   db.SImage
 	}
-	batchSize := 50
+	batchSize := 100
 	threads := runtime.NumCPU()
 	maxWorkers := max(1, threads-2)
 

@@ -1,5 +1,5 @@
 <p align="center">
-	<img src="assets/logo.svg" alt="Acuity Logo" width="300"/>
+ <img src="assets/logo.svg" alt="Acuity Logo" width="300"/>
 </p>
 
 > acuity  
@@ -41,7 +41,7 @@ volumes:
   - /your/folder/2:/images/2:rw
 ```
 
-While you're at it enable CUDA, if you have an Nvidia card:
+While you're at it enable [CUDA](https://docs.docker.com/compose/how-tos/gpu-support/), if you have an Nvidia card:
 
 ```yaml
 environment:
@@ -53,7 +53,7 @@ environment:
 Open your preferred terminal in the acuity folder and run `docker compose up -d`
 
 > [!NOTE]
-> Weaviate will take ~8 GB to download its model. If you want a smaller (or larger) model head over to 
+> Weaviate will take ~8 GB to download its model. If you want a smaller (or larger) model head over to
 > [the Weaviate docker install guide](https://docs.weaviate.io/deploy/installation-guides/docker-installation) and choose a model for your needs.
 >
 > You can also install `Docker Desktop` on Linux if you want to.
@@ -61,6 +61,7 @@ Open your preferred terminal in the acuity folder and run `docker compose up -d`
 ## Developing
 
 Replace the acuity container in the [docker-compose](docker-dev.yml) with
+
 ```yml
 acuity:
   # image: codeberg.org/shlks/acuity:latest

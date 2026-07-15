@@ -3,19 +3,7 @@
 		{{template "image-card" .}}
 	{{end}}
 	{{if .HasNext}}
-		<div id="infinite-scroll-trigger" x-data="{
-				init() {
-					let observer = new IntersectionObserver((entries) => {
-						if (entries[0].isIntersecting) {
-							setTimeout(() => {
-								htmx.trigger(this.$el, 'load-more');
-							}, 50);
-							observer.disconnect();
-						}
-					}, { root: document.querySelector('.main-area'), rootMargin: '400px' });
-					observer.observe(this.$el);
-				}
-			 }"
+		<div id="infinite-scroll-trigger" x-data="infiniteScroll()"
 			 hx-get="/gallery/{{.GalleryName}}/images?page={{.NextPage}}&infinite=true{{if .Folder}}&folder={{urlquery .Folder}}{{end}}"
 			 hx-trigger="load-more"
 			 hx-swap="outerHTML"
@@ -40,19 +28,7 @@
 				{{template "image-card" .}}
 			{{end}}
 			{{if and (getConfig).InfiniteScroll .HasNext}}
-				<div id="infinite-scroll-trigger" x-data="{
-						init() {
-							let observer = new IntersectionObserver((entries) => {
-								if (entries[0].isIntersecting) {
-									setTimeout(() => {
-										htmx.trigger(this.$el, 'load-more');
-									}, 50);
-									observer.disconnect();
-								}
-							}, { root: document.querySelector('.main-area'), rootMargin: '400px' });
-							observer.observe(this.$el);
-						}
-					 }"
+				<div id="infinite-scroll-trigger" x-data="infiniteScroll()"
 					 hx-get="/gallery/{{.GalleryName}}/images?page={{.NextPage}}&infinite=true{{if .Folder}}&folder={{urlquery .Folder}}{{end}}"
 					 hx-trigger="load-more"
 					 hx-swap="outerHTML"

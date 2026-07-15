@@ -240,7 +240,11 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 			column = "flag"
 		}
 
-		query += " ORDER BY " + column + " " + order
+		if column != "id" {
+			query += " ORDER BY " + column + " " + order + ", id DESC"
+		} else {
+			query += " ORDER BY id " + order
+		}
 	}
 
 	// Pagination

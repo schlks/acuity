@@ -17,27 +17,27 @@ window.addEventListener('keydown', (e) => {
 	}
 
 	const isCarouselOpen = document.querySelector('.carousel-modal[open], #culling-modal[open]') !== null;
-	
+
 	let targetCard = null;
 	const activeEl = document.activeElement && document.activeElement.classList.contains('image-card') ? document.activeElement : null;
 	const hoverEl = document.querySelector('.image-card:hover');
-	
+
 	if (lastInputMethod === 'keyboard' && activeEl) {
 		targetCard = activeEl;
 	} else {
 		targetCard = hoverEl || activeEl;
 	}
-	
-	switch(e.key) {
-        case 'h': case 'H': case 'ArrowRight':
+
+	switch (e.key) {
+		case 'h': case 'H': case 'ArrowRight':
 			if (isCarouselOpen) { window.dispatchEvent(new CustomEvent('acuity-next')); }
 			else { moveGridFocus(1, 0); e.preventDefault(); }
 			break;
-        case 'l': case 'L': case 'ArrowLeft':
+		case 'l': case 'L': case 'ArrowLeft':
 			if (isCarouselOpen) { window.dispatchEvent(new CustomEvent('acuity-prev')); }
 			else { moveGridFocus(-1, 0); e.preventDefault(); }
 			break;
-        case 'k': case 'K': case 'ArrowUp':
+		case 'k': case 'K': case 'ArrowUp':
 			if (!isCarouselOpen) {
 				if (document.activeElement.classList.contains('nav-item')) {
 					moveSidebarFocus(-1);
@@ -50,7 +50,7 @@ window.addEventListener('keydown', (e) => {
 				e.preventDefault();
 			}
 			break;
-        case 'j': case 'J': case 'ArrowDown':
+		case 'j': case 'J': case 'ArrowDown':
 			if (!isCarouselOpen) {
 				if (document.activeElement.classList.contains('nav-item')) {
 					moveSidebarFocus(1);
@@ -94,7 +94,7 @@ window.addEventListener('keydown', (e) => {
 			if (!isCarouselOpen) {
 				const bodyData = document.querySelector('body').__x?.$data;
 				if (bodyData && bodyData.currentGallery) {
-					fetch(`/gallery/${bodyData.currentGallery}/scan`, { method: 'POST' });
+					htmx.ajax('POST', `/gallery/${bodyData.currentGallery}/scan`);
 					// Optional: Feedback-Animation oder Benachrichtigung
 				}
 			}
@@ -141,11 +141,11 @@ window.addEventListener('keydown', (e) => {
 					window.dispatchEvent(new CustomEvent('rating-updated', { detail: { id, rating } }));
 					fetch(`/image/${id}`, {
 						method: 'POST',
-						headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+						headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 						body: `rating=${rating}`
 					}).then(() => {
-						if(document.querySelector('body').__x?.$data?.showDetailPanel) {
-							htmx.ajax('GET', '/image/' + id, {target: '#image-detail-container'});
+						if (document.querySelector('body').__x?.$data?.showDetailPanel) {
+							htmx.ajax('GET', '/image/' + id, { target: '#image-detail-container' });
 						}
 					});
 				}
@@ -153,13 +153,13 @@ window.addEventListener('keydown', (e) => {
 			break;
 		case 'i': case 'I':
 			if (isCarouselOpen) {
-                window.dispatchEvent(new CustomEvent('acuity-toggle-info'));
-            } else if (document.getElementById('settingsDialog')?.hasAttribute('open')) {
-                const details = document.getElementById('settingsDialog').querySelector('details');
-                if (details) {
-                    details.open = !details.open;
-                }
-            }
+				window.dispatchEvent(new CustomEvent('acuity-toggle-info'));
+			} else if (document.getElementById('settingsDialog')?.hasAttribute('open')) {
+				const details = document.getElementById('settingsDialog').querySelector('details');
+				if (details) {
+					details.open = !details.open;
+				}
+			}
 			break;
 		case 'Enter':
 			if (!isCarouselOpen) {
@@ -177,11 +177,11 @@ window.addEventListener('keydown', (e) => {
 			e.preventDefault();
 			break;
 		case 'a': case 'A':
-            const addDialog = document.getElementById('addDialog');
-            if (addDialog) {
-                e.preventDefault();
-                addDialog.showModal();
-            }
+			const addDialog = document.getElementById('addDialog');
+			if (addDialog) {
+				e.preventDefault();
+				addDialog.showModal();
+			}
 			break;
 		case 'b': case 'B':
 			const batchDialog = document.getElementById('batchActionDialog');
@@ -199,13 +199,13 @@ window.addEventListener('keydown', (e) => {
 					const id = img.dataset.id;
 					const badge = document.getElementById('flag-badge-' + id);
 					let currentFlag = parseInt(img.dataset.flag) || 0;
-					
+
 					let newFlag = currentFlag === 1 ? 0 : 1;
-					
-					fetch(`/image/${id}/flag`, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: `flag=${newFlag}`})
+
+					fetch(`/image/${id}/flag`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `flag=${newFlag}` })
 						.then(() => {
 							window.dispatchEvent(new CustomEvent('flag-updated', { detail: { id, flag: newFlag } }));
-							if(document.querySelector('body').__x?.$data?.showDetailPanel) htmx.ajax('GET', '/image/' + id, {target: '#image-detail-container'});
+							if (document.querySelector('body').__x?.$data?.showDetailPanel) htmx.ajax('GET', '/image/' + id, { target: '#image-detail-container' });
 						});
 				}
 			}
@@ -219,12 +219,12 @@ window.addEventListener('keydown', (e) => {
 					const id = img.dataset.id;
 					const badge = document.getElementById('flag-badge-' + id);
 					let currentFlag = parseInt(img.dataset.flag) || 0;
-					
+
 					let newFlag = currentFlag === -1 ? 0 : -1;
-					fetch(`/image/${id}/flag`, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: `flag=${newFlag}`})
+					fetch(`/image/${id}/flag`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `flag=${newFlag}` })
 						.then(() => {
 							window.dispatchEvent(new CustomEvent('flag-updated', { detail: { id, flag: newFlag } }));
-							if(document.querySelector('body').__x?.$data?.showDetailPanel) htmx.ajax('GET', '/image/' + id, {target: '#image-detail-container'});
+							if (document.querySelector('body').__x?.$data?.showDetailPanel) htmx.ajax('GET', '/image/' + id, { target: '#image-detail-container' });
 						});
 				}
 			}
@@ -251,8 +251,8 @@ window.addEventListener('keydown', (e) => {
 					let v = parseFloat(th.value);
 					if (v < parseFloat(th.max)) {
 						th.value = (v + parseFloat(th.step || 0.05)).toFixed(2);
-						th.dispatchEvent(new Event('input', {bubbles: true}));
-						th.dispatchEvent(new Event('change', {bubbles: true}));
+						th.dispatchEvent(new Event('input', { bubbles: true }));
+						th.dispatchEvent(new Event('change', { bubbles: true }));
 						if (th.closest('form') && !th.closest('form').hasAttribute('hx-trigger')) htmx.trigger(th.closest('form'), 'submit');
 					}
 				}
@@ -268,8 +268,8 @@ window.addEventListener('keydown', (e) => {
 					let v = parseFloat(th.value);
 					if (v > parseFloat(th.min)) {
 						th.value = (v - parseFloat(th.step || 0.05)).toFixed(2);
-						th.dispatchEvent(new Event('input', {bubbles: true}));
-						th.dispatchEvent(new Event('change', {bubbles: true}));
+						th.dispatchEvent(new Event('input', { bubbles: true }));
+						th.dispatchEvent(new Event('change', { bubbles: true }));
 						if (th.closest('form') && !th.closest('form').hasAttribute('hx-trigger')) htmx.trigger(th.closest('form'), 'submit');
 					}
 				}
@@ -279,19 +279,19 @@ window.addEventListener('keydown', (e) => {
 			const firstGallery = document.querySelector('.nav-item[hx-get^="/gallery/"]');
 			if (firstGallery) firstGallery.focus();
 			break;
-        case 'c': case 'C':
-            if (e.ctrlKey || e.metaKey) {
-                window.dispatchEvent(new CustomEvent('acuity-clipboard-copy'));
-                e.preventDefault();
+		case 'c': case 'C':
+			if (e.ctrlKey || e.metaKey) {
+				window.dispatchEvent(new CustomEvent('acuity-clipboard-copy'));
+				e.preventDefault();
 			} else {
 				if (!isCarouselOpen) {
 					window.dispatchEvent(new CustomEvent('acuity-start-culling'));
 				}
 			}
 			break;
-        case 'm': case 'M':
-            window.dispatchEvent(new CustomEvent('acuity-move'));
-            break;
+		case 'm': case 'M':
+			window.dispatchEvent(new CustomEvent('acuity-move'));
+			break;
 	}
 });
 
@@ -309,24 +309,24 @@ function moveSidebarFocus(dy) {
 	// Only select visible nav-items in the sidebar
 	const navItems = Array.from(document.querySelectorAll('.sidebar-left .nav-item')).filter(el => el.offsetWidth > 0 && el.offsetHeight > 0);
 	if (navItems.length === 0) return;
-	
+
 	let currentIdx = navItems.indexOf(document.activeElement);
 	if (currentIdx === -1) {
 		navItems[0].focus();
 		return;
 	}
-	
+
 	let nextIdx = currentIdx + dy;
 	if (nextIdx < 0) nextIdx = navItems.length - 1;
 	if (nextIdx >= navItems.length) nextIdx = 0;
-	
+
 	navItems[nextIdx].focus();
 }
 
 function moveGridFocus(dx, dy) {
 	const cards = Array.from(document.querySelectorAll('.image-card'));
 	if (cards.length === 0) return;
-	
+
 	let currentIdx = cards.indexOf(document.activeElement);
 	if (currentIdx === -1) {
 		if (dx < 0 || dy < 0) {
@@ -336,7 +336,7 @@ function moveGridFocus(dx, dy) {
 		}
 		return;
 	}
-	
+
 	if (dx !== 0) {
 		let newIdx = currentIdx + dx;
 		if (newIdx >= 0 && newIdx < cards.length) {
@@ -352,7 +352,7 @@ function moveGridFocus(dx, dy) {
 		const currentCard = cards[currentIdx];
 		const currentTop = currentCard.offsetTop;
 		const currentCX = currentCard.offsetLeft + currentCard.offsetWidth / 2;
-		
+
 		let targetTop = -1;
 		if (dy < 0) {
 			let tops = cards.map(c => c.offsetTop).filter(t => t < currentTop - 5);
@@ -361,7 +361,7 @@ function moveGridFocus(dx, dy) {
 			let tops = cards.map(c => c.offsetTop).filter(t => t > currentTop + 5);
 			if (tops.length > 0) targetTop = Math.min(...tops);
 		}
-		
+
 		if (targetTop !== -1) {
 			let bestCard = null;
 			let minDiff = Infinity;
@@ -393,7 +393,7 @@ function moveGridFocus(dx, dy) {
 window.addEventListener('htmx:afterSettle', () => {
 	const focusAction = sessionStorage.getItem('acuity-focus');
 	const focusId = sessionStorage.getItem('acuity-focus-id');
-	
+
 	if (focusId) {
 		sessionStorage.removeItem('acuity-focus-id');
 		const targetImg = document.querySelector(`.image-card img[data-id="${focusId}"]`);
