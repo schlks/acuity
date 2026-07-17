@@ -221,38 +221,36 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 		sortOrder = "DESC"
 	}
 
-	if sortBy != "" {
-		order := "ASC"
-		if strings.ToUpper(sortOrder) == "DESC" {
-			order = "DESC"
-		}
+	order := "ASC"
+	if strings.ToUpper(sortOrder) == "DESC" {
+		order = "DESC"
+	}
 
-		// Map frontend sort fields to db columns
-		column := "id"
-		switch sortBy {
-		case "name":
-			column = "filepath COLLATE NATSORT"
-		case "name_lex":
-			column = "filepath"
-		case "date":
-			column = "date"
-		case "size":
-			column = "size"
-		case "rating":
-			column = "rating"
-		case "resolution":
-			column = "resolution"
-		case "aspect_ratio":
-			column = "aspect_ratio"
-		case "flag":
-			column = "flag"
-		}
+	// Map frontend sort fields to db columns
+	column := "id"
+	switch sortBy {
+	case "name":
+		column = "filepath COLLATE NATSORT"
+	case "name_lex":
+		column = "filepath"
+	case "date":
+		column = "date"
+	case "size":
+		column = "size"
+	case "rating":
+		column = "rating"
+	case "resolution":
+		column = "resolution"
+	case "aspect_ratio":
+		column = "aspect_ratio"
+	case "flag":
+		column = "flag"
+	}
 
-		if column != "id" {
-			query += " ORDER BY " + column + " " + order + ", id DESC"
-		} else {
-			query += " ORDER BY id " + order
-		}
+	if column != "id" {
+		query += " ORDER BY " + column + " " + order + ", id DESC"
+	} else {
+		query += " ORDER BY id " + order
 	}
 
 	// Pagination
