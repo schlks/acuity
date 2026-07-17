@@ -273,9 +273,11 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 }
 
 func (s *SQLiteClient) RemoveGallery(id int) error {
-	query := "DELETE FROM galleries WHERE id = ?;"
+	query := `
+		DELETE FROM galleries WHERE id = ?;
+		DELETE FROM images WHERE gallery_id = ?;`
 
-	_, err := s.DB.Exec(query, id)
+	_, err := s.DB.Exec(query, id, id)
 	if err != nil {
 		return err
 	}

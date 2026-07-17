@@ -159,14 +159,12 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 		}()
 
 		known, err := g.sDB.GetKnownPaths(gallery.ID)
-		slog.Info("known", slog.Int("length", len(known)))
 		if err != nil {
 			slog.Error("Failed to get known paths", slog.Any("error", err))
 			return
 		}
 
 		filePaths, missingPaths, err := g.getSeenFilePaths(known, gallery.Path)
-		slog.Info("filepaths", slog.Int("length", len(missingPaths)))
 		if err != nil {
 			slog.Error("Failed to get file paths", slog.Any("error", err))
 			return
