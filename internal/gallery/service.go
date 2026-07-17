@@ -258,8 +258,8 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 				message := "failed to get gallery name"
 				slog.Error(message, slog.Any("error", err))
 			}
-			message := fmt.Sprintf("Wrote %i files into database and finished import for %s", len(wBatch)-failed, gallery)
-			slog.Info(message)
+			message := "Wrote files into database and finished import"
+			slog.Info(message, slog.Int("amount", len(wBatch)-failed), slog.String("gallery", gallery.Name))
 		}
 		close(done)
 	}()
