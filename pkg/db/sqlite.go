@@ -101,7 +101,8 @@ func naturalCompare(a, b string) int {
 }
 
 func NewSqliteDB(path string) (*SQLiteClient, error) {
-	db, err := sqlx.Connect("sqlite", path)
+	db, err := sqlx.Open("sqlite", path)
+	// db, err := sqlx.Connect("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
@@ -167,25 +168,25 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
 	query, err := tx.PrepareNamed(`
 		INSERT INTO images (gallery_id, filepath, blurhash, rating, flag, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, focal_length, aperture, shutter_speed, 
 iso, flash)
 		VALUES (:gallery_id, :filepath, :blurhash, :rating, :flag, :extension, :date, :taken, :size, :resolution, :aspect_ratio, :camera_make, :lens_make, :focal_length, :aperture, :shutter_speed, 
-:iso, :flash)
+:iso, :flash);
 	`)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	defer query.Close()
 
 	for _, img := range images {
 		_, err := query.Exec(img)
 		if err != nil {
-			tx.Rollback()
 			message := fmt.Sprintf("failed to insert %s into SQLite", img.FilePath)
 			slog.Error(message, slog.Any("error", err))
+			return err
 		}
 	}
 	err = tx.Commit()
@@ -361,6 +362,25 @@ func (s *SQLiteClient) GetGalleryCount(galleryID int) (int, error) {
 	return count, err
 }
 
+func (s *SQLiteClient) GetKnownPaths(galleryID int) ([]string, error) {
+	query := "SELECT filepath FROM images WHERE gallery_id = ?;"
+	rows, err := s.DB.Query(query, galleryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		paths = append(paths, p)
+	}
+	return paths, nil
+}
+
 func (s *SQLiteClient) UpdateImageFlag(id int, flag int) error {
 	query := "UPDATE images SET flag = ? WHERE id = ?;"
 	_, err := s.DB.Exec(query, flag, id)
@@ -395,4 +415,15 @@ func (s *SQLiteClient) GetAllGalleries() ([]Gallery, error) {
 		galleries = append(galleries, g)
 	}
 	return galleries, nil
+}
+
+func (s *SQLiteClient) ResetDatabase() error {
+	query := `
+		DROP TABLE IF EXISTS galleries;
+		DROP TABLE IF EXISTS images;
+	`
+	if _, err := s.DB.Exec(query); err != nil {
+		return err
+	}
+	return s.InitTable()
 }

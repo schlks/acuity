@@ -1,4 +1,3 @@
-// TODO: fix image import and other retrieval funktions
 package db
 
 import (
@@ -8,45 +7,37 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/google/uuid"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/filters"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	"github.com/weaviate/weaviate/entities/models"
-
-	"github.com/google/uuid"
 )
 
 type WeaviateClient struct {
 	Client *weaviate.Client
-	Chan   chan BatchRequest
-}
-
-type BatchRequest struct {
-	Objects  []*models.Object
-	Wg       *sync.WaitGroup
-	Callback func(successCount int)
+	Worker int
 }
 
 type ImageVector struct {
-	ID          string
-	Path        string
-	Vector      []float64
-	AspectRatio float64
+	ID     string
+	Path   string
+	Vector []float64
 }
 
 type WImage struct {
 	ID        string
 	Path      string
 	Base64    string
-	GalleryID string
+	GalleryID int
 	Distance  float64
-	Flag      int
 }
+
+const className = "Image"
 
 func NewWeaviateClient(host string) (*WeaviateClient, error) {
 	cfg := weaviate.Config{
@@ -58,13 +49,11 @@ func NewWeaviateClient(host string) (*WeaviateClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	worker := max(1, runtime.NumCPU())
 
-	channel := make(chan BatchRequest, runtime.NumCPU()*2)
-	w := &WeaviateClient{Client: client, Chan: channel}
-
-	// Only spawn a few concurrent writers to avoid overwhelming Weaviate's CLIP model
-	for i := 0; i < 2; i++ {
-		go w.batchWriterLoop()
+	w := &WeaviateClient{
+		Client: client,
+		Worker: worker,
 	}
 
 	return w, nil
@@ -79,23 +68,21 @@ func (w *WeaviateClient) WaitForReady(timeout time.Duration) error {
 		if ready && err == nil {
 			return nil
 		}
-
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timout waiting for weaviate: %w", ctx.Err())
+			return fmt.Errorf("timout waiting for weaviate %v", ctx.Err())
 		case <-time.After(10 * time.Second):
-			slog.Info("Waiting for Weaviate server...")
+			slog.Info("Waiting for Weaviate Server...")
 		}
 	}
 }
 
 func (w *WeaviateClient) InitSchema() error {
-	className := "Image"
 	ctx := context.Background()
 
 	exists, err := w.Client.Schema().ClassExistenceChecker().WithClassName(className).Do(ctx)
 	if err != nil {
-		return fmt.Errorf("error checking existence: %w", err)
+		return fmt.Errorf("error checking existance: %v", err)
 	}
 
 	if !exists {
@@ -124,25 +111,13 @@ func (w *WeaviateClient) InitSchema() error {
 			},
 		}
 
-		err = w.Client.Schema().ClassCreator().WithClass(classObj).Do(ctx)
-		if err != nil {
-			return fmt.Errorf("error creating schema: %w", err)
+		if err := w.Client.Schema().ClassCreator().WithClass(classObj).Do(ctx); err != nil {
+			return fmt.Errorf("error creating schema: %v", err)
 		}
-		fmt.Println("Weaviate schema: 'Image' successfully created.")
+		fmt.Printf("Weaviate schema: 'Image' successfully created")
 	}
 
 	return nil
-}
-
-func (w *WeaviateClient) batchWriterLoop() {
-	ctx := context.Background()
-	for req := range w.Chan {
-		successCount := w.WriteBatchDB(ctx, req.Objects)
-		if req.Callback != nil {
-			req.Callback(successCount)
-		}
-		req.Wg.Done()
-	}
 }
 
 func (w *WeaviateClient) RemoveGalleryImages(ctx context.Context, galleryID int) error {
@@ -152,7 +127,7 @@ func (w *WeaviateClient) RemoveGalleryImages(ctx context.Context, galleryID int)
 		WithValueInt(int64(galleryID))
 
 	response, err := w.Client.Batch().ObjectsBatchDeleter().
-		WithClassName("Image").
+		WithClassName(className).
 		WithWhere(filter).
 		WithOutput("minimal").
 		Do(ctx)
@@ -166,17 +141,6 @@ func (w *WeaviateClient) RemoveGalleryImages(ctx context.Context, galleryID int)
 				return fmt.Errorf("error deleting an object: %v", obj.Errors)
 			}
 		}
-	}
-	return nil
-}
-
-func (w *WeaviateClient) RemoveImage(ctx context.Context, image WImage) error {
-	err := w.Client.Data().Deleter().
-		WithClassName("Image").
-		WithID(image.ID).
-		Do(ctx)
-	if err != nil {
-		return fmt.Errorf("error deleting an image (ID: %s): %v", image.ID, err)
 	}
 	return nil
 }
@@ -199,29 +163,34 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 					continue
 				}
 
-				var filePath, image, id, gallery string
+				var filePath, image, id string
+				var galleryID int
+				var distance float64
 
 				if val, ok := imgProps["filepath"].(string); ok {
 					filePath = val
 				}
-				if val, ok := imgProps["gallery_id"].(float64); ok {
-					gallery = fmt.Sprintf("%.0f", val)
-				}
 				if val, ok := imgProps["image"].(string); ok {
 					image = val
 				}
-
+				if val, ok := imgProps["gallery_id"].(int); ok {
+					galleryID = val
+				}
 				if additional, ok := imgProps["_additional"].(map[string]any); ok {
-					if i, ok := additional["id"].(string); ok {
-						id = i
+					if val, ok := additional["id"].(string); ok {
+						id = val
+					}
+					if val, ok := additional["distance"].(float64); ok {
+						distance = val
 					}
 				}
 
 				images = append(images, WImage{
 					ID:        id,
 					Path:      filePath,
-					GalleryID: gallery,
+					GalleryID: galleryID,
 					Base64:    image,
+					Distance:  distance,
 				})
 			}
 		}
@@ -230,58 +199,25 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 	return images
 }
 
-func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) int {
-	res, err := w.Client.Batch().
-		ObjectsBatcher().
-		WithObjects(batch...).
-		Do(ctx)
-	if err != nil {
-		slog.Error("Error during batch write to Weaviate", slog.Any("error", err))
-		return 0
+func (w *WeaviateClient) getQueryWithWhere(ctx context.Context, distance bool, galleryID int, page int, imagesPerPage int) (*graphql.GetBuilder, *filters.WhereBuilder) {
+	additional := []graphql.Field{
+		{Name: "id"},
 	}
-
-	successCount := 0
-	failedCount := 0
-	for _, r := range res {
-		if r.Result != nil && r.Result.Errors != nil && len(r.Result.Errors.Error) > 0 {
-			failedCount++
-			var errMsgs []string
-			for _, e := range r.Result.Errors.Error {
-				if e != nil {
-					errMsgs = append(errMsgs, e.Message)
-				}
-			}
-
-			slog.Error("Failed to insert object", slog.String("errors", strings.Join(errMsgs, " | ")))
-		} else {
-			successCount++
-		}
+	if distance {
+		additional = append(additional, graphql.Field{Name: "distance"})
 	}
-	slog.Info("Batch write to Weaviate completed", slog.Int("success", successCount), slog.Int("failed", failedCount))
-	return failedCount
-}
-
-func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
-	nearText := w.Client.GraphQL().
-		NearTextArgBuilder().
-		WithConcepts([]string{search}).
-		WithDistance(threshold)
-
 	query := w.Client.GraphQL().Get().
-		WithClassName("Image").
+		WithClassName(className).
 		WithFields(
 			graphql.Field{Name: "filepath"},
 			graphql.Field{Name: "gallery_id"},
 			graphql.Field{Name: "image"},
 			graphql.Field{
-				Name: "_additional",
-				Fields: []graphql.Field{
-					{Name: "id"},
-					{Name: "distance"},
-				},
-			},
-		)
-
+				Name:   "_additional",
+				Fields: additional,
+			}).
+		WithLimit(imagesPerPage).
+		WithOffset(page * imagesPerPage)
 	var whereFilter *filters.WhereBuilder
 
 	if galleryID >= 0 {
@@ -291,17 +227,51 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 			WithValueInt(int64(galleryID))
 	}
 
+	return query, whereFilter
+}
+
+func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) int {
+	res, err := w.Client.Batch().ObjectsBatcher().WithObjects(batch...).Do(ctx)
+	if err != nil {
+		slog.Error("Error durcing batch wirte to Weaviate", slog.Any("error", err))
+		return 0
+	}
+
+	success := 0
+	failed := 0
+	for _, r := range res {
+		if r.Result != nil && r.Result.Errors != nil && len(r.Result.Errors.Error) > 0 {
+			failed++
+			var errMsgs []string
+			for _, e := range r.Result.Errors.Error {
+				if e != nil {
+					errMsgs = append(errMsgs, e.Message)
+				}
+			}
+			slog.Error("Failed to insert Object", slog.String("errors", strings.Join(errMsgs, " | ")))
+		} else {
+			success++
+		}
+	}
+	slog.Info("Batch write to Weaviate complete", slog.Int("success", success), slog.Int("failed", failed))
+	return failed
+}
+
+func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
+	nearText := w.Client.GraphQL().
+		NearTextArgBuilder().
+		WithConcepts([]string{search}).
+		WithDistance(threshold)
+
+	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, page, imagesPerPage)
+
 	if whereFilter != nil {
 		query = query.
 			WithWhere(whereFilter).
-			WithNearText(nearText).
-			WithLimit(imagesPerPage).
-			WithOffset(page * imagesPerPage)
+			WithNearText(nearText)
 	} else {
 		query = query.
-			WithNearText(nearText).
-			WithLimit(imagesPerPage).
-			WithOffset(page * imagesPerPage)
+			WithNearText(nearText)
 	}
 
 	result, err := query.Do(ctx)
@@ -313,47 +283,21 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 	return images, nil
 }
 
-func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
+func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
 	nearImage := w.Client.GraphQL().
 		NearImageArgBuilder().
 		WithImage(image).
 		WithDistance(threshold)
 
-	query := w.Client.GraphQL().Get().
-		WithClassName("Image").
-		WithFields(
-			graphql.Field{Name: "filepath"},
-			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "image"},
-			graphql.Field{
-				Name: "_additional",
-				Fields: []graphql.Field{
-					{Name: "id"},
-					{Name: "distance"},
-				},
-			},
-		)
-
-	var whereFilter *filters.WhereBuilder
-
-	if galleryID >= 0 {
-		whereFilter = filters.Where().
-			WithPath([]string{"gallery_id"}).
-			WithOperator(filters.Equal).
-			WithValueInt(int64(galleryID))
-	}
+	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, page, imagesPerPage)
 
 	if whereFilter != nil {
 		query = query.
 			WithWhere(whereFilter).
-			WithNearImage(nearImage).
-			WithLimit(imagesPerPage).
-			WithOffset(page * imagesPerPage)
+			WithNearImage(nearImage)
 	} else {
 		query = query.
-			WithNearImage(nearImage).
-			WithLimit(imagesPerPage).
-			WithOffset(page * imagesPerPage)
+			WithNearImage(nearImage)
 	}
 
 	result, err := query.Do(ctx)
@@ -370,40 +314,21 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, gal
 		WithID(imageID).
 		WithDistance(threshold)
 
-	query := w.Client.GraphQL().Get().
-		WithClassName("Image").
-		WithFields(
-			graphql.Field{Name: "filepath"},
-			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "image"},
-			graphql.Field{
-				Name: "_additional",
-				Fields: []graphql.Field{
-					{Name: "id"},
-					{Name: "distance"},
-				},
-			},
-		).
-		WithNearObject(imageObj)
+	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, page, imagesPerPage)
 
-	if galleryID >= 0 {
-		filter := filters.Where().
-			WithPath([]string{"gallery_id"}).
-			WithOperator(filters.Equal).
-			WithValueInt(int64(galleryID))
-		query = query.WithWhere(filter)
-	}
-
-	query = query.WithLimit(imagesPerPage)
-	if page >= 0 {
-		query = query.WithOffset(page * imagesPerPage)
+	if whereFilter != nil {
+		query = query.
+			WithWhere(whereFilter).
+			WithNearObject(imageObj)
+	} else {
+		query = query.
+			WithNearObject(imageObj)
 	}
 
 	result, err := query.Do(ctx)
 	if err != nil {
 		return nil, err
 	}
-
 	images := w.getData(result)
 	var filtered []WImage
 
@@ -417,15 +342,10 @@ func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, gal
 }
 
 func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []WImage) error {
-	threads := runtime.NumCPU()
-	maxWorkers := max(threads-2, threads/2)
-	maxWorkers = max(maxWorkers, 1)
-
 	g := new(errgroup.Group)
-	g.SetLimit(maxWorkers)
-
+	g.SetLimit(w.Worker)
 	for _, img := range images {
-		img := img // Create local copy for closure
+		img := img
 		g.Go(func() error {
 			props := map[string]any{
 				"gallery_id": newID,
@@ -436,7 +356,7 @@ func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []
 			return w.Client.Data().Updater().
 				WithMerge().
 				WithID(img.ID).
-				WithClassName("Image").
+				WithClassName(className).
 				Do(ctx)
 		})
 	}
@@ -445,12 +365,8 @@ func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []
 }
 
 func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, images []WImage) error {
-	threads := runtime.NumCPU()
-	maxWorkers := max(threads-2, threads/2)
-	maxWorkers = max(maxWorkers, 1)
-
 	g := new(errgroup.Group)
-	g.SetLimit(maxWorkers)
+	g.SetLimit(w.Worker)
 
 	for _, img := range images {
 		img := img // Copy for closure
@@ -482,17 +398,24 @@ func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, im
 	return g.Wait()
 }
 
+func (w *WeaviateClient) RemoveImage(ctx context.Context, image WImage) error {
+	err := w.Client.Data().Deleter().
+		WithClassName(className).
+		WithID(image.ID).
+		Do(ctx)
+	if err != nil {
+		return fmt.Errorf("error deleting image (ID %s): %v", image.ID, err)
+	}
+	return nil
+}
+
 func (w *WeaviateClient) RemoveImages(ctx context.Context, images []WImage) error {
-	threads := runtime.NumCPU()
-	maxWorkers := max(threads-2, threads/2)
-	maxWorkers = max(maxWorkers, 1)
-
 	g := new(errgroup.Group)
-	g.SetLimit(maxWorkers)
+	g.SetLimit(w.Worker)
 
-	for _, image := range images {
+	for _, img := range images {
 		g.Go(func() error {
-			return w.RemoveImage(ctx, image)
+			return w.RemoveImage(ctx, img)
 		})
 	}
 
@@ -500,44 +423,24 @@ func (w *WeaviateClient) RemoveImages(ctx context.Context, images []WImage) erro
 }
 
 func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]WImage, error) {
-	query := w.Client.GraphQL().Get().
-		WithClassName("Image").
-		WithFields(
-			graphql.Field{Name: "filepath"},
-			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "image"},
-			graphql.Field{
-				Name: "_additional",
-				Fields: []graphql.Field{
-					{Name: "id"},
-				},
-			},
-		)
-
-	var whereFilter *filters.WhereBuilder
-
-	if galleryID >= 0 {
-		whereFilter = filters.Where().
-			WithPath([]string{"gallery_id"}).
-			WithOperator(filters.Equal).
-			WithValueInt(int64(galleryID))
-	}
+	query, whereFilter := w.getQueryWithWhere(ctx, false, galleryID, page, imagesPerPage)
 
 	if flagFilter != "" && flagFilter != "any" {
 		flagVal, err := strconv.Atoi(flagFilter)
-		if err == nil {
-			flagCond := filters.Where().
-				WithPath([]string{"flag"}).
-				WithOperator(filters.Equal).
-				WithValueNumber(float64(flagVal))
+		if err != nil {
+			return nil, err
+		}
+		flagCond := filters.Where().
+			WithPath([]string{"flag"}).
+			WithOperator(filters.Equal).
+			WithValueNumber(float64(flagVal))
 
-			if whereFilter != nil {
-				whereFilter = filters.Where().
-					WithOperator(filters.And).
-					WithOperands([]*filters.WhereBuilder{whereFilter, flagCond})
-			} else {
-				whereFilter = flagCond
-			}
+		if whereFilter != nil {
+			whereFilter = filters.Where().
+				WithOperator(filters.And).
+				WithOperands([]*filters.WhereBuilder{whereFilter, flagCond})
+		} else {
+			whereFilter = flagCond
 		}
 	}
 
@@ -557,13 +460,14 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 	}
 
 	if whereFilter != nil {
-		query = query.WithWhere(whereFilter)
-	}
-
-	query = query.WithLimit(imagesPerPage)
-
-	if page >= 0 {
-		query = query.WithOffset(page * imagesPerPage)
+		query = query.
+			WithWhere(whereFilter).
+			WithLimit(imagesPerPage).
+			WithOffset(page * imagesPerPage)
+	} else {
+		query = query.
+			WithLimit(imagesPerPage).
+			WithOffset(page * imagesPerPage)
 	}
 
 	var order graphql.SortOrder
@@ -591,85 +495,9 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 	return images, nil
 }
 
-func (w *WeaviateClient) GetKnownPaths(ctx context.Context, galleryID int) (map[string]string, error) {
-	knownPaths := make(map[string]string)
-
-	var afterID string
-
-	for {
-		builder := w.Client.GraphQL().Get().
-			WithClassName("Image").
-			WithFields(
-				graphql.Field{Name: "filepath"},
-				graphql.Field{
-					Name: "_additional",
-					Fields: []graphql.Field{
-						{Name: "id"},
-					},
-				},
-			).
-			WithWhere(
-				filters.Where().
-					WithPath([]string{"gallery_id"}).
-					WithOperator(filters.Equal).
-					WithValueInt(int64(galleryID)),
-			).
-			WithLimit(10000)
-
-		if afterID != "" {
-			builder = builder.WithAfter(afterID)
-		}
-
-		result, err := builder.Do(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		data, ok := result.Data["Get"].(map[string]any)
-		if !ok || data["Image"] == nil {
-			break
-		}
-		images, ok := data["Image"].([]any)
-		if !ok || len(images) == 0 {
-			break
-		}
-
-		for _, imgObj := range images {
-			img := imgObj.(map[string]any)
-			path := img["filepath"].(string)
-			additional := img["_additional"].(map[string]any)
-			id := additional["id"].(string)
-			knownPaths[path] = id
-			afterID = id
-		}
-	}
-
-	return knownPaths, nil
-}
-
 func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (WImage, error) {
-	result, err := w.Client.GraphQL().Get().
-		WithClassName("Image").
-		WithFields(
-			graphql.Field{Name: "filepath"},
-			graphql.Field{Name: "image"},
-			graphql.Field{Name: "gallery_id"},
-			graphql.Field{Name: "flag"},
-			graphql.Field{
-				Name: "_additional",
-				Fields: []graphql.Field{
-					{Name: "id"},
-				},
-			},
-		).
-		WithWhere(
-			filters.Where().
-				WithPath([]string{"id"}).
-				WithOperator(filters.Equal).
-				WithValueText(imageID),
-		).
-		WithLimit(1).
-		Do(ctx)
+	query, _ := w.getQueryWithWhere(ctx, false, -1, 0, 1)
+	result, err := query.Do(ctx)
 	if err != nil {
 		return WImage{}, err
 	}
@@ -718,7 +546,7 @@ func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]Im
 
 	result, err := query.Do(ctx)
 	if err != nil {
-		return []ImageVector{}, err
+		return nil, err
 	}
 
 	if getMap, ok := result.Data["Get"].(map[string]any); ok {
@@ -773,28 +601,4 @@ func (w *WeaviateClient) ResetDatabase(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (w *WeaviateClient) SetRating(ctx context.Context, imageID string, rating int) error {
-	props := map[string]any{
-		"rating": rating,
-	}
-	return w.Client.Data().Updater().
-		WithMerge().
-		WithID(imageID).
-		WithClassName("Image").
-		WithProperties(props).
-		Do(ctx)
-}
-
-func (w *WeaviateClient) SetFlag(ctx context.Context, imageID string, flag int) error {
-	props := map[string]any{
-		"flag": flag,
-	}
-	return w.Client.Data().Updater().
-		WithMerge().
-		WithID(imageID).
-		WithClassName("Image").
-		WithProperties(props).
-		Do(ctx)
 }
