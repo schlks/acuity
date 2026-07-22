@@ -233,12 +233,11 @@ func (w *WeaviateClient) getQueryWithWhere(ctx context.Context, distance bool, g
 func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Object) int {
 	res, err := w.Client.Batch().ObjectsBatcher().WithObjects(batch...).Do(ctx)
 	if err != nil {
-		slog.Error("Error durcing batch wirte to Weaviate", slog.Any("error", err))
+		slog.Error("Error during batch write to Weaviate", slog.Any("error", err))
 		return 0
 	}
 
-	success := 0
-	failed := 0
+	success, failed := 0, 0
 	for _, r := range res {
 		if r.Result != nil && r.Result.Errors != nil && len(r.Result.Errors.Error) > 0 {
 			failed++
@@ -253,7 +252,7 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 			success++
 		}
 	}
-	slog.Info("Batch write to Weaviate complete", slog.Int("success", success), slog.Int("failed", failed))
+	//slog.Info("Batch write to Weaviate complete", slog.Int("success", success), slog.Int("failed", failed))
 	return failed
 }
 

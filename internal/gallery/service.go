@@ -205,18 +205,17 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 }
 
 func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, galleryID int, progressCallback func(count int)) {
-	batchSize := 100
-	threads := runtime.NumCPU()
+	batchSize, threads := 100, runtime.NumCPU()
 	maxWorkers := max(1, threads-2)
 
-	resultChan := make(chan ImagePayload, batchSize)
-	done := make(chan struct{})
+	resultChan, done := make(chan ImagePayload, batchSize), make(chan struct{})
 
 	go func() {
 		var wBatch []*models.Object
 		var sBatch []db.SImage
 
 		for result := range resultChan {
+			var amount int
 			id := uuid.NewMD5(uuid.NameSpaceURL, []byte(result.Weaviate.Path+strconv.Itoa(galleryID))).String()
 			obj := &models.Object{
 				ID:    strfmt.UUID(id),
@@ -227,43 +226,42 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 					"gallery_id": galleryID,
 				},
 			}
-			wBatch = append(wBatch, obj)
-			sBatch = append(sBatch, result.SQLite)
+			wBatch, sBatch = append(wBatch, obj), append(sBatch, result.SQLite)
 
 			if len(wBatch) >= batchSize {
 				failed := g.wDB.WriteBatchDB(ctx, wBatch)
 				if err := g.sDB.InsertImage(sBatch); err != nil {
 					slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
 				}
-				amount := len(wBatch) - failed
+				amount = len(wBatch) - failed
 				if progressCallback != nil {
 					progressCallback(amount)
 				}
 
-				wBatch = make([]*models.Object, 0, batchSize)
-				sBatch = make([]db.SImage, 0, batchSize)
-				slog.Info("Wrote Images into the Databases")
+				wBatch, sBatch = make([]*models.Object, 0, batchSize), make([]db.SImage, 0, batchSize)
 			}
 
 			if len(wBatch) > 0 {
 				failed := g.wDB.WriteBatchDB(ctx, wBatch)
-
+				amount = len(wBatch) - failed
 				if err := g.sDB.InsertImage(sBatch); err != nil {
 					slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
 				}
 				if progressCallback != nil {
-					progressCallback(len(wBatch) - failed)
+					progressCallback(amount)
 				}
-				gallery, err := g.sDB.GetGalleryByID(galleryID)
-				if err != nil {
-					message := "Failed to get gallery name"
-					slog.Error(message, slog.Any("error", err))
-				}
-				message := "Wrote files into databases and finished import"
-				slog.Info(message, slog.String("gallery", gallery.Name))
 			}
-
+			slog.Info("Wrote Images into the Databases", slog.Int("amount", amount))
 		}
+		gallery, err := g.sDB.GetGalleryByID(galleryID)
+		if err != nil {
+			slog.Error("Failed to gallery name", slog.Any("error", err))
+		}
+		count, err := g.sDB.GetGalleryCount(galleryID)
+		if err != nil {
+			slog.Error("Failed to gallery count", slog.Any("error", err))
+		}
+		slog.Info("Finished import", slog.String("gallery", gallery.Name), slog.Int("amount", count))
 		close(done)
 	}()
 
