@@ -214,8 +214,8 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 		var wBatch []*models.Object
 		var sBatch []db.SImage
 
+		var amount int
 		for result := range resultChan {
-			var amount int
 			id := uuid.NewMD5(uuid.NameSpaceURL, []byte(result.Weaviate.Path+strconv.Itoa(galleryID))).String()
 			obj := &models.Object{
 				ID:    strfmt.UUID(id),
@@ -239,28 +239,29 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 				}
 
 				wBatch, sBatch = make([]*models.Object, 0, batchSize), make([]db.SImage, 0, batchSize)
+				slog.Info("Wrote Images into the Databases", slog.Int("amount", amount))
 			}
-
-			if len(wBatch) > 0 {
-				failed := g.wDB.WriteBatchDB(ctx, wBatch)
-				amount = len(wBatch) - failed
-				if err := g.sDB.InsertImage(sBatch); err != nil {
-					slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
-				}
-				if progressCallback != nil {
-					progressCallback(amount)
-				}
+		}
+		if len(wBatch) > 0 {
+			failed := g.wDB.WriteBatchDB(ctx, wBatch)
+			amount = len(wBatch) - failed
+			if err := g.sDB.InsertImage(sBatch); err != nil {
+				slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
 			}
-			slog.Info("Wrote Images into the Databases", slog.Int("amount", amount))
+			if progressCallback != nil {
+				progressCallback(amount)
+			}
 		}
 		gallery, err := g.sDB.GetGalleryByID(galleryID)
 		if err != nil {
 			slog.Error("Failed to gallery name", slog.Any("error", err))
 		}
+
 		count, err := g.sDB.GetGalleryCount(galleryID)
 		if err != nil {
 			slog.Error("Failed to gallery count", slog.Any("error", err))
 		}
+
 		slog.Info("Finished import", slog.String("gallery", gallery.Name), slog.Int("amount", count))
 		close(done)
 	}()
@@ -287,16 +288,17 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 			if err != nil {
 				return err
 			}
+			stat, err := os.Stat(path)
 
 			bimgImg := bimg.NewImage(data)
 			var width, heigth int
 			bimgSize, err := bimgImg.Size()
-			if err != nil {
-				slog.Error("failed to get image size", slog.Any("error", err))
-				return err
+			if err == nil {
+				width = bimgSize.Width
+				heigth = bimgSize.Height
+			} else {
+				slog.Error("failed to get image size with bimg", slog.String("file", path), slog.Any("error", err))
 			}
-			width = bimgSize.Width
-			heigth = bimgSize.Height
 
 			var resolution int
 			var aspectRatio float64
@@ -328,7 +330,7 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 
 			sImage.Date = time.Now().Format(time.RFC3339)
 			sImage.Taken = sImage.Date
-			sImage.Size = float64(len(data))
+			sImage.Size = float64(stat.Size())
 			sImage.Resolution = resolution
 			sImage.AspectRatio = aspectRatio
 
