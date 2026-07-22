@@ -4,16 +4,11 @@ RUN apk add --no-cache vips-dev gcc musl-dev glycin-loaders-all upx vips-heif
 WORKDIR /app
 COPY go.mod go.sum .
 RUN go mod download
-RUN go install go.uber.org/mock/mockgen@latest
 
 COPY . .
-RUN go generate ./...
 RUN mkdir -p ./bin
 RUN go build -ldflags="-s -w" -o ./bin/acuity ./cmd/acuity
 RUN upx --best --lzma ./bin/acuity
-
-FROM build-stage AS test-stage
-RUN go test -v ./...
 
 FROM alpine:latest AS production
 

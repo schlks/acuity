@@ -176,7 +176,6 @@ func (s *Server) resetDatabase(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	imageIDStr := r.PathValue("id")
 	imageID, err := strconv.Atoi(imageIDStr)
 	if err != nil {
@@ -186,7 +185,7 @@ func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 	flagStr := r.FormValue("flag")
 	flag, _ := strconv.Atoi(flagStr)
 
-	if err := s.Service.SetFlag(ctx, imageID, flag); err != nil {
+	if err := s.Service.SetFlag(imageID, flag); err != nil {
 		message := "Failed to set Flag"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -433,7 +432,7 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	count, _ := s.Service.GetGalleryCount(ctx, id)
+	count, _ := s.Service.GetGalleryCount(id)
 
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
@@ -526,7 +525,7 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 			expected := s.Service.GetExpectedCount(g.ID)
 			if expected != 0 {
 				hasAct = true
-				current, _ := s.Service.GetGalleryCount(ctx, g.ID)
+				current, _ := s.Service.GetGalleryCount(g.ID)
 				if expected == -1 {
 					p = append(p, Progress{
 						GalleryName: g.Name,
@@ -649,7 +648,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, message, http.StatusInternalServerError)
 			return
 		}
-		if err := s.Service.DeleteImages(ctx, files, false); err != nil {
+		if err := s.Service.DeleteImages(ctx, files); err != nil {
 			message := "Failed to delete Gallery"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -705,7 +704,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryImage, _ := s.Service.GetImageInfo(ctx, imageID)
+	queryImage, _ := s.Service.GetImageInfo(imageID)
 	returnTo := query.String(r, "returnTo", name)
 	galleries, _ := s.Service.GetAllGalleries()
 
@@ -801,9 +800,7 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	image.FilePath = r.FormValue("path")
 
-	deleteDisk := true
-
-	if err := s.Service.DeleteImage(ctx, image, deleteDisk); err != nil {
+	if err := s.Service.DeleteImage(ctx, image); err != nil {
 		message := "Failed to delete File"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -837,7 +834,6 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		imageIDsStr := r.FormValue("image_id")
-		deleteDisk := true
 		var images []db.SImage
 
 		for _, id := range strings.Split(imageIDsStr, ",") {
@@ -848,7 +844,7 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := s.Service.DeleteImages(ctx, images, deleteDisk); err != nil {
+		if err := s.Service.DeleteImages(ctx, images); err != nil {
 			message := "Failed to delete Image"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -861,8 +857,6 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	name := r.PathValue("name")
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
@@ -873,7 +867,7 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := s.Service.GetGalleryCount(ctx, galleryID)
+	count, err := s.Service.GetGalleryCount(galleryID)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get count of images in Gallery: %d", galleryID)
 		slog.Error(message, slog.Any("error", err))
@@ -951,7 +945,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	count := -1
 	lastPage := 1
 	if !s.Config.InfiniteScroll {
-		count, _ = s.Service.GetGalleryCount(ctx, galleryID)
+		count, _ = s.Service.GetGalleryCount(galleryID)
 		lastPage = count / s.Config.ImagesPerPage
 		if count%s.Config.ImagesPerPage != 0 {
 			lastPage++
@@ -993,7 +987,6 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	name := r.PathValue("name")
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
@@ -1008,7 +1001,7 @@ func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	count, _ := s.Service.GetGalleryCount(ctx, galleryID)
+	count, _ := s.Service.GetGalleryCount(galleryID)
 	w.Write([]byte(fmt.Sprintf("%d Images", count)))
 }
 
@@ -1063,8 +1056,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if action == "delete" || action == "delete_disk" {
-		deleteDisk := true
-		if err := s.Service.DeleteImages(ctx, images, deleteDisk); err != nil {
+		if err := s.Service.DeleteImages(ctx, images); err != nil {
 			message := "Failed to delete images in batch"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -1103,7 +1095,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, message, http.StatusInternalServerError)
 				return
 			}
-		} else if action == "copy" {
+		} else {
 			if err := s.Service.CopyToGallery(ctx, targetID, images); err != nil {
 				message := "Failed to copy images"
 				slog.Error(message, slog.Any("error", err))
@@ -1186,9 +1178,8 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
-	flagFilter := r.FormValue("flagFilter")
 
-	images, err := s.Service.SearchImages(ctx, search, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, threshold, flagFilter)
+	images, err := s.Service.SearchImages(ctx, search, galleryID, page-1, s.Config.ImagesPerPage, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -1302,8 +1293,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
 
-	flagFilter := r.FormValue("flagFilter")
-	images, err := s.Service.SearchImages64(ctx, file64, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, threshold, flagFilter)
+	images, err := s.Service.SearchImages64(ctx, file64, galleryID, page-1, s.Config.ImagesPerPage, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -1335,14 +1325,13 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
 	}
-	imageInfo, err := s.Service.GetImageInfo(ctx, id)
+	imageInfo, err := s.Service.GetImageInfo(id)
 	if err != nil {
 		message := "Failed to get Image Info"
 		slog.Error(message, slog.Any("error", err))
@@ -1358,7 +1347,6 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	imageIDStr := r.PathValue("id")
 	imageID, err := strconv.Atoi(imageIDStr)
 	if err != nil {
@@ -1375,7 +1363,7 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Service.SetRating(ctx, imageID, rating); err != nil {
+	if err := s.Service.SetRating(imageID, rating); err != nil {
 		message := "Failed to set Image rating"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)

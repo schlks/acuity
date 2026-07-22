@@ -175,7 +175,7 @@ dialog.closing::backdrop {
 	background: color-mix(in srgb, var(--secondary) 30%, transparent);
 }
 .nav-item.active {
-	background-color: color-mix(in srgb, var(--primary) 15%, transparent);
+	background-color: color-mix(in srgb, var(--bg) 100%, transparent);
 	color: var(--text);
 }
 

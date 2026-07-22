@@ -5,7 +5,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -184,8 +183,7 @@ iso, flash)
 	for _, img := range images {
 		_, err := query.Exec(img)
 		if err != nil {
-			message := fmt.Sprintf("failed to insert %s into SQLite", img.FilePath)
-			slog.Error(message, slog.Any("error", err))
+			slog.Error("failed to insert image into SQLite", slog.String("imagePath", img.FilePath), slog.Any("error", err))
 			return err
 		}
 	}
@@ -293,7 +291,7 @@ func (s *SQLiteClient) RemoveImage(id int) error {
 }
 
 func (s *SQLiteClient) UpdateGallery(id int, name string) error {
-	query := "UPDATE  galleries SET name = ? WHERE id = ?;"
+	query := "UPDATE galleries SET name = ? WHERE id = ?;"
 
 	_, err := s.DB.Exec(query, name, id)
 	if err != nil {
@@ -415,6 +413,35 @@ func (s *SQLiteClient) GetAllGalleries() ([]Gallery, error) {
 		galleries = append(galleries, g)
 	}
 	return galleries, nil
+}
+
+func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
+	tx, err := s.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query, err := tx.Prepare("UPDATE images SET gallery_id = ? WHERE id = ?")
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	for _, img := range sImages {
+		_, err := query.Exec(newGalleryID, img.ID)
+		if err != nil {
+			message := "failed to instert into SQLite"
+			slog.Error(message, slog.String("file", img.FilePath), slog.Any("error", err))
+			return err
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *SQLiteClient) ResetDatabase() error {

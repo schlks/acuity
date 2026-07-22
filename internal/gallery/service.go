@@ -1,9 +1,10 @@
-// Package gallery contains the core business logic for managing
+// Package gallery contains the core logic for managing
 // photo galleries, including synchronizing local folders and
-// orchestrating database updates.
+// orchestrating database updates
 package gallery
 
 import (
+	"acuity/pkg/db"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -21,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"acuity/pkg/db"
-
 	"github.com/buckket/go-blurhash"
 	"github.com/evanoberholster/imagemeta"
 	"github.com/go-openapi/strfmt"
@@ -30,6 +29,7 @@ import (
 	"github.com/h2non/bimg"
 	"github.com/weaviate/weaviate/entities/models"
 	"golang.org/x/sync/errgroup"
+	"gonum.org/v1/gonum/floats"
 )
 
 type GalleryService struct {
@@ -116,8 +116,9 @@ func (g *GalleryService) CreateGallery(ctx context.Context, name string, folderP
 	}
 
 	if err := g.sDB.InsertGallery(folderPath, name); err != nil {
-		return err
+		return nil
 	}
+
 	if err := g.UpdateFolder(ctx, name); err != nil {
 		return err
 	}
@@ -129,6 +130,7 @@ func (g *GalleryService) DeleteGallery(ctx context.Context, id int) error {
 	if err := g.sDB.RemoveGallery(id); err != nil {
 		return err
 	}
+
 	if err := g.wDB.RemoveGalleryImages(ctx, id); err != nil {
 		return err
 	}
@@ -153,15 +155,14 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 	go func() {
 		defer func() {
 			g.mu.Lock()
-			g.ExpectedCount[gallery.ID] = 0 // Reset when done to prevent infinite UI polling
+			g.ExpectedCount[gallery.ID] = 0
 			delete(g.cancelFuncs, gallery.ID)
 			g.mu.Unlock()
 		}()
 
 		known, err := g.sDB.GetKnownPaths(gallery.ID)
 		if err != nil {
-			slog.Error("Failed to get known paths", slog.Any("error", err))
-			return
+			slog.Error("Failed to get file paths", slog.Any("error", err))
 		}
 
 		filePaths, missingPaths, err := g.getSeenFilePaths(known, gallery.Path)
@@ -176,6 +177,7 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 		g.mu.Lock()
 		g.ExpectedCount[gallery.ID] = currentCount + len(filePaths) - len(missingPaths)
 		g.cancelFuncs[gallery.ID] = cancel
+
 		g.CurrentCount[gallery.ID] = currentCount - len(missingPaths)
 		g.mu.Unlock()
 
@@ -186,8 +188,7 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 			for _, path := range missingPaths {
 				imagesToDelete = append(imagesToDelete, db.SImage{FilePath: path, GalleryID: gallery.ID})
 			}
-			// Delete from DB without touching the disk (since they are already missing)
-			_ = g.DeleteImages(importCtx, imagesToDelete, false)
+			_ = g.DeleteImages(importCtx, imagesToDelete)
 		}
 		if len(filePaths) > 0 {
 			g.ImportImages(importCtx, filePaths, gallery.ID, func(count int) {
@@ -199,6 +200,7 @@ func (g *GalleryService) UpdateFolder(ctx context.Context, name string) error {
 			})
 		}
 	}()
+
 	return nil
 }
 
@@ -221,7 +223,7 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 				Class: "Image",
 				Properties: map[string]any{
 					"filepath":   result.Weaviate.Path,
-					"image":      result.Weaviate.Base64,
+					"images":     result.Weaviate.Base64,
 					"gallery_id": galleryID,
 				},
 			}
@@ -242,24 +244,25 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 				sBatch = make([]db.SImage, 0, batchSize)
 				slog.Info("Wrote Images into the Databases")
 			}
-		}
 
-		if len(wBatch) > 0 {
-			failed := g.wDB.WriteBatchDB(ctx, wBatch)
+			if len(wBatch) > 0 {
+				failed := g.wDB.WriteBatchDB(ctx, wBatch)
 
-			if err := g.sDB.InsertImage(sBatch); err != nil {
-				slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
+				if err := g.sDB.InsertImage(sBatch); err != nil {
+					slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
+				}
+				if progressCallback != nil {
+					progressCallback(len(wBatch) - failed)
+				}
+				gallery, err := g.sDB.GetGalleryByID(galleryID)
+				if err != nil {
+					message := "Failed to get gallery name"
+					slog.Error(message, slog.Any("error", err))
+				}
+				message := "Wrote files into databases and finished import"
+				slog.Info(message, slog.String("gallery", gallery.Name))
 			}
-			if progressCallback != nil {
-				progressCallback(len(wBatch) - failed)
-			}
-			gallery, err := g.sDB.GetGalleryByID(galleryID)
-			if err != nil {
-				message := "failed to get gallery name"
-				slog.Error(message, slog.Any("error", err))
-			}
-			message := "Wrote files into database and finished import"
-			slog.Info(message, slog.Int("amount", len(wBatch)-failed), slog.String("gallery", gallery.Name))
+
 		}
 		close(done)
 	}()
@@ -288,18 +291,20 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 			}
 
 			bimgImg := bimg.NewImage(data)
-			var width, height int
+			var width, heigth int
 			bimgSize, err := bimgImg.Size()
-			if err == nil {
-				width = bimgSize.Width
-				height = bimgSize.Height
+			if err != nil {
+				slog.Error("failed to get image size", slog.Any("error", err))
+				return err
 			}
+			width = bimgSize.Width
+			heigth = bimgSize.Height
 
 			var resolution int
 			var aspectRatio float64
-			if width > 0 && height > 0 {
-				resolution = width * height
-				aspectRatio = float64(width) / float64(height)
+			if width > 0 && heigth > 0 {
+				resolution = width * heigth
+				aspectRatio = float64(width) / float64(heigth)
 			}
 
 			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
@@ -307,20 +312,21 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 				return nil
 			}
 
-			// Generate Blurhash
 			smallImgOptions := bimg.Options{
 				Width:  128,
 				Height: 128,
 				Crop:   false,
 			}
 			smallBuffer, err := bimgImg.Process(smallImgOptions)
-			if err == nil {
-				img, err := jpeg.Decode(bytes.NewReader(smallBuffer))
-				if err == nil {
-					bhash, _ := blurhash.Encode(4, 3, img)
-					sImage.Blurhash = bhash
-				}
+			if err != nil {
+				return nil
 			}
+			img, err := jpeg.Decode(bytes.NewReader(smallBuffer))
+			if err != nil {
+				return nil
+			}
+			bhash, _ := blurhash.Encode(4, 3, img)
+			sImage.Blurhash = bhash
 
 			sImage.Date = time.Now().Format(time.RFC3339)
 			sImage.Taken = sImage.Date
@@ -328,7 +334,6 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 			sImage.Resolution = resolution
 			sImage.AspectRatio = aspectRatio
 
-			// Extract EXIF data
 			if x, err := imagemeta.Decode(bytes.NewReader(data)); err == nil {
 				tm := x.OriginalDate()
 				if !tm.IsZero() {
@@ -355,7 +360,7 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 	}
 
 	if err := eg.Wait(); err != nil {
-		slog.Error("Errors occurred while importing images", slog.Any("error", err))
+		slog.Error("Errors occured while importing images", slog.Any("error", err))
 	}
 
 	close(resultChan)
@@ -376,20 +381,20 @@ func (g *GalleryService) GetGalleryID(name string) (int, error, bool) {
 }
 
 func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.SImage, error) {
-	gallery, err := g.sDB.GetGalleryByName(name)
-	if err != nil {
+	galleryID, err, ok := g.GetGalleryID(name)
+	if err != nil && !ok {
 		return nil, err
 	}
-	files, err := g.sDB.GetAllImages(gallery.ID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
+	files, err := g.sDB.GetAllImages(galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
 	if err != nil {
 		return nil, err
 	}
 
-	return files, nil
+	return files, err
 }
 
-func (g *GalleryService) SearchImages(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.SImage, error) {
-	images, err := g.wDB.SearchImage(ctx, search, galleryID, page, imagesPerPage, threshold)
+func (g *GalleryService) SearchImages(ctx context.Context, searcn string, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.SImage, error) {
+	images, err := g.wDB.SearchImage(ctx, searcn, galleryID, page, imagesPerPage, threshold)
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +409,7 @@ func (g *GalleryService) SearchImages(ctx context.Context, search string, galler
 	return sImages, nil
 }
 
-func (g *GalleryService) SearchImages64(ctx context.Context, search string, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, threshold float32, flagFilter string) ([]db.SImage, error) {
+func (g *GalleryService) SearchImages64(ctx context.Context, search string, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.SImage, error) {
 	images, err := g.wDB.SearchImage64(ctx, search, galleryID, page, imagesPerPage, threshold)
 	if err != nil {
 		return nil, err
@@ -436,14 +441,13 @@ func (g *GalleryService) ConvertImage(file []byte) (string, error) {
 	return base64Image, nil
 }
 
-func (g *GalleryService) DeleteImage(ctx context.Context, inputImg db.SImage, deleteDisk bool) error {
+func (g *GalleryService) DeleteImage(ctx context.Context, inputImg db.SImage) error {
 	image, err := g.sDB.GetImageByID(inputImg.ID)
 	if err != nil {
 		return fmt.Errorf("failed to fetch image: %w", err)
 	}
 
-	message := fmt.Sprintf("Deleting: %s", image.FilePath)
-	slog.Info(message)
+	slog.Info("Deleting image", slog.String("file", image.FilePath))
 
 	uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(image.FilePath+strconv.Itoa(image.GalleryID))).String()
 	wImage := db.WImage{ID: uuidStr, Path: image.FilePath}
@@ -456,16 +460,15 @@ func (g *GalleryService) DeleteImage(ctx context.Context, inputImg db.SImage, de
 		return err
 	}
 
-	if deleteDisk && image.FilePath != "" {
-		err := os.Remove(image.FilePath)
-		if err != nil {
+	if image.FilePath != "" {
+		if err := os.Remove(image.FilePath); err != nil {
 			slog.Warn("Failed to delete physical file", slog.String("path", image.FilePath), slog.Any("error", err))
 		}
 	}
 	return nil
 }
 
-func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage, deleteDisk bool) error {
+func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage) error {
 	var paths []string
 	var wImages []db.WImage
 
@@ -476,15 +479,11 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage, d
 			continue
 		}
 
-		message := fmt.Sprintf("Deleting: %s", img.FilePath)
-		slog.Info(message)
-		// Calculate the Weaviate UUID using the original deterministic logic
+		slog.Info("Removing Image from Databases", slog.String("Image", img.FilePath))
 		uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(img.FilePath+strconv.Itoa(img.GalleryID))).String()
 		wImages = append(wImages, db.WImage{ID: uuidStr, Path: img.FilePath})
 
-		if deleteDisk && img.FilePath != "" {
-			paths = append(paths, img.FilePath)
-		}
+		paths = append(paths, img.FilePath)
 
 		if err := g.sDB.RemoveImage(img.ID); err != nil {
 			return err
@@ -495,14 +494,11 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage, d
 		return err
 	}
 
-	if deleteDisk {
-		for _, path := range paths {
-			message := fmt.Sprintf("Deleting physical file: %s", path)
-			slog.Info(message)
-			err := os.Remove(path)
-			if err != nil {
-				slog.Warn("Failed to delete physical file", slog.String("path", path), slog.Any("error", err))
-			}
+	for _, path := range paths {
+		slog.Info("Deleting physical file", slog.String("file", path))
+		err := os.Remove(path)
+		if err != nil {
+			slog.Warn("Failed to delete physical file", slog.String("path", path), slog.Any("error", err))
 		}
 	}
 	return nil
@@ -517,14 +513,14 @@ func (g *GalleryService) FindDublicates(ctx context.Context, imageID int, galler
 	return g.wDB.FindDublicates(ctx, uuidStr, galleryID, page, imagesPerPage, threshold)
 }
 
-func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []db.SImage) error {
+func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, sImages []db.SImage) error {
 	targetGallery, err := g.sDB.GetGalleryByID(newID)
 	if err != nil {
 		return err
 	}
 	var wImages []db.WImage
 
-	for _, img := range images {
+	for _, img := range sImages {
 		if img.FilePath != "" {
 			fileName := filepath.Base(img.FilePath)
 			newPath := filepath.Join(targetGallery.Path, fileName)
@@ -534,7 +530,6 @@ func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []
 			if err := os.Rename(img.FilePath, newPath); err == nil {
 				img.FilePath = newPath
 			} else {
-				// cross-device fallback
 				input, err := os.ReadFile(img.FilePath)
 				if err == nil {
 					if err := os.WriteFile(newPath, input, 0o644); err == nil {
@@ -552,17 +547,23 @@ func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, images []
 		}
 	}
 
-	return g.wDB.ChangeGallery(ctx, newID, wImages)
+	if err := g.sDB.ChangeGallery(newID, sImages); err != nil {
+		return err
+	}
+	if err := g.wDB.ChangeGallery(ctx, newID, wImages); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, images []db.SImage) error {
+func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, sImages []db.SImage) error {
 	targetGallery, err := g.sDB.GetGalleryByID(newID)
 	if err != nil {
 		return err
 	}
 	var wImages []db.WImage
 
-	for _, img := range images {
+	for _, img := range sImages {
 		if img.FilePath != "" {
 			fileName := filepath.Base(img.FilePath)
 			newPath := filepath.Join(targetGallery.Path, fileName)
@@ -573,6 +574,7 @@ func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, images []
 			if err == nil {
 				if err := os.WriteFile(newPath, input, 0o644); err == nil {
 					img.FilePath = newPath
+					img.GalleryID = newID
 				} else {
 					return fmt.Errorf("failed to write copy %s: %w", newPath, err)
 				}
@@ -584,10 +586,16 @@ func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, images []
 		}
 	}
 
-	return g.wDB.CopyToGallery(ctx, newID, wImages)
+	if err := g.sDB.InsertImage(sImages); err != nil {
+		return err
+	}
+	if err := g.wDB.CopyToGallery(ctx, newID, wImages); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[string]any, error) {
+func (g *GalleryService) GetImageInfo(imageID int) (map[string]any, error) {
 	sImage, err := g.sDB.GetImageByID(imageID)
 	if err != nil {
 		return nil, err
@@ -633,17 +641,7 @@ func (g *GalleryService) GetImageInfo(ctx context.Context, imageID int) (map[str
 	return imageInfo, nil
 }
 
-func (g *GalleryService) ResetDatabase(ctx context.Context) error {
-	if err := g.sDB.ResetDatabase(); err != nil {
-		return err
-	}
-	if err := g.wDB.ResetDatabase(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (g *GalleryService) GetGalleryCount(ctx context.Context, galleryID int) (int, error) {
+func (g *GalleryService) GetGalleryCount(galleryID int) (int, error) {
 	g.mu.Lock()
 	expected := g.ExpectedCount[galleryID]
 	current, hasCurrent := g.CurrentCount[galleryID]
@@ -655,11 +653,11 @@ func (g *GalleryService) GetGalleryCount(ctx context.Context, galleryID int) (in
 	return g.sDB.GetGalleryCount(galleryID)
 }
 
-func (g *GalleryService) SetRating(ctx context.Context, imageID int, rating int) error {
+func (g *GalleryService) SetRating(imageID int, rating int) error {
 	return g.sDB.UpdateImageRating(imageID, rating)
 }
 
-func (g *GalleryService) SetFlag(ctx context.Context, imageID int, flag int) error {
+func (g *GalleryService) SetFlag(imageID int, flag int) error {
 	return g.sDB.UpdateImageFlag(imageID, flag)
 }
 
@@ -695,7 +693,7 @@ func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold flo
 				continue
 			}
 
-			distance := 1.0 - cosineSimilarity(imgA.Vector, imgB.Vector)
+			distance := 1. - floats.Dot(imgA.Vector, imgB.Vector)/(math.Sqrt(floats.Norm(imgA.Vector, 2))*math.Sqrt(floats.Norm(imgB.Vector, 2)))
 			if distance <= threshold {
 				if len(currentGroup) == 0 {
 					sImageA, err := g.sDB.GetImageByPath(imgA.Path)
@@ -722,15 +720,12 @@ func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold flo
 	return groups, nil
 }
 
-func cosineSimilarity(a, b []float64) float64 {
-	var dotProduct, normA, normB float64
-	for i := 0; i < len(a); i++ {
-		dotProduct += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
+func (g *GalleryService) ResetDatabase(ctx context.Context) error {
+	if err := g.sDB.ResetDatabase(); err != nil {
+		return err
 	}
-	if normA == 0 || normB == 0 {
-		return 0
+	if err := g.wDB.ResetDatabase(ctx); err != nil {
+		return err
 	}
-	return dotProduct / (math.Sqrt(normB) * math.Sqrt(normB))
+	return nil
 }

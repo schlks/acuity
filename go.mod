@@ -11,11 +11,10 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mallardduck/go-http-helpers v0.1.0
 	github.com/spf13/viper v1.21.0
-	github.com/stretchr/testify v1.11.1
 	github.com/weaviate/weaviate v1.37.2
 	github.com/weaviate/weaviate-go-client/v5 v5.7.3
-	go.uber.org/mock v0.4.0
 	golang.org/x/sync v0.20.0
+	gonum.org/v1/gonum v0.17.0
 	modernc.org/sqlite v1.52.0
 )
 
@@ -61,6 +60,7 @@ require (
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tinylib/msgp v1.6.3 // indirect
 	go.mongodb.org/mongo-driver v1.17.6 // indirect
