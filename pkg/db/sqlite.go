@@ -173,7 +173,12 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
 		INSERT INTO images (gallery_id, filepath, blurhash, rating, flag, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, focal_length, aperture, shutter_speed, 
 iso, flash)
 		VALUES (:gallery_id, :filepath, :blurhash, :rating, :flag, :extension, :date, :taken, :size, :resolution, :aspect_ratio, :camera_make, :lens_make, :focal_length, :aperture, :shutter_speed, 
-:iso, :flash);
+:iso, :flash)
+		ON CONFLICT(filepath) DO UPDATE SET
+                gallery_id = :gallery_id,
+                blurhash = :blurhash,
+                size = :size,
+				date = :date;
 	`)
 	if err != nil {
 		tx.Rollback()
@@ -200,7 +205,7 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 
 	// Basis-Query
 	query := "SELECT * FROM images WHERE gallery_id = ?"
-	args := []interface{}{galleryID}
+	args := []any{galleryID}
 
 	// Filtering
 	if flagFilter != "" && flagFilter != "any" && flagFilter != "all" {
@@ -431,7 +436,7 @@ func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
 	for _, img := range sImages {
 		_, err := query.Exec(newGalleryID, img.ID)
 		if err != nil {
-			message := "failed to instert into SQLite"
+			message := "failed to insert into SQLite"
 			slog.Error(message, slog.String("file", img.FilePath), slog.Any("error", err))
 			return err
 		}
