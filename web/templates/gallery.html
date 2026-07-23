@@ -43,6 +43,9 @@
 		<button class="btn-icon" title="Select All (Page)" style="flex-shrink: 0;" @click="document.querySelectorAll('#gallery-container img').forEach(img => { if(img.dataset.id && !selectedImages.includes(img.dataset.id)) selectedImages.push(img.dataset.id) })">
 			<span class="material-symbols-outlined">library_add_check</span>
 		</button>
+        <button class="btn-icon" title="Remove flags" style="flex-shrink: 0;" hx-post="/gallery/{{.Name}}/unflag">
+            <span class="material-symbols-outlined">block</span>
+        </button>
 		<button class="btn-icon" title="Batch Actions" style="flex-shrink: 0;" @click="document.getElementById('batchActionDialog').showModal()">
 			<span class="material-symbols-outlined">more_vert</span>
 		</button>

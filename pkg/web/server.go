@@ -87,6 +87,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
 	mux.HandleFunc("DELETE /gallery/{name}/scan", s.cancelScan)
 	mux.HandleFunc("POST /gallery/{name}/edit", s.editGallery)
+	mux.HandleFunc("POST /gallery/{name}/unflag", s.unflagGallery)
 	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
 	mux.HandleFunc("GET	/gallery/{name}/count", s.handleGalleryCount)
 	mux.HandleFunc("GET	/gallery/{name}/images", s.getGalleryImages)
@@ -202,6 +203,19 @@ func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *Server) unflagGallery(w http.ResponseWriter, r *http.Request) {
+	galleryName := r.PathValue("name")
+	if err := s.Service.Unflag(galleryName); err != nil {
+		message := "Failed to unflag all images in gallery"
+		slog.Error(message, slog.String("gallery", galleryName), slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("HX-Trigger", "refresh-images")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {

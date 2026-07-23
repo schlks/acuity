@@ -720,6 +720,14 @@ func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold flo
 	return groups, nil
 }
 
+func (g *GalleryService) Unflag(galleryName string) error {
+	gallery, err := g.sDB.GetGalleryByName(galleryName)
+	if err != nil {
+		return err
+	}
+	return g.sDB.Unflag(gallery.ID)
+}
+
 func (g *GalleryService) ResetDatabase(ctx context.Context) error {
 	if err := g.sDB.ResetDatabase(); err != nil {
 		return err

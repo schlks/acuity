@@ -449,6 +449,12 @@ func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
 	return nil
 }
 
+func (s *SQLiteClient) Unflag(galleryID int) error {
+	query := "UPDATE images SET flag = ? WHERE gallery_id = ?;"
+	_, err := s.DB.Exec(query, 0, galleryID)
+	return err
+}
+
 func (s *SQLiteClient) ResetDatabase() error {
 	query := `
 		DROP TABLE IF EXISTS galleries;
