@@ -655,7 +655,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if deleteGallery {
-		files, err := s.Service.GetGalleryFiles(ctx, name, "", "", -1, 10_000, "", "")
+		files, err := s.Service.GetGalleryFiles(name, "", "", -1, 10_000, "", "")
 		if err != nil {
 			message := "Failed to get Files in Gallery"
 			slog.Error(message, slog.Any("error", err))
@@ -670,6 +670,7 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	w.Header().Set("HX-Trigger", "refresh-sidebar")
 	w.Header().Set("HX-Redirect", "/")
 }
 
@@ -710,7 +711,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
 
-	images, err := s.Service.FindDublicates(ctx, imageID, galleryID, page-1, s.Config.ImagesPerPage, threshold)
+	images, err := s.Service.FindDublicates(ctx, imageID, galleryID, threshold)
 	if err != nil {
 		message := "Failed to find duplicate Images"
 		slog.Error(message, slog.Any("error", err))
@@ -1054,7 +1055,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			flagFilter = strings.TrimPrefix(criteria, "flag_")
 		}
 
-		files, err := s.Service.GetGalleryFiles(ctx, sourceGalleryName, "", "", 0, 100_000, flagFilter, "")
+		files, err := s.Service.GetGalleryFiles(sourceGalleryName, "", "", 0, 100_000, flagFilter, "")
 		if err != nil {
 			message := "Failed to get files for batch action"
 			slog.Error(message, slog.Any("error", err))
@@ -1199,7 +1200,7 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
 
-	images, err := s.Service.SearchImages(ctx, search, galleryID, page-1, s.Config.ImagesPerPage, threshold)
+	images, err := s.Service.SearchImages(ctx, search, galleryID, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -1313,7 +1314,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
 
-	images, err := s.Service.SearchImages64(ctx, file64, galleryID, page-1, s.Config.ImagesPerPage, threshold)
+	images, err := s.Service.SearchImages64(ctx, file64, galleryID, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))

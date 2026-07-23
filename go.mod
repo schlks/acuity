@@ -10,6 +10,7 @@ require (
 	github.com/h2non/bimg v1.1.9
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mallardduck/go-http-helpers v0.1.0
+	github.com/pillowskiy/imagesize v1.1.0
 	github.com/spf13/viper v1.21.0
 	github.com/weaviate/weaviate v1.37.2
 	github.com/weaviate/weaviate-go-client/v5 v5.7.3

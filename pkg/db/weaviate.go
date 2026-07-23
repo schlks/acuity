@@ -252,17 +252,17 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 			success++
 		}
 	}
-	//slog.Info("Batch write to Weaviate complete", slog.Int("success", success), slog.Int("failed", failed))
+	slog.Info("Batch write to Weaviate complete", slog.Int("success", success), slog.Int("failed", failed))
 	return failed
 }
 
-func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
+func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, imagesPerPage int, threshold float32) ([]WImage, error) {
 	nearText := w.Client.GraphQL().
 		NearTextArgBuilder().
 		WithConcepts([]string{search}).
 		WithDistance(threshold)
 
-	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, page, imagesPerPage)
+	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, 0, imagesPerPage)
 
 	if whereFilter != nil {
 		query = query.
@@ -282,13 +282,13 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 	return images, nil
 }
 
-func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
+func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galleryID int, imagesPerPage int, threshold float32) ([]WImage, error) {
 	nearImage := w.Client.GraphQL().
 		NearImageArgBuilder().
 		WithImage(image).
 		WithDistance(threshold)
 
-	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, page, imagesPerPage)
+	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, 0, imagesPerPage)
 
 	if whereFilter != nil {
 		query = query.
@@ -308,12 +308,12 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 	return images, nil
 }
 
-func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, galleryID int, page int, imagesPerPage int, threshold float32) ([]WImage, error) {
+func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, galleryID int, imagesPerPage int, threshold float32) ([]WImage, error) {
 	imageObj := w.Client.GraphQL().NearObjectArgBuilder().
 		WithID(imageID).
 		WithDistance(threshold)
 
-	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, page, imagesPerPage)
+	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, 0, imagesPerPage)
 
 	if whereFilter != nil {
 		query = query.

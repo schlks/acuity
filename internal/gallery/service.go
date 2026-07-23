@@ -27,6 +27,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
 	"github.com/h2non/bimg"
+	"github.com/pillowskiy/imagesize"
 	"github.com/weaviate/weaviate/entities/models"
 	"golang.org/x/sync/errgroup"
 	"gonum.org/v1/gonum/floats"
@@ -222,7 +223,7 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 				Class: "Image",
 				Properties: map[string]any{
 					"filepath":   result.Weaviate.Path,
-					"images":     result.Weaviate.Base64,
+					"image":      result.Weaviate.Base64,
 					"gallery_id": galleryID,
 				},
 			}
@@ -292,12 +293,12 @@ func (g *GalleryService) ImportImages(ctx context.Context, filePaths []string, g
 
 			bimgImg := bimg.NewImage(data)
 			var width, heigth int
-			bimgSize, err := bimgImg.Size()
+			imageSize, err := imagesize.ExtractFileInfo(path)
 			if err == nil {
-				width = bimgSize.Width
-				heigth = bimgSize.Height
+				width = imageSize.Width
+				heigth = imageSize.Height
 			} else {
-				slog.Error("failed to get image size with bimg", slog.String("file", path), slog.Any("error", err))
+				slog.Error("failed to get image size with imagesize", slog.String("file", path), slog.Any("error", err))
 			}
 
 			var resolution int
@@ -380,7 +381,7 @@ func (g *GalleryService) GetGalleryID(name string) (int, error, bool) {
 	return gallery.ID, nil, true
 }
 
-func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.SImage, error) {
+func (g *GalleryService) GetGalleryFiles(name string, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]db.SImage, error) {
 	galleryID, err, ok := g.GetGalleryID(name)
 	if err != nil && !ok {
 		return nil, err
@@ -393,8 +394,12 @@ func (g *GalleryService) GetGalleryFiles(ctx context.Context, name string, sortB
 	return files, err
 }
 
-func (g *GalleryService) SearchImages(ctx context.Context, searcn string, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.SImage, error) {
-	images, err := g.wDB.SearchImage(ctx, searcn, galleryID, page, imagesPerPage, threshold)
+func (g *GalleryService) SearchImages(ctx context.Context, search string, galleryID int, threshold float32) ([]db.SImage, error) {
+	count, err := g.sDB.GetGalleryCount(galleryID)
+	if err != nil {
+		return nil, err
+	}
+	images, err := g.wDB.SearchImage(ctx, search, galleryID, count, threshold)
 	if err != nil {
 		return nil, err
 	}
@@ -409,8 +414,12 @@ func (g *GalleryService) SearchImages(ctx context.Context, searcn string, galler
 	return sImages, nil
 }
 
-func (g *GalleryService) SearchImages64(ctx context.Context, search string, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.SImage, error) {
-	images, err := g.wDB.SearchImage64(ctx, search, galleryID, page, imagesPerPage, threshold)
+func (g *GalleryService) SearchImages64(ctx context.Context, search string, galleryID int, threshold float32) ([]db.SImage, error) {
+	count, err := g.sDB.GetGalleryCount(galleryID)
+	if err != nil {
+		return nil, err
+	}
+	images, err := g.wDB.SearchImage64(ctx, search, galleryID, count, threshold)
 	if err != nil {
 		return nil, err
 	}
@@ -504,13 +513,17 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage) e
 	return nil
 }
 
-func (g *GalleryService) FindDublicates(ctx context.Context, imageID int, galleryID int, page int, imagesPerPage int, threshold float32) ([]db.WImage, error) {
+func (g *GalleryService) FindDublicates(ctx context.Context, imageID int, galleryID int, threshold float32) ([]db.WImage, error) {
 	sImage, err := g.sDB.GetImageByID(imageID)
 	if err != nil {
 		return nil, err
 	}
 	uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(sImage.FilePath+strconv.Itoa(sImage.GalleryID))).String()
-	return g.wDB.FindDublicates(ctx, uuidStr, galleryID, page, imagesPerPage, threshold)
+	count, err := g.sDB.GetGalleryCount(galleryID)
+	if err != nil {
+		return nil, err
+	}
+	return g.wDB.FindDublicates(ctx, uuidStr, galleryID, count, threshold)
 }
 
 func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, sImages []db.SImage) error {
@@ -693,7 +706,7 @@ func (g *GalleryService) FindGlobalDuplicates(ctx context.Context, threshold flo
 				continue
 			}
 
-			distance := 1. - floats.Dot(imgA.Vector, imgB.Vector)/(math.Sqrt(floats.Norm(imgA.Vector, 2))*math.Sqrt(floats.Norm(imgB.Vector, 2)))
+			distance := 1.0 - (floats.Dot(imgA.Vector, imgB.Vector) / (math.Sqrt(floats.Norm(imgA.Vector, 2)) * math.Sqrt(floats.Norm(imgB.Vector, 2))))
 			if distance <= threshold {
 				if len(currentGroup) == 0 {
 					sImageA, err := g.sDB.GetImageByPath(imgA.Path)
