@@ -1019,6 +1019,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	criteria := r.FormValue("criteria")
 	action := r.FormValue("batch_action")
 	sourceGalleryName := r.FormValue("source_gallery")
+	var targetGalleryName string
 
 	var images []db.SImage
 
@@ -1064,7 +1065,6 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if action == "move" || action == "copy" {
 		isNew := r.FormValue("is_new") == "true"
-		var targetGalleryName string
 
 		if isNew {
 			targetGalleryName = r.FormValue("new_name")
@@ -1104,8 +1104,14 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if err := s.Service.UpdateFolder(ctx, targetGalleryName); err != nil {
+		message := "Failed to update target gallery"
+		slog.Error(message, slog.String("gallery", targetGalleryName), slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
 
-	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": ""}`)
+	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": "", "check-progress": ""}`)
 	w.WriteHeader(http.StatusOK)
 }
 

@@ -173,10 +173,12 @@ dialog.closing::backdrop {
 .nav-item:hover {
 	color: var(--text);
 	background: color-mix(in srgb, var(--secondary) 30%, transparent);
+    z-index: 5
 }
 .nav-item.active {
-	background-color: color-mix(in srgb, var(--bg) 100%, transparent);
-	color: var(--text);
+    color: var(--text);
+	background-color: color-mix(in srgb, var(--bg-light) 100%, transparent);
+    z-index: 6
 }
 
 .btn-primary {

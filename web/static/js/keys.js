@@ -234,7 +234,9 @@ window.addEventListener('keydown', (e) => {
 			if (settingsBtn) settingsBtn.click();
 			break;
 		case 'u': case 'U':
-			const dupBtn = document.querySelector('[hx-get="/gallery/global/duplicates"]');
+            if (!isCarouselOpen) {
+                const dupBtn = document.querySelector('[hx-get="/gallery/global/duplicates"]');
+            }
 			if (dupBtn) dupBtn.click();
 			break;
 		case '+': case '=':
