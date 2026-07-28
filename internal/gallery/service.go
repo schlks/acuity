@@ -47,6 +47,12 @@ type ImagePayload struct {
 	SQLite   db.SImage
 }
 
+type ImageInfo struct {
+	SImage db.SImage `json:"SImage"`
+	Gallery string   `json:"gallery,omitempty"`
+	Name string 	 `json:"name,omitempty"`
+}
+
 func NewService(sDB *db.SQLiteClient, wDB *db.WeaviateClient) *GalleryService {
 	return &GalleryService{
 		sDB:           sDB,
@@ -513,7 +519,7 @@ func (g *GalleryService) DeleteImages(ctx context.Context, images []db.SImage) e
 	return nil
 }
 
-func (g *GalleryService) FindDublicates(ctx context.Context, imageID int, galleryID int, threshold float32) ([]db.WImage, error) {
+func (g *GalleryService) FindDublicates(ctx context.Context, imageID int, galleryID int, threshold float32) ([]db.SImage, error) {
 	sImage, err := g.sDB.GetImageByID(imageID)
 	if err != nil {
 		return nil, err
@@ -523,7 +529,20 @@ func (g *GalleryService) FindDublicates(ctx context.Context, imageID int, galler
 	if err != nil {
 		return nil, err
 	}
-	return g.wDB.FindDublicates(ctx, uuidStr, galleryID, count, threshold)
+	var sImages []db.SImage 
+	images, err := g.wDB.FindDuplicates(ctx, uuidStr, galleryID, count, threshold)
+	if err != nil {
+		return nil, err
+	}
+	for _, img := range images {
+		image, err := g.sDB.GetImageByPath(img.Path)
+		if err != nil {
+			slog.Error("Failed to get Image", slog.String("Image", img.Path), slog.Any("error", err))
+			continue
+		}
+		sImages = append(sImages, image)
+	}
+	return sImages, nil
 }
 
 func (g *GalleryService) ChangeGallery(ctx context.Context, newID int, sImages []db.SImage) error {
@@ -608,49 +627,25 @@ func (g *GalleryService) CopyToGallery(ctx context.Context, newID int, sImages [
 	return nil
 }
 
-func (g *GalleryService) GetImageInfo(imageID int) (map[string]any, error) {
+func (g *GalleryService) GetImageInfo(imageID int) (ImageInfo, error) {
 	sImage, err := g.sDB.GetImageByID(imageID)
 	if err != nil {
-		return nil, err
+		return ImageInfo{}, err
 	}
 
-	baseName := filepath.Base(sImage.FilePath)
+	name := strings.TrimSuffix(filepath.Base(sImage.FilePath), filepath.Ext(sImage.FilePath))
 
-	cameraDetails := map[string]any{
-		"make":          sImage.CameraMake,
-		"lens_make":     sImage.LensMake,
-		"lens_model":    sImage.LensMake,
-		"focal_length":  sImage.FocalLength,
-		"aperture":      sImage.Aperture,
-		"shutter_speed": sImage.ShutterSpeed,
-		"iso":           sImage.Iso,
-		"flash":         sImage.Flash,
-	}
-
-	imageInfo := map[string]any{
-		"ID":            strconv.Itoa(sImage.ID),
-		"Name":          strings.TrimSuffix(baseName, filepath.Ext(baseName)),
-		"Path":          sImage.FilePath,
-		"FilePath":      sImage.FilePath,
-		"GalleryID":     strconv.Itoa(sImage.GalleryID),
-		"Rating":        sImage.Rating,
-		"Size":          sImage.Size,
-		"Resolution":    sImage.Resolution,
-		"AspectRatio":   sImage.AspectRatio,
-		"Extension":     sImage.Extension,
-		"Date":          sImage.Date,
-		"Taken":         sImage.Taken,
-		"Flag":          sImage.Flag,
-		"CameraDetails": cameraDetails,
-		"Gallery":       "",
-	}
-
-	galleryName, err := g.sDB.GetGalleryByID(sImage.GalleryID)
+	gallery, err := g.sDB.GetGalleryByID(sImage.GalleryID)
 	if err != nil {
-		imageInfo["Gallery"] = "Unknown"
-	} else {
-		imageInfo["Gallery"] = galleryName.Name
+		return ImageInfo{}, err
 	}
+
+	imageInfo := ImageInfo {
+		SImage: sImage,
+		Gallery: gallery.Name,
+		Name: name,
+	}
+
 	return imageInfo, nil
 }
 

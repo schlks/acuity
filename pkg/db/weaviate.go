@@ -24,9 +24,9 @@ type WeaviateClient struct {
 }
 
 type ImageVector struct {
-	ID     string
-	Path   string
-	Vector []float64
+	ID     string `json:"id"`
+	Path   string `json:"path"`
+	Vector []float64 `json:"vector"`
 }
 
 type WImage struct {
@@ -199,7 +199,7 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 	return images
 }
 
-func (w *WeaviateClient) getQueryWithWhere(ctx context.Context, distance bool, galleryID int, page int, imagesPerPage int) (*graphql.GetBuilder, *filters.WhereBuilder) {
+func (w *WeaviateClient) getQueryWithWhere(distance bool, galleryID int, page int, imagesPerPage int) (*graphql.GetBuilder, *filters.WhereBuilder) {
 	additional := []graphql.Field{
 		{Name: "id"},
 	}
@@ -262,7 +262,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 		WithConcepts([]string{search}).
 		WithDistance(threshold)
 
-	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, 0, imagesPerPage)
+	query, whereFilter := w.getQueryWithWhere( true, galleryID, 0, imagesPerPage)
 
 	if whereFilter != nil {
 		query = query.
@@ -288,7 +288,7 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 		WithImage(image).
 		WithDistance(threshold)
 
-	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, 0, imagesPerPage)
+	query, whereFilter := w.getQueryWithWhere(true, galleryID, 0, imagesPerPage)
 
 	if whereFilter != nil {
 		query = query.
@@ -308,12 +308,12 @@ func (w *WeaviateClient) SearchImage64(ctx context.Context, image string, galler
 	return images, nil
 }
 
-func (w *WeaviateClient) FindDublicates(ctx context.Context, imageID string, galleryID int, imagesPerPage int, threshold float32) ([]WImage, error) {
+func (w *WeaviateClient) FindDuplicates(ctx context.Context, imageID string, galleryID int, imagesPerPage int, threshold float32) ([]WImage, error) {
 	imageObj := w.Client.GraphQL().NearObjectArgBuilder().
 		WithID(imageID).
 		WithDistance(threshold)
 
-	query, whereFilter := w.getQueryWithWhere(ctx, true, galleryID, 0, imagesPerPage)
+	query, whereFilter := w.getQueryWithWhere(true, galleryID, 0, imagesPerPage)
 
 	if whereFilter != nil {
 		query = query.
@@ -422,7 +422,7 @@ func (w *WeaviateClient) RemoveImages(ctx context.Context, images []WImage) erro
 }
 
 func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]WImage, error) {
-	query, whereFilter := w.getQueryWithWhere(ctx, false, galleryID, page, imagesPerPage)
+	query, whereFilter := w.getQueryWithWhere(false, galleryID, page, imagesPerPage)
 
 	if flagFilter != "" && flagFilter != "any" {
 		flagVal, err := strconv.Atoi(flagFilter)
@@ -495,7 +495,7 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 }
 
 func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (WImage, error) {
-	query, _ := w.getQueryWithWhere(ctx, false, -1, 0, 1)
+	query, _ := w.getQueryWithWhere(false, -1, 0, 1)
 	result, err := query.Do(ctx)
 	if err != nil {
 		return WImage{}, err

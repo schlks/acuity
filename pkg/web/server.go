@@ -35,9 +35,30 @@ type Server struct {
 	Config   *config.Config
 }
 
-type SearchResult struct {
-	Filepath string
-	Distance float64
+type Progress struct {
+	GalleryName string
+	Current     int
+	Expected    int
+	Percent     int
+}
+
+type searchResult struct {
+	GalleryName      string 	  `json:"gallery_name,omitempty"`
+	Images           []db.SImage  `json:"images,omitempty"`
+	QueryImage 		 gallery.ImageInfo `json:"query_image"`
+	Query 			 string		  `json:"query,omitempty"`
+	Threshold 		 float64 	  `json:"threshold,omitempty"`
+	CurrentPage      int 		  `json:"current_page"`
+	PrevPage         int 		  `json:"prev_page,omitempty"`
+	NextPage         int 		  `json:"next_page,omitempty"`
+	HasNext          bool 		  `json:"has_page,omitempty"`
+	LastPage         int 		  `json:"last_page,omitempty"`
+	Count            int 		  `json:"count,omitempty"`
+	Folder           string 	  `json:"folder,omitempty"`
+	IsInfiniteAppend bool 		  `json:"is_inf_append,omitempty"`
+	ReturnTo 		 string 	  `json:"return_to,omitempty"`
+	SearchType 		 string 	  `json:"search-type,omitempty"`
+	Galleries 		 []db.Gallery `json:"galleries"`
 }
 
 // NewServer creates a new server
@@ -78,27 +99,27 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET	/settings", s.getSettings)
 	mux.HandleFunc("POST	/settings", s.setSettings)
 	mux.HandleFunc("GET	/image", s.handleImage)
-	mux.HandleFunc("POST /image/{id}/delete", s.deleteFiles)
+	mux.HandleFunc("POST 	/image/{id}/delete", s.deleteFiles)
 	mux.HandleFunc("GET	/image/{id}", s.getInfo)
 	mux.HandleFunc("POST	/image/{id}", s.setRating)
-	mux.HandleFunc("POST /images", s.deleteFiles)
+	mux.HandleFunc("POST 	/image/{id}/flag", s.setFlag)
+	mux.HandleFunc("POST 	/images", s.deleteFiles)
 	mux.HandleFunc("GET	/gallery/{name}/duplicates", s.handleDuplicates)
 	mux.HandleFunc("POST	/gallery/{name}/search", s.handleSearch)
 	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
 	mux.HandleFunc("DELETE /gallery/{name}/scan", s.cancelScan)
-	mux.HandleFunc("POST /gallery/{name}/edit", s.editGallery)
-	mux.HandleFunc("POST /gallery/{name}/unflag", s.unflagGallery)
+	mux.HandleFunc("POST 	/gallery/{name}/edit", s.editGallery)
+	mux.HandleFunc("POST 	/gallery/{name}/unflag", s.unflagGallery)
 	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
 	mux.HandleFunc("GET	/gallery/{name}/count", s.handleGalleryCount)
 	mux.HandleFunc("GET	/gallery/{name}/images", s.getGalleryImages)
-	mux.HandleFunc("GET /api/progress", s.getGlobalProgress)
 	mux.HandleFunc("POST	/gallery", s.createGallery)
 	mux.HandleFunc("DELETE /gallery/{name}", s.deleteGallery)
-	mux.HandleFunc("POST /gallery/batch", s.handleBatchAction)
-	mux.HandleFunc("GET /api/browse", s.browseFiles)
-	mux.HandleFunc("POST /api/browse/mkdir", s.mkdir)
-	mux.HandleFunc("POST /image/{id}/flag", s.setFlag)
-	mux.HandleFunc("POST /api/reset", s.resetDatabase)
+	mux.HandleFunc("POST 	/gallery/batch", s.handleBatchAction)
+	mux.HandleFunc("GET 	/api/progress", s.getGlobalProgress)
+	mux.HandleFunc("GET 	/api/browse", s.browseFiles)
+	mux.HandleFunc("POST 	/api/browse/mkdir", s.mkdir)
+	mux.HandleFunc("POST 	/api/reset", s.resetDatabase)
 }
 
 type SubFolder struct {
@@ -110,6 +131,17 @@ type SubFolder struct {
 type GalleryView struct {
 	db.Gallery
 	SubFolders []*SubFolder
+}
+
+func (s *Server) writeJSON(w http.ResponseWriter, data any, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		message := "Failed encoding JSON response"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
@@ -149,17 +181,19 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	data := struct {
-		Galleries []GalleryView
-		Config    *config.Config
+		Galleries []GalleryView `json:"galleries"`
+		Config    *config.Config `json:"config"`
 	}{
 		Galleries: galleryViews,
 		Config:    s.Config,
 	}
 
-	if err = s.Template.ExecuteTemplate(w, "index.html", data); err != nil {
+	/*if err = s.Template.ExecuteTemplate(w, "index.html", data); err != nil {
 		slog.Error("Internal server error during rendering", slog.Any("error", err))
 		http.Error(w, "Internal server error during rendering", http.StatusInternalServerError)
-	}
+	}*/
+
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) resetDatabase(w http.ResponseWriter, r *http.Request) {
@@ -194,15 +228,18 @@ func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		ID   string
-		Flag int
+		ID   string `json:"id"`
+		Flag int	`json:"flag"`
 	}{ID: imageIDStr, Flag: flag}
-	if err := s.Template.ExecuteTemplate(w, "flag-set", data); err != nil {
+
+	/*if err := s.Template.ExecuteTemplate(w, "flag-set", data); err != nil {
 		message := "Failed to update Flag"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) unflagGallery(w http.ResponseWriter, r *http.Request) {
@@ -247,10 +284,10 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 	target := query.String(r, "target", "")
 
 	data := struct {
-		CurrentDir string
-		ParentDir  string
-		Folders    []string
-		Target     string
+		CurrentDir string   `json:"current_dir"`
+		ParentDir  string   `json:"parent_dir"`
+		Folders    []string `json:"folders"`
+		Target     string   `json:"target"`
 	}{
 		CurrentDir: dir,
 		ParentDir:  parentDir,
@@ -258,12 +295,14 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 		Target:     target,
 	}
 
-	if err := s.Template.ExecuteTemplate(w, "file-browser", data); err != nil {
+	/*if err := s.Template.ExecuteTemplate(w, "file-browser", data); err != nil {
 		message := "file browser cannot be loaded"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+	
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) mkdir(w http.ResponseWriter, r *http.Request) {
@@ -296,6 +335,8 @@ func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
@@ -316,9 +357,9 @@ func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Failed to save config", slog.Any("error", err))
 	}
 
-	w.Header().Set("HX-Trigger", "refresh-images")
+	//w.Header().Set("HX-Trigger", "refresh-images")
 	w.WriteHeader(http.StatusOK)
-
+	/*
 	// Return an Out-Of-Band update for the search-options-form so the UI reflects the new defaults without a full reload
 	formTmpl := `
 	<form id="search-options-form" hx-swap-oob="true" @change="let q = document.querySelector('input[name=\'q\']'); if(q && q.value.trim()){ htmx.trigger(q, 'keyup', {key: 'Enter'}); } else { htmx.trigger(document.body, 'refresh-images'); }">
@@ -341,7 +382,7 @@ func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
 	</form>`
 
 	t := template.Must(template.New("form").Parse(formTmpl))
-	t.Execute(w, s.Config)
+	t.Execute(w, s.Config)*/
 }
 
 func isRawExtension(ext string) bool {
@@ -452,19 +493,21 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	galleries, _ := s.Service.GetAllGalleries()
-	data := map[string]any{
-		"Images":    images,
-		"Count":     count,
-		"Name":      name,
-		"Galleries": galleries,
+	data := searchResult{
+		Images:      images,
+		Count:       count,
+		GalleryName: name,
+		Galleries:   galleries,
 	}
 
-	if err = s.Template.ExecuteTemplate(w, "gallery.html", data); err != nil {
+	/*if err = s.Template.ExecuteTemplate(w, "gallery.html", data); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
@@ -488,13 +531,6 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"load-gallery": {"value": "%s"}}`, newName))
-}
-
-type Progress struct {
-	GalleryName string
-	Current     int
-	Expected    int
-	Percent     int
 }
 
 func progressesEqual(p1, p2 []Progress) bool {
@@ -600,14 +636,19 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	jsonData, _ := json.Marshal(progresses)
 	newLastStr := base64.StdEncoding.EncodeToString(jsonData)
 
-	data := map[string]any{
-		"Progresses": progresses,
-		"LastStr":    newLastStr,
+	data := struct {
+		Progresses []Progress `json:"progresses"`
+		LastStr string		  `json:"last_str"`
+	}{
+		Progresses: progresses,
+		LastStr:    newLastStr,
 	}
 
-	if err := s.Template.ExecuteTemplate(w, "progress.html", data); err != nil {
+	/*if err := s.Template.ExecuteTemplate(w, "progress.html", data); err != nil {
 		slog.Error("progress cannot be loaded", slog.Any("error", err))
-	}
+	}*/
+	
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) scanGallery(w http.ResponseWriter, r *http.Request) {
@@ -723,30 +764,32 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	returnTo := query.String(r, "returnTo", name)
 	galleries, _ := s.Service.GetAllGalleries()
 
-	data := map[string]any{
-		"Images":      images,
-		"QueryImage":  queryImage,
-		"Query":       imageID,
-		"Page":        page,
-		"PrevPage":    page - 1,
-		"NextPage":    page + 1,
-		"HasNext":     len(images) == s.Config.ImagesPerPage,
-		"GalleryName": name,
-		"ReturnTo":    returnTo,
-		"SearchType":  "duplicate",
-		"Threshold":   thresholdFloat,
-		"Galleries":   galleries,
+	data := searchResult{
+		Images:      images,
+		QueryImage:  queryImage,
+		Query:       strconv.Itoa(imageID),
+		CurrentPage: page,
+		PrevPage:    page - 1,
+		NextPage:    page + 1,
+		HasNext:     len(images) == s.Config.ImagesPerPage,
+		GalleryName: name,
+		ReturnTo:    returnTo,
+		SearchType:  "duplicate",
+		Threshold:   thresholdFloat,
+		Galleries:   galleries,
 	}
 
-	err = s.Template.ExecuteTemplate(w, "search-results.html", data)
+	/*err = s.Template.ExecuteTemplate(w, "search-results.html", data)
 	if err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+	s.writeJSON(w, data, http.StatusOK)
 }
 
+// TODO: change to json
 func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -897,22 +940,28 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	galleries, _ := s.Service.GetAllGalleries()
-	data := map[string]any{
-		"Images":    nil,
-		"Count":     count,
-		"Name":      name,
-		"Heading":   heading,
-		"Folder":    folder,
-		"Galleries": galleries,
+	data := struct{
+		Count 		int 		 `json:"count"`
+		Name 		string 		 `json:"name"`
+		Heading 	string 		 `json:"heading"`
+		Folder		string 		 `json:"Folder"`
+		Galleries 	[]db.Gallery `json:"galleries"`
+	}{
+		Count:     count,
+		Name:      name,
+		Heading:   heading,
+		Folder:    folder,
+		Galleries: galleries,
 	}
 
 	// Bilder werden auf "nil" gesetzt, da sie erst später lazy geladen werden!
-	if err = s.Template.ExecuteTemplate(w, "gallery.html", data); err != nil {
+	/*if err = s.Template.ExecuteTemplate(w, "gallery.html", data); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
@@ -970,18 +1019,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := struct {
-		GalleryName      string
-		Images           []db.SImage
-		CurrentPage      int
-		PrevPage         int
-		NextPage         int
-		HasNext          bool
-		LastPage         int
-		Count            int
-		Folder           string
-		IsInfiniteAppend bool
-	}{
+	data := searchResult {
 		GalleryName:      name,
 		Images:           images,
 		CurrentPage:      page,
@@ -995,10 +1033,11 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rendert nur die Bilder-Kacheln aus dem neuen Template
-	if err := s.Template.ExecuteTemplate(w, "gallery-images.html", data); err != nil {
+	/*if err := s.Template.ExecuteTemplate(w, "gallery-images.html", data); err != nil {
 		slog.Error("Failed to render gallery images", slog.Any("error", err))
 		http.Error(w, "Failed to render", http.StatusInternalServerError)
-	}
+	}*/
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
@@ -1006,18 +1045,23 @@ func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
 
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
-		if name == "Global" {
-			galleryID = 0
-		} else if name == "duplicates" {
-			galleryID = -1
-		} else {
+		switch name {
+		case "Global": galleryID = 0
+		case "duplicates": galleryID = -1
+		default:
 			http.Error(w, "Gallery not found", http.StatusNotFound)
 			return
 		}
 	}
 
 	count, _ := s.Service.GetGalleryCount(galleryID)
-	w.Write([]byte(fmt.Sprintf("%d Images", count)))
+	data := struct {
+		Count int `json:"count"`
+	}{
+		Count: count,
+	}
+	// w.Write([]byte(fmt.Sprintf("%d Images", count)))
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
@@ -1126,7 +1170,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": "", "check-progress": ""}`)
+	//w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": "", "check-progress": ""}`)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -1160,7 +1204,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Error(w, "Failed to parse form", http.StatusBadRequest)
+	//http.Error(w, "Failed to parse form", http.StatusBadRequest)
+	data, _ := json.Marshal(struct{}{})
+	s.writeJSON(w, data, http.StatusBadRequest)
 }
 
 func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
@@ -1211,26 +1257,27 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	returnTo := query.String(r, "returnTo", name)
 	galleries, _ := s.Service.GetAllGalleries()
 
-	data := map[string]any{
-		"Images":      images,
-		"Query":       search,
-		"Threshold":   thresholdFloat,
-		"Page":        page,
-		"PrevPage":    page - 1,
-		"NextPage":    page + 1,
-		"HasNext":     len(images) == s.Config.ImagesPerPage,
-		"GalleryName": name,
-		"ReturnTo":    returnTo,
-		"SearchType":  "text",
-		"Galleries":   galleries,
+	data := searchResult {
+		GalleryName: name,
+		Images:      images,
+		Query:       search,
+		Threshold:   thresholdFloat,
+		CurrentPage: page,
+		PrevPage:    page - 1,
+		NextPage:    page + 1,
+		HasNext:     len(images) == s.Config.ImagesPerPage,
+		ReturnTo:    returnTo,
+		SearchType:  "text",
+		Galleries:   galleries,
 	}
 
-	if err := s.Template.ExecuteTemplate(w, "search-results.html", data); err != nil {
+	/*if err := s.Template.ExecuteTemplate(w, "search-results.html", data); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
@@ -1324,25 +1371,26 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 
 	returnTo := query.String(r, "returnTo", name)
 	galleries, _ := s.Service.GetAllGalleries()
-	data := map[string]any{
-		"Images":      images,
-		"Page":        page,
-		"PrevPage":    page - 1,
-		"NextPage":    page + 1,
-		"HasNext":     len(images) == s.Config.ImagesPerPage,
-		"GalleryName": name,
-		"ReturnTo":    returnTo,
-		"SearchType":  "duplicate",
-		"Galleries":   galleries,
+	data := searchResult{
+		Images:      images,
+		CurrentPage: page,
+		PrevPage:    page - 1,
+		NextPage:    page + 1,
+		HasNext:     len(images) == s.Config.ImagesPerPage,
+		GalleryName: name,
+		ReturnTo:    returnTo,
+		SearchType:  "duplicate",
+		Galleries:   galleries,
 	}
 
-	err = s.Template.ExecuteTemplate(w, "search-results.html", data)
+	/*err = s.Template.ExecuteTemplate(w, "search-results.html", data)
 	if err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
@@ -1352,19 +1400,20 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
 	}
-	imageInfo, err := s.Service.GetImageInfo(id)
+	data, err := s.Service.GetImageInfo(id)
 	if err != nil {
 		message := "Failed to get Image Info"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	if err := s.Template.ExecuteTemplate(w, "info-sidebar", imageInfo); err != nil {
+	/*if err := s.Template.ExecuteTemplate(w, "info-sidebar", imageInfo); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
@@ -1392,18 +1441,19 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		ID     string
-		Rating int
+		ID     string `json:"id"`
+		Rating int `json:"rating"`
 	}{
 		ID:     imageIDStr,
 		Rating: rating,
 	}
 
-	w.Header().Set("HX-Trigger", "rating-updated")
+	//w.Header().Set("HX-Trigger", "rating-updated")
 
-	if err := s.Template.ExecuteTemplate(w, "rating-stars", data); err != nil {
+	/*if err := s.Template.ExecuteTemplate(w, "rating-stars", data); err != nil {
 		message := "Failed to render rating"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
-	}
+	}*/
+	s.writeJSON(w, data, http.StatusOK)
 }

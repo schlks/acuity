@@ -19,31 +19,31 @@ type SQLiteClient struct {
 }
 
 type SImage struct {
-	ID           int     `db:"id"`
-	GalleryID    int     `db:"gallery_id"`
-	FilePath     string  `db:"filepath"`
-	Blurhash     string  `db:"blurhash"`
-	Rating       int     `db:"rating"`
-	Flag         int     `db:"flag"`
-	Extension    string  `db:"extension"`
-	Date         string  `db:"date"`
-	Taken        string  `db:"taken"`
-	Size         float64 `db:"size"`
-	Resolution   int     `db:"resolution"`
-	AspectRatio  float64 `db:"aspect_ratio"`
-	CameraMake   string  `db:"camera_make"`
-	LensMake     string  `db:"lens_make"`
-	FocalLength  string  `db:"focal_length"`
-	Aperture     string  `db:"aperture"`
-	ShutterSpeed string  `db:"shutter_speed"`
-	Iso          string  `db:"iso"`
-	Flash        bool    `db:"flash"`
+	ID           int     `db:"id" json:"id"`
+	GalleryID    int     `db:"gallery_id" json:"gallery_id"`
+	FilePath     string  `db:"filepath" json:"filepath"`
+	Blurhash     string  `db:"blurhash" json:"blurhash"`
+	Rating       int     `db:"rating" json:"rating"`
+	Flag         int     `db:"flag" json:"db"`
+	Extension    string  `db:"extension" json:"extension"`
+	Date         string  `db:"date" json:"date"`
+	Taken        string  `db:"taken" json:"taken"`
+	Size         float64 `db:"size" json:"size"`
+	Resolution   int     `db:"resolution" json:"resolution"`
+	AspectRatio  float64 `db:"aspect_ratio" json:"aspect_ratio"`
+	CameraMake   string  `db:"camera_make" json:"camera_make"`
+	LensMake     string  `db:"lens_make" json:"lens_make"`
+	FocalLength  string  `db:"focal_length" json:"focal_length"`
+	Aperture     string  `db:"aperture" json:"aperture"`
+	ShutterSpeed string  `db:"shutter_speed" json:"shutter_speed"`
+	Iso          string  `db:"iso" json:"iso"`
+	Flash        bool    `db:"flash" json:"flash"`
 }
 
 type Gallery struct {
-	ID   int
-	Name string
-	Path string
+	ID   int `json:"id"`
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 func init() {
