@@ -3,9 +3,6 @@
 package web
 
 import (
-	"acuity/internal/config"
-	"acuity/internal/gallery"
-	"acuity/pkg/db"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -23,6 +20,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"acuity/internal/config"
+	"acuity/internal/gallery"
+	"acuity/pkg/db"
 
 	"github.com/h2non/bimg"
 	"github.com/mallardduck/go-http-helpers/pkg/query"
@@ -43,22 +44,22 @@ type Progress struct {
 }
 
 type searchResult struct {
-	GalleryName      string 	  `json:"gallery_name,omitempty"`
-	Images           []db.SImage  `json:"images,omitempty"`
-	QueryImage 		 gallery.ImageInfo `json:"query_image"`
-	Query 			 string		  `json:"query,omitempty"`
-	Threshold 		 float64 	  `json:"threshold,omitempty"`
-	CurrentPage      int 		  `json:"current_page"`
-	PrevPage         int 		  `json:"prev_page,omitempty"`
-	NextPage         int 		  `json:"next_page,omitempty"`
-	HasNext          bool 		  `json:"has_page,omitempty"`
-	LastPage         int 		  `json:"last_page,omitempty"`
-	Count            int 		  `json:"count,omitempty"`
-	Folder           string 	  `json:"folder,omitempty"`
-	IsInfiniteAppend bool 		  `json:"is_inf_append,omitempty"`
-	ReturnTo 		 string 	  `json:"return_to,omitempty"`
-	SearchType 		 string 	  `json:"search-type,omitempty"`
-	Galleries 		 []db.Gallery `json:"galleries"`
+	GalleryName      string            `json:"gallery_name,omitempty"`
+	Images           []db.SImage       `json:"images,omitempty"`
+	QueryImage       gallery.ImageInfo `json:"query_image"`
+	Query            string            `json:"query,omitempty"`
+	Threshold        float64           `json:"threshold,omitempty"`
+	CurrentPage      int               `json:"current_page"`
+	PrevPage         int               `json:"prev_page,omitempty"`
+	NextPage         int               `json:"next_page,omitempty"`
+	HasNext          bool              `json:"has_page,omitempty"`
+	LastPage         int               `json:"last_page,omitempty"`
+	Count            int               `json:"count,omitempty"`
+	Folder           string            `json:"folder,omitempty"`
+	IsInfiniteAppend bool              `json:"is_inf_append,omitempty"`
+	ReturnTo         string            `json:"return_to,omitempty"`
+	SearchType       string            `json:"search-type,omitempty"`
+	Galleries        []db.Gallery      `json:"galleries"`
 }
 
 // NewServer creates a new server
@@ -181,7 +182,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	data := struct {
-		Galleries []GalleryView `json:"galleries"`
+		Galleries []GalleryView  `json:"galleries"`
 		Config    *config.Config `json:"config"`
 	}{
 		Galleries: galleryViews,
@@ -229,7 +230,7 @@ func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		ID   string `json:"id"`
-		Flag int	`json:"flag"`
+		Flag int    `json:"flag"`
 	}{ID: imageIDStr, Flag: flag}
 
 	/*if err := s.Template.ExecuteTemplate(w, "flag-set", data); err != nil {
@@ -301,7 +302,7 @@ func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}*/
-	
+
 	s.writeJSON(w, data, http.StatusOK)
 }
 
@@ -312,7 +313,7 @@ func (s *Server) mkdir(w http.ResponseWriter, r *http.Request) {
 
 	if dir != "" && newFolder != "" {
 		newPath := filepath.Join(dir, newFolder)
-		err := os.MkdirAll(newPath, 0755)
+		err := os.MkdirAll(newPath, 0o755)
 		if err != nil {
 			slog.Error("Failed to create folder", slog.String("path", newPath), slog.Any("error", err))
 		}
@@ -360,29 +361,29 @@ func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
 	//w.Header().Set("HX-Trigger", "refresh-images")
 	w.WriteHeader(http.StatusOK)
 	/*
-	// Return an Out-Of-Band update for the search-options-form so the UI reflects the new defaults without a full reload
-	formTmpl := `
-	<form id="search-options-form" hx-swap-oob="true" @change="let q = document.querySelector('input[name=\'q\']'); if(q && q.value.trim()){ htmx.trigger(q, 'keyup', {key: 'Enter'}); } else { htmx.trigger(document.body, 'refresh-images'); }">
-		<div style="margin-bottom: 12px;">
-			<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Sort by</div>
-			<select name="sortBy" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
-				<option value="name" {{if eq .DefaultSortBy "name"}}selected{{end}}>Name</option>
-				<option value="date" {{if eq .DefaultSortBy "date"}}selected{{end}}>Date</option>
-				<option value="size" {{if eq .DefaultSortBy "size"}}selected{{end}}>Size</option>
-				<option value="rating" {{if eq .DefaultSortBy "rating"}}selected{{end}}>Rating</option>
-			</select>
-		</div>
-		<div>
-			<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Order</div>
-			<select name="sortOrder" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
-				<option value="desc" {{if eq .DefaultSortOrder "desc"}}selected{{end}}>Descending</option>
-				<option value="asc" {{if eq .DefaultSortOrder "asc"}}selected{{end}}>Ascending</option>
-			</select>
-		</div>
-	</form>`
+		// Return an Out-Of-Band update for the search-options-form so the UI reflects the new defaults without a full reload
+		formTmpl := `
+		<form id="search-options-form" hx-swap-oob="true" @change="let q = document.querySelector('input[name=\'q\']'); if(q && q.value.trim()){ htmx.trigger(q, 'keyup', {key: 'Enter'}); } else { htmx.trigger(document.body, 'refresh-images'); }">
+			<div style="margin-bottom: 12px;">
+				<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Sort by</div>
+				<select name="sortBy" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
+					<option value="name" {{if eq .DefaultSortBy "name"}}selected{{end}}>Name</option>
+					<option value="date" {{if eq .DefaultSortBy "date"}}selected{{end}}>Date</option>
+					<option value="size" {{if eq .DefaultSortBy "size"}}selected{{end}}>Size</option>
+					<option value="rating" {{if eq .DefaultSortBy "rating"}}selected{{end}}>Rating</option>
+				</select>
+			</div>
+			<div>
+				<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Order</div>
+				<select name="sortOrder" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
+					<option value="desc" {{if eq .DefaultSortOrder "desc"}}selected{{end}}>Descending</option>
+					<option value="asc" {{if eq .DefaultSortOrder "asc"}}selected{{end}}>Ascending</option>
+				</select>
+			</div>
+		</form>`
 
-	t := template.Must(template.New("form").Parse(formTmpl))
-	t.Execute(w, s.Config)*/
+		t := template.Must(template.New("form").Parse(formTmpl))
+		t.Execute(w, s.Config)*/
 }
 
 func isRawExtension(ext string) bool {
@@ -638,7 +639,7 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		Progresses []Progress `json:"progresses"`
-		LastStr string		  `json:"last_str"`
+		LastStr    string     `json:"last_str"`
 	}{
 		Progresses: progresses,
 		LastStr:    newLastStr,
@@ -647,7 +648,7 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	/*if err := s.Template.ExecuteTemplate(w, "progress.html", data); err != nil {
 		slog.Error("progress cannot be loaded", slog.Any("error", err))
 	}*/
-	
+
 	s.writeJSON(w, data, http.StatusOK)
 }
 
@@ -940,12 +941,12 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	galleries, _ := s.Service.GetAllGalleries()
-	data := struct{
-		Count 		int 		 `json:"count"`
-		Name 		string 		 `json:"name"`
-		Heading 	string 		 `json:"heading"`
-		Folder		string 		 `json:"Folder"`
-		Galleries 	[]db.Gallery `json:"galleries"`
+	data := struct {
+		Count     int          `json:"count"`
+		Name      string       `json:"name"`
+		Heading   string       `json:"heading"`
+		Folder    string       `json:"Folder"`
+		Galleries []db.Gallery `json:"galleries"`
 	}{
 		Count:     count,
 		Name:      name,
@@ -1019,7 +1020,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := searchResult {
+	data := searchResult{
 		GalleryName:      name,
 		Images:           images,
 		CurrentPage:      page,
@@ -1046,8 +1047,10 @@ func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
 	galleryID, err, ok := s.Service.GetGalleryID(name)
 	if err != nil && !ok {
 		switch name {
-		case "Global": galleryID = 0
-		case "duplicates": galleryID = -1
+		case "Global":
+			galleryID = 0
+		case "duplicates":
+			galleryID = -1
 		default:
 			http.Error(w, "Gallery not found", http.StatusNotFound)
 			return
@@ -1257,7 +1260,7 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	returnTo := query.String(r, "returnTo", name)
 	galleries, _ := s.Service.GetAllGalleries()
 
-	data := searchResult {
+	data := searchResult{
 		GalleryName: name,
 		Images:      images,
 		Query:       search,
@@ -1442,7 +1445,7 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 
 	data := struct {
 		ID     string `json:"id"`
-		Rating int `json:"rating"`
+		Rating int    `json:"rating"`
 	}{
 		ID:     imageIDStr,
 		Rating: rating,
