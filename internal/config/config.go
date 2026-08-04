@@ -10,18 +10,18 @@ import (
 )
 
 type Config struct {
-	Port         string   `mapstructure:"port"`
-	WeaviateHost string   `mapstructure:"weaviate_host"`
-	WeaviatePort string   `mapstructure:"weaviate_port"`
-	Folders      []string `mapstructure:"default_folders"`
-	DBPath       string   `mapstructure:"db_path"`
+	Port         string   `mapstructure:"port" json:"port"`
+	WeaviateHost string   `mapstructure:"weaviate_host" json:"weaviate_host"`
+	WeaviatePort string   `mapstructure:"weaviate_port" json:"weaviate_port"`
+	Folders      []string `mapstructure:"default_folders" json:"default_folders"`
+	DBPath       string   `mapstructure:"db_path" json:"db_path"`
 
-	ImagesPerPage    int    `mapstructure:"images_per_page"`
-	DefaultSortBy    string `mapstructure:"default_sort_by"`
-	DefaultSortOrder string `mapstructure:"default_sort_order"`
-	GridSize         string `mapstructure:"grid_size"`
-	InfiniteScroll   bool   `mapstructure:"infinite_scroll"`
-	Debug			 bool   `mapstructure:"debug"`
+	ImagesPerPage    int    `mapstructure:"images_per_page" json:"images_per_page"`
+	DefaultSortBy    string `mapstructure:"default_sort_by" json:"default_sort_by"`
+	DefaultSortOrder string `mapstructure:"default_sort_order" json:"default_sort_order"`
+	GridSize         string `mapstructure:"grid_size" json:"grid_size"`
+	InfiniteScroll   bool   `mapstructure:"infinite_scroll" json:"infinite_scroll"`
+	Debug            bool   `mapstructure:"debug" json:"debug"`
 }
 
 func Load() (*Config, error) {
@@ -73,6 +73,7 @@ func Save(cfg *Config) error {
 	viper.Set("default_sort_by", cfg.DefaultSortBy)
 	viper.Set("default_sort_order", cfg.DefaultSortOrder)
 	viper.Set("infinite_scroll", cfg.InfiniteScroll)
+	viper.Set("grid_size", cfg.GridSize)
 
 	return viper.WriteConfig()
 }

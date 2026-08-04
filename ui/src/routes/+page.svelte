@@ -1,35 +1,57 @@
 <script lang="ts">
     import type { PageData } from './$types';
 
-    export let data: PageData;
+	let searchQuery = $state('');
+
+	function handleSearch(event) {
+		event.preventDefault();
+		console.log("Submitting search to API for:", searchQuery);
+	}
 </script>
 
-<h1>Search</h1>
-
-<form method="GET" class="search-form">
-    <input
-        type="search"
-        name="q"
-        placeholder="Search for images"
-        value={data.query ?? ''}
-    />
-    <button type="submit">Search</button>
-</form>
-
-{#if data.result && data.results.length > 0}
-	<ul>
-		{#each data.result as result}
-			<li>{result.name}</li>
-		{/each}
-	</ul>
-{:else if data.query}
-	<p>No results found for "{data.query}".</p>
-{/if}
+<div class="search-container">
+	<form class="search-form" onsubmit={handleSearch}>
+		<input
+			type="search"
+			placeholder="Search for images"
+			bind:value={searchQuery}
+		/>
+	</form>	
+</div>
 
 <style>
-	search-form {
+	.search-container {
+		flex: 1;
 		display: flex;
-		gap: 0.5rem;
-		margin-bottom: 1rem;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+	}
+
+	.search-form {
+		width: 100%;
+		max-width: 500px;
+		justify-self: center;
+	}
+
+	.search-form input {
+		width: 100%;
+		padding: 14px 20px 14px 48px;
+		font-size: 1.1rem;
+		background-color: var(--bg);
+		color: var(--text);
+		border: 3px solid transparent;
+		border-radius: 16px;
+		outline: none;
+		transition: border-color 0.2s;
+	}
+
+	.search-form input:focus {
+		border-color: var(--primary);
+		box-shadow: 0 0 40px color-mix(in srgb, var(--primary) 45%, transparent);
+	}
+
+	.search-form input:hover {
+		box-shadow: 0 0 40px color-mix(in srgb, var(--primary) 45%, transparent);
 	}
 </style>

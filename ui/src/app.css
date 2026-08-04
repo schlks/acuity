@@ -1,0 +1,66 @@
+::-webkit-scrollbar {
+	display: none;
+}
+
+@font-face {
+	font-family: 'Elms Sans';
+	src: url('/fonts/Elms_Sans/ElmsSans-VariableFont_wght.ttf') format('truetype');
+	font-weight: 100 900;
+	font-style: normal;
+}
+
+:root {
+	--bg-dark: #000000;
+	--bg: #090909;
+	--bg-light: #1c1c1c;
+	--text: #eeeeee;
+	--text-muted: #d1d1d1;
+	--primary: #407cf5;
+	--secondary: #0039ae;
+	--tertiary: #ade1b5;
+	--danger: #c01c28;
+	--warning: #e4c447;
+	--success: #02c45d;
+	--info: #9589f3;
+}
+
+* {
+	box-sizing: border-box;
+	-ms-overflow-style: none;
+	scorllbar-width: none;
+}
+
+body {
+	background-color: var(--bg-dark);
+	color: var(--text);
+	margin: 0;
+	font-family: 'Elms Sans', system-ui, sans-serif;
+	font-weight: 400;
+	overflow-x: hidden;
+}
+
+h1, h2, h3, strong {
+	font-weight: 700;
+	margin: 0
+}
+
+hr {
+	border: none;
+	border-top: 1px solid var(--bg-light);
+	width: 100%;
+	margin: 16px 0;
+}
+
+.app-layout {
+	display: flex;
+	height: 100vh;
+	width: 100vw;
+	overflow: hidden
+}
+
+.main-content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow-y: auto;
+}

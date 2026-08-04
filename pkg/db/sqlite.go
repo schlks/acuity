@@ -24,7 +24,7 @@ type SImage struct {
 	FilePath     string  `db:"filepath" json:"filepath"`
 	Blurhash     string  `db:"blurhash" json:"blurhash"`
 	Rating       int     `db:"rating" json:"rating"`
-	Flag         int     `db:"flag" json:"db"`
+	Flag         int     `db:"flag" json:"flag"`
 	Extension    string  `db:"extension" json:"extension"`
 	Date         string  `db:"date" json:"date"`
 	Taken        string  `db:"taken" json:"taken"`

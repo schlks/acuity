@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"acuity/internal/config"
-	"acuity/internal/gallery"
 	"acuity/pkg/db"
 
 	"github.com/h2non/bimg"
@@ -31,7 +30,7 @@ import (
 )
 
 type Server struct {
-	Service  *gallery.GalleryService
+	Bridge   *db.Bridge
 	Template *template.Template
 	Config   *config.Config
 }
@@ -46,7 +45,7 @@ type Progress struct {
 type searchResult struct {
 	GalleryName      string            `json:"gallery_name,omitempty"`
 	Images           []db.SImage       `json:"images,omitempty"`
-	QueryImage       gallery.ImageInfo `json:"query_image"`
+	QueryImage       db.ImageInfo 	   `json:"query_image"`
 	Query            string            `json:"query,omitempty"`
 	Threshold        float64           `json:"threshold,omitempty"`
 	CurrentPage      int               `json:"current_page"`
@@ -64,9 +63,9 @@ type searchResult struct {
 
 // NewServer creates a new server
 func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config *config.Config, tmpl *template.Template) *Server {
-	service := gallery.NewService(sdatabase, wdatabase)
+	service := db.NewBridge(sdatabase, wdatabase)
 	server := &Server{
-		Service:  service,
+		Bridge:   service,
 		Template: tmpl,
 		Config:   config,
 	}
@@ -95,32 +94,47 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 		webDir = "web"
 	}
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(filepath.Join(webDir, "static")))))
-
-	mux.HandleFunc("/", s.handleRoot)
-	mux.HandleFunc("GET	/settings", s.getSettings)
-	mux.HandleFunc("POST	/settings", s.setSettings)
-	mux.HandleFunc("GET	/image", s.handleImage)
-	mux.HandleFunc("POST 	/image/{id}/delete", s.deleteFiles)
-	mux.HandleFunc("GET	/image/{id}", s.getInfo)
-	mux.HandleFunc("POST	/image/{id}", s.setRating)
-	mux.HandleFunc("POST 	/image/{id}/flag", s.setFlag)
-	mux.HandleFunc("POST 	/images", s.deleteFiles)
-	mux.HandleFunc("GET	/gallery/{name}/duplicates", s.handleDuplicates)
-	mux.HandleFunc("POST	/gallery/{name}/search", s.handleSearch)
-	mux.HandleFunc("POST	/gallery/{name}/scan", s.scanGallery)
-	mux.HandleFunc("DELETE /gallery/{name}/scan", s.cancelScan)
-	mux.HandleFunc("POST 	/gallery/{name}/edit", s.editGallery)
-	mux.HandleFunc("POST 	/gallery/{name}/unflag", s.unflagGallery)
-	mux.HandleFunc("GET	/gallery/{name}", s.getGallery)
-	mux.HandleFunc("GET	/gallery/{name}/count", s.handleGalleryCount)
-	mux.HandleFunc("GET	/gallery/{name}/images", s.getGalleryImages)
-	mux.HandleFunc("POST	/gallery", s.createGallery)
-	mux.HandleFunc("DELETE /gallery/{name}", s.deleteGallery)
-	mux.HandleFunc("POST 	/gallery/batch", s.handleBatchAction)
+	mux.HandleFunc("GET	/api/root", s.handleRoot)
+	mux.HandleFunc("GET	/api/settings", s.getSettings)
+	mux.HandleFunc("POST	/api/settings", s.setSettings)
+	mux.HandleFunc("GET	/api/image", s.handleImage)
+	mux.HandleFunc("POST 	/api/image/{id}/delete", s.deleteFiles)
+	mux.HandleFunc("GET	/api/image/{id}", s.getInfo)
+	mux.HandleFunc("POST	/api/image/{id}", s.setRating)
+	mux.HandleFunc("POST 	/api/image/{id}/flag", s.setFlag)
+	mux.HandleFunc("POST 	/api/image/delete", s.deleteFiles)
+	mux.HandleFunc("GET	/api/gallery/{name}/duplicates", s.handleDuplicates)
+	mux.HandleFunc("POST	/api/gallery/{name}/search", s.handleSearch)
+	mux.HandleFunc("POST	/api/gallery/{name}/scan", s.scanGallery)
+	mux.HandleFunc("DELETE /api/gallery/{name}/scan", s.cancelScan)
+	mux.HandleFunc("POST 	/api/gallery/{name}/edit", s.editGallery)
+	mux.HandleFunc("POST 	/api/gallery/{name}/unflag", s.unflagGallery)
+	mux.HandleFunc("GET	/api/gallery/{name}", s.getGallery)
+	mux.HandleFunc("GET	/api/gallery/{name}/count", s.handleGalleryCount)
+	mux.HandleFunc("GET	/api/gallery/{name}/images", s.getGalleryImages)
+	mux.HandleFunc("POST	/api/gallery", s.createGallery)
+	mux.HandleFunc("DELETE /api/gallery/{name}", s.deleteGallery)
+	mux.HandleFunc("POST 	/api/gallery/batch", s.handleBatchAction)
 	mux.HandleFunc("GET 	/api/progress", s.getGlobalProgress)
 	mux.HandleFunc("GET 	/api/browse", s.browseFiles)
 	mux.HandleFunc("POST 	/api/browse/mkdir", s.mkdir)
 	mux.HandleFunc("POST 	/api/reset", s.resetDatabase)
+
+	uiBuildDir := filepath.Join(webDir, "build")
+	uiFS := http.FileServer(http.Dir(uiBuildDir))
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		path := filepath.Join(uiBuildDir, r.URL.Path)
+		_, err := os.Stat(path)
+
+		if os.IsNotExist(err) || r.URL.Path == "/" {
+			http.ServeFile(w, r, filepath.Join(uiBuildDir, "index.html"))
+			return
+		}
+
+		uiFS.ServeHTTP(w, r)
+	})
+
 }
 
 type SubFolder struct {
@@ -146,7 +160,7 @@ func (s *Server) writeJSON(w http.ResponseWriter, data any, status int) {
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
-	galleries, err := s.Service.GetAllGalleries()
+	galleries, err := s.Bridge.GetAllGalleries()
 	if err != nil {
 		slog.Error("Failed to load galleries", slog.Any("error", err))
 	}
@@ -199,7 +213,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) resetDatabase(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	err := s.Service.ResetDatabase(ctx)
+	err := s.Bridge.ResetDatabase(ctx)
 	if err != nil {
 		slog.Error("Failed to reset database", slog.Any("error", err))
 		http.Error(w, "Failed to reset database", http.StatusInternalServerError)
@@ -221,7 +235,7 @@ func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 	flagStr := r.FormValue("flag")
 	flag, _ := strconv.Atoi(flagStr)
 
-	if err := s.Service.SetFlag(imageID, flag); err != nil {
+	if err := s.Bridge.SetFlag(imageID, flag); err != nil {
 		message := "Failed to set Flag"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -245,7 +259,7 @@ func (s *Server) setFlag(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) unflagGallery(w http.ResponseWriter, r *http.Request) {
 	galleryName := r.PathValue("name")
-	if err := s.Service.Unflag(galleryName); err != nil {
+	if err := s.Bridge.Unflag(galleryName); err != nil {
 		message := "Failed to unflag all images in gallery"
 		slog.Error(message, slog.String("gallery", galleryName), slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -329,61 +343,29 @@ func (s *Server) mkdir(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
-	err := s.Template.ExecuteTemplate(w, "settings.html", s.Config)
-	if err != nil {
-		message := "Index cannot be loaded"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(s.Config); err != nil {
+		slog.Error("Failed to encode settings to JSON", slog.Any("error", err))
+		http.Error(w, "Failed to encode settings", http.StatusInternalServerError)
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
-	var err error
-	s.Config.ImagesPerPage, err = strconv.Atoi(r.FormValue("per_page"))
-	if err != nil {
-		message := "Failed to get the number for images per page"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
+	newConfig := *s.Config
+	if err := json.NewDecoder(r.Body).Decode(&newConfig); err != nil {
+		slog.Error("Failed to decode JSON settings", slog.Any("error", err))
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	s.Config.DefaultSortBy = r.FormValue("sort_by")
-	s.Config.DefaultSortOrder = r.FormValue("sort_order")
-	s.Config.GridSize = r.FormValue("grid_size")
-	s.Config.InfiniteScroll = r.FormValue("infinite_scroll") == "true"
 
+	s.Config = &newConfig
+	
 	if err := config.Save(s.Config); err != nil {
-		slog.Error("Failed to save config", slog.Any("error", err))
+		slog.Error("failed to save config", slog.Any("error", err))
 	}
 
-	//w.Header().Set("HX-Trigger", "refresh-images")
 	w.WriteHeader(http.StatusOK)
-	/*
-		// Return an Out-Of-Band update for the search-options-form so the UI reflects the new defaults without a full reload
-		formTmpl := `
-		<form id="search-options-form" hx-swap-oob="true" @change="let q = document.querySelector('input[name=\'q\']'); if(q && q.value.trim()){ htmx.trigger(q, 'keyup', {key: 'Enter'}); } else { htmx.trigger(document.body, 'refresh-images'); }">
-			<div style="margin-bottom: 12px;">
-				<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Sort by</div>
-				<select name="sortBy" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
-					<option value="name" {{if eq .DefaultSortBy "name"}}selected{{end}}>Name</option>
-					<option value="date" {{if eq .DefaultSortBy "date"}}selected{{end}}>Date</option>
-					<option value="size" {{if eq .DefaultSortBy "size"}}selected{{end}}>Size</option>
-					<option value="rating" {{if eq .DefaultSortBy "rating"}}selected{{end}}>Rating</option>
-				</select>
-			</div>
-			<div>
-				<div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Order</div>
-				<select name="sortOrder" class="input-clean" style="width: 100%; padding: 8px; border-radius: 8px;">
-					<option value="desc" {{if eq .DefaultSortOrder "desc"}}selected{{end}}>Descending</option>
-					<option value="asc" {{if eq .DefaultSortOrder "asc"}}selected{{end}}>Ascending</option>
-				</select>
-			</div>
-		</form>`
-
-		t := template.Must(template.New("form").Parse(formTmpl))
-		t.Execute(w, s.Config)*/
 }
 
 func isRawExtension(ext string) bool {
@@ -467,13 +449,13 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		path = filepath.Join("/images", path)
 	}*/
 
-	if err := s.Service.CreateGallery(ctx, name, path); err != nil {
+	if err := s.Bridge.CreateGallery(ctx, name, path); err != nil {
 		message := "Failed to create Gallery"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	id, err, ok := s.Service.GetGalleryID(name)
+	id, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
 		slog.Error(message, slog.Any("error", err))
@@ -481,19 +463,19 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	flagFilter := r.FormValue("flagFilter")
-	images, err := s.Service.GetAllImages(ctx, id, s.Config.DefaultSortBy, s.Config.DefaultSortOrder, 0, s.Config.ImagesPerPage, flagFilter, "")
+	images, err := s.Bridge.GetAllImages(ctx, id, s.Config.DefaultSortBy, s.Config.DefaultSortOrder, 0, s.Config.ImagesPerPage, flagFilter, "")
 	if err != nil {
 		message := "Failed to fetch images for new gallery"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	count, _ := s.Service.GetGalleryCount(id)
+	count, _ := s.Bridge.GetGalleryCount(id)
 
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
 
-	galleries, _ := s.Service.GetAllGalleries()
+	galleries, _ := s.Bridge.GetAllGalleries()
 	data := searchResult{
 		Images:      images,
 		Count:       count,
@@ -515,7 +497,7 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 	oldName := r.PathValue("name")
 	newName := r.FormValue("name")
 
-	id, err, ok := s.Service.GetGalleryID(oldName)
+	id, err, ok := s.Bridge.GetGalleryID(oldName)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
 		slog.Error(message, slog.Any("error", err))
@@ -523,7 +505,7 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ok {
-		if err := s.Service.EditGalleryName(id, newName); err != nil {
+		if err := s.Bridge.EditGalleryName(id, newName); err != nil {
 			message := "Failed to update Gallery"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -553,7 +535,7 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 
-	galleries, err := s.Service.GetAllGalleries()
+	galleries, err := s.Bridge.GetAllGalleries()
 	if err != nil {
 		http.Error(w, "Failed to get galleries", http.StatusInternalServerError)
 		return
@@ -573,10 +555,10 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		var hasAct bool
 		var refreshGalleries []string
 		for _, g := range galleries {
-			expected := s.Service.GetExpectedCount(g.ID)
+			expected := s.Bridge.GetExpectedCount(g.ID)
 			if expected != 0 {
 				hasAct = true
-				current, _ := s.Service.GetGalleryCount(g.ID)
+				current, _ := s.Bridge.GetGalleryCount(g.ID)
 				if expected == -1 {
 					p = append(p, Progress{
 						GalleryName: g.Name,
@@ -657,7 +639,7 @@ func (s *Server) scanGallery(w http.ResponseWriter, r *http.Request) {
 
 	name := r.PathValue("name")
 
-	if err := s.Service.UpdateFolder(ctx, name); err != nil {
+	if err := s.Bridge.UpdateFolder(ctx, name); err != nil {
 		message := "Failed to update gallery"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -670,8 +652,8 @@ func (s *Server) scanGallery(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if id, err, ok := s.Service.GetGalleryID(name); err == nil && ok {
-		s.Service.CancelImport(id)
+	if id, err, ok := s.Bridge.GetGalleryID(name); err == nil && ok {
+		s.Bridge.CancelImport(id)
 	}
 	w.Header().Set("HX-Trigger", "check-progress")
 	w.WriteHeader(http.StatusOK)
@@ -683,28 +665,28 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	deleteGallery := query.Bool(r, "deleteGallery", false)
 
-	id, err, ok := s.Service.GetGalleryID(name)
+	id, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery Id"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	if err := s.Service.DeleteGallery(ctx, id); err != nil {
+	if err := s.Bridge.DeleteGallery(ctx, id); err != nil {
 		message := "Failed to delete Gallery from Database"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
 	if deleteGallery {
-		files, err := s.Service.GetGalleryFiles(name, "", "", -1, 10_000, "", "")
+		files, err := s.Bridge.GetGalleryFiles(name, "", "", -1, 10_000, "", "")
 		if err != nil {
 			message := "Failed to get Files in Gallery"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
 			return
 		}
-		if err := s.Service.DeleteImages(ctx, files); err != nil {
+		if err := s.Bridge.DeleteImages(ctx, files); err != nil {
 			message := "Failed to delete Gallery"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -741,7 +723,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	if formTarget := r.FormValue("target_gallery"); formTarget != "" {
 		name = formTarget
 	}
-	galleryID, err, ok := s.Service.GetGalleryID(name)
+	galleryID, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
 		slog.Error(message, slog.Any("error", err))
@@ -753,7 +735,7 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
 
-	images, err := s.Service.FindDublicates(ctx, imageID, galleryID, threshold)
+	images, err := s.Bridge.FindDublicates(ctx, imageID, galleryID, threshold)
 	if err != nil {
 		message := "Failed to find duplicate Images"
 		slog.Error(message, slog.Any("error", err))
@@ -761,9 +743,9 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryImage, _ := s.Service.GetImageInfo(imageID)
+	queryImage, _ := s.Bridge.GetImageInfo(imageID)
 	returnTo := query.String(r, "returnTo", name)
-	galleries, _ := s.Service.GetAllGalleries()
+	galleries, _ := s.Bridge.GetAllGalleries()
 
 	data := searchResult{
 		Images:      images,
@@ -807,7 +789,7 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	groups, err := s.Service.FindGlobalDuplicates(ctx, thresholdFloat, galleryIDs)
+	groups, err := s.Bridge.FindGlobalDuplicates(ctx, thresholdFloat, galleryIDs)
 	if err != nil {
 		message := "Failed to find duplicate Images"
 		slog.Error(message, slog.Any("error", err))
@@ -815,7 +797,7 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	galleries, _ := s.Service.GetAllGalleries()
+	galleries, _ := s.Bridge.GetAllGalleries()
 
 	data := map[string]any{
 		"Groups":            groups,
@@ -824,12 +806,13 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 		"SelectedGalleries": selectedGalleries,
 	}
 
-	if err := s.Template.ExecuteTemplate(w, "global-duplicates.html", data); err != nil {
+	/*if err := s.Template.ExecuteTemplate(w, "global-duplicates.html", data); err != nil {
 		message := "Internal server error during rendering"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
-	}
+	}*/
+	s.writeJSON(w, data, http.StatusOK)
 }
 
 // Deprecated
@@ -859,7 +842,7 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	image.FilePath = r.FormValue("path")
 
-	if err := s.Service.DeleteImage(ctx, image); err != nil {
+	if err := s.Bridge.DeleteImage(ctx, image); err != nil {
 		message := "Failed to delete File"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -903,7 +886,7 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := s.Service.DeleteImages(ctx, images); err != nil {
+		if err := s.Bridge.DeleteImages(ctx, images); err != nil {
 			message := "Failed to delete Image"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -918,7 +901,7 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
-	galleryID, err, ok := s.Service.GetGalleryID(name)
+	galleryID, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
 		slog.Error(message, slog.Any("error", err))
@@ -926,7 +909,7 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := s.Service.GetGalleryCount(galleryID)
+	count, err := s.Bridge.GetGalleryCount(galleryID)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get count of images in Gallery: %d", galleryID)
 		slog.Error(message, slog.Any("error", err))
@@ -940,7 +923,7 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		heading = name + " / " + filepath.Base(folder)
 	}
 
-	galleries, _ := s.Service.GetAllGalleries()
+	galleries, _ := s.Bridge.GetAllGalleries()
 	data := struct {
 		Count     int          `json:"count"`
 		Name      string       `json:"name"`
@@ -985,7 +968,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 
-	galleryID, err, ok := s.Service.GetGalleryID(name)
+	galleryID, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		http.Error(w, "Failed to get Gallery ID", http.StatusInternalServerError)
 		return
@@ -994,7 +977,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	flagFilter := r.FormValue("flagFilter")
 	folderFilter := r.FormValue("folder")
 	start := time.Now()
-	images, err := s.Service.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, flagFilter, folderFilter)
+	images, err := s.Bridge.GetAllImages(ctx, galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, flagFilter, folderFilter)
 	slog.Info("GetAllImages took", slog.Duration("duration", time.Since(start)))
 	if err != nil {
 		slog.Error("Failed to fetch images", slog.Any("error", err))
@@ -1010,7 +993,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	count := -1
 	lastPage := 1
 	if !s.Config.InfiniteScroll {
-		count, _ = s.Service.GetGalleryCount(galleryID)
+		count, _ = s.Bridge.GetGalleryCount(galleryID)
 		lastPage = count / s.Config.ImagesPerPage
 		if count%s.Config.ImagesPerPage != 0 {
 			lastPage++
@@ -1044,7 +1027,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
-	galleryID, err, ok := s.Service.GetGalleryID(name)
+	galleryID, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		switch name {
 		case "Global":
@@ -1057,7 +1040,7 @@ func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	count, _ := s.Service.GetGalleryCount(galleryID)
+	count, _ := s.Bridge.GetGalleryCount(galleryID)
 	data := struct {
 		Count int `json:"count"`
 	}{
@@ -1102,7 +1085,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			flagFilter = strings.TrimPrefix(criteria, "flag_")
 		}
 
-		files, err := s.Service.GetGalleryFiles(sourceGalleryName, "", "", 0, 100_000, flagFilter, "")
+		files, err := s.Bridge.GetGalleryFiles(sourceGalleryName, "", "", 0, 100_000, flagFilter, "")
 		if err != nil {
 			message := "Failed to get files for batch action"
 			slog.Error(message, slog.Any("error", err))
@@ -1119,7 +1102,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if action == "delete" || action == "delete_disk" {
-		if err := s.Service.DeleteImages(ctx, images); err != nil {
+		if err := s.Bridge.DeleteImages(ctx, images); err != nil {
 			message := "Failed to delete images in batch"
 			slog.Error(message, slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
@@ -1132,7 +1115,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			targetGalleryName = r.FormValue("new_name")
 			path := r.FormValue("path")
 
-			if err := s.Service.CreateGallery(ctx, targetGalleryName, path); err != nil {
+			if err := s.Bridge.CreateGallery(ctx, targetGalleryName, path); err != nil {
 				message := "Failed to create new Gallery"
 				slog.Error(message, slog.Any("error", err))
 				http.Error(w, message, http.StatusInternalServerError)
@@ -1142,7 +1125,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			targetGalleryName = r.FormValue("name")
 		}
 
-		targetID, err, ok := s.Service.GetGalleryID(targetGalleryName)
+		targetID, err, ok := s.Bridge.GetGalleryID(targetGalleryName)
 		if err != nil || !ok {
 			message := "Failed to get target Gallery ID"
 			slog.Error(message, slog.Any("error", err))
@@ -1151,14 +1134,14 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if action == "move" {
-			if err := s.Service.ChangeGallery(ctx, targetID, images); err != nil {
+			if err := s.Bridge.ChangeGallery(ctx, targetID, images); err != nil {
 				message := "Failed to move images"
 				slog.Error(message, slog.Any("error", err))
 				http.Error(w, message, http.StatusInternalServerError)
 				return
 			}
 		} else {
-			if err := s.Service.CopyToGallery(ctx, targetID, images); err != nil {
+			if err := s.Bridge.CopyToGallery(ctx, targetID, images); err != nil {
 				message := "Failed to copy images"
 				slog.Error(message, slog.Any("error", err))
 				http.Error(w, message, http.StatusInternalServerError)
@@ -1166,7 +1149,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if err := s.Service.UpdateFolder(ctx, targetGalleryName); err != nil {
+	if err := s.Bridge.UpdateFolder(ctx, targetGalleryName); err != nil {
 		message := "Failed to update target gallery"
 		slog.Error(message, slog.String("gallery", targetGalleryName), slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
@@ -1234,7 +1217,7 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	if formTarget := r.FormValue("target_gallery"); formTarget != "" {
 		name = formTarget
 	}
-	galleryID, err, ok := s.Service.GetGalleryID(name)
+	galleryID, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
 		slog.Error(message, slog.Any("error", err))
@@ -1249,7 +1232,7 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
 
-	images, err := s.Service.SearchImages(ctx, search, galleryID, threshold)
+	images, err := s.Bridge.SearchImages(ctx, search, galleryID, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -1258,7 +1241,7 @@ func (s *Server) textSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	returnTo := query.String(r, "returnTo", name)
-	galleries, _ := s.Service.GetAllGalleries()
+	galleries, _ := s.Bridge.GetAllGalleries()
 
 	data := searchResult{
 		GalleryName: name,
@@ -1304,7 +1287,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	if formTarget := r.FormValue("target_gallery"); formTarget != "" {
 		name = formTarget
 	}
-	galleryID, err, ok := s.Service.GetGalleryID(name)
+	galleryID, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
 		slog.Error(message, slog.Any("error", err))
@@ -1349,7 +1332,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file64, err := s.Service.ConvertImage(fileBytes)
+	file64, err := s.Bridge.ConvertImage(fileBytes)
 	if err != nil {
 		message := "Failed to convert Image to Base64"
 		slog.Error(message, slog.Any("error", err))
@@ -1364,7 +1347,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	thresholdFloat, _ := strconv.ParseFloat(thresholdStr, 32)
 	threshold := float32(thresholdFloat)
 
-	images, err := s.Service.SearchImages64(ctx, file64, galleryID, threshold)
+	images, err := s.Bridge.SearchImages64(ctx, file64, galleryID, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))
@@ -1373,7 +1356,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	returnTo := query.String(r, "returnTo", name)
-	galleries, _ := s.Service.GetAllGalleries()
+	galleries, _ := s.Bridge.GetAllGalleries()
 	data := searchResult{
 		Images:      images,
 		CurrentPage: page,
@@ -1403,7 +1386,7 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
 	}
-	data, err := s.Service.GetImageInfo(id)
+	data, err := s.Bridge.GetImageInfo(id)
 	if err != nil {
 		message := "Failed to get Image Info"
 		slog.Error(message, slog.Any("error", err))
@@ -1436,7 +1419,7 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Service.SetRating(imageID, rating); err != nil {
+	if err := s.Bridge.SetRating(imageID, rating); err != nil {
 		message := "Failed to set Image rating"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)

@@ -1,11 +1,22 @@
 <script lang="ts">
-	import favicon from '$lib/assets/favicon.svg';
+	import logo from '$lib/assets/logo.svg';
+	import Sidebar from '$lib/components/Sidebar.svelte';
+	import Carousel from '$lib/components/Carousel.svelte';
+	import '../app.css';
 
-	let { children } = $props();
+	let { data, children } = $props();
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={logo} />
 </svelte:head>
 
-{@render children()}
+<div class="app-layout">
+	<Sidebar galleries={data.galleries} />
+
+	<main class="main-content">
+		{@render children()}
+	</main>
+</div>
+
+<Carousel />

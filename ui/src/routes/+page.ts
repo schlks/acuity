@@ -1,6 +1,6 @@
-import type { PageServerLoad } from './$tpyes';
+import type { PageLoad } from './$types';
 
-export const load: PageServerLoad = async ({ url, fetch}) => {
+export const load: PageLoad = async ({ url, fetch}) => {
 	const query = url.searchParams.get('q');
 
 	if (!query) {
@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ url, fetch}) => {
 	}
 
 	try {
-		const res = await fetch(`htpp://localhost:3000/api/search?q=${encodeURIComponent(query)}`);
+		const res = await fetch(`http://localhost:3000/api/search?q=${encodeURIComponent(query)}`);
 
 		if (!res.ok) {
 			throw new Error(`Go server responded with status: ${res.status}`);

@@ -1,4 +1,11 @@
-FROM golang:1.26-alpine AS build-stage
+FROM oven/bun:latest AS ui-builder
+WORKER /ui
+COPY ui/package.json ui/bun-lockb ./
+RUN bun install
+COPY ui/ .
+RUM bun run build
+
+FROM golang:1.26-alpine AS go-builder
 RUN apk add --no-cache vips-dev gcc musl-dev glycin-loaders-all upx vips-heif
 
 WORKDIR /app
@@ -15,7 +22,7 @@ FROM alpine:latest AS production
 RUN apk add --no-cache vips exiftool vips-heif
 
 WORKDIR /app
-COPY --from=build-stage /app/bin/acuity .
-COPY --from=build-stage /app/web ./web
+COPY --from=go-builder /app/bin/acuity .
+COPY --from=ui-builder /ui/build ./web/build
 
 ENTRYPOINT ["./acuity"]
