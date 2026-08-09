@@ -1,7 +1,7 @@
 <script>
 	import { decode } from 'blurhash';
 
-	let { image, onclick } = $props();
+	let { image, onclick, onmouseenter, isFocused, isSelected, dataIndex } = $props();
 
 	let canvasElement = $state(null);
 	let isLoaded = $state(false);
@@ -19,8 +19,11 @@
 
 <div
 	class="image-card"
+	class:focused={isFocused}
+	data-index={dataIndex}
+	{onmouseenter}
 	onclick={onclick}
-	style="flex-grow: {image.aspect_ratio}; flex-basis: calc(var(--grid-base, 250px) * {image.aspect_ratio})"
+	style="flex-grow: {image.aspect_ratio || 1.5}; flex-basis: calc(var(--grid-base, 250px) * {image.aspect_ratio || 1.5})"
 	tabindex="0">
 
 	<canvas
@@ -36,6 +39,7 @@
 		loading="lazy"
 		class:loaded={isLoaded}
 		onload={() => isLoaded = true}
+		onerror={() => isLoaded = true}
 	/>
 
 	{#if image.rating > 0}
@@ -46,12 +50,18 @@
 	{/if}
 
 	{#if image.flag === 1}
-		<div class="badge keep">
+		<div class="badge flag keep">
 			<span class="material-symbols-outlined">check_circle</span>
 		</div>
 	{:else if image.flag === -1}
-		<div class="badge reject">
+		<div class="badge flag reject">
 			<span class="material-symbols-outlined">cancel</span>
+		</div>
+	{/if}
+
+	{#if isSelected}
+		<div class="selection-overlay">
+			<span class="material-symbols-outlined check-icon">check_circle</span>
 		</div>
 	{/if}
 </div>
@@ -62,7 +72,7 @@
 		position: absolute;
 		top: 0; left: 0; right: 0; bottom: 0;
 		background: transparent;
-		z-index: 2; /* Höher als das Bild (z-index: 1) */
+		z-index: 2;
 		pointer-events: none;
 		clip-path: circle(0% at 0% 100%);
 		transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), clip-path 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -75,6 +85,7 @@
 		overflow: hidden;
 		cursor: pointer;
 		height: var(--grid-base, 250px);
+		--badge-offset: 12px;
 	}
 
 	.image-card::after {
@@ -82,10 +93,9 @@
 		position: absolute;
 		top: 0; left: 0; right: 0; bottom: 0;
 
-		border: 3px solid var(--primary);
-		border-radius: 8px;
-		box-sizing: border-box;
-		z-index: 3; /* Höher als das Bild und der Tint */
+		box-shadow: inset 0 0 0 3px var(--primary);
+		border-radius: inherit;
+		z-index: 3;
 		pointer-events: none;
 
 		clip-path: circle(0% at 0% 100%);
@@ -97,36 +107,8 @@
 		background: color-mix(in srgb, var(--primary) 15%, transparent);
 	}
 
-	.image-card:hover::after {
+	.image-card:hover:after {
 		clip-path: circle(150% at 0% 100%);
-	}
-
-	.image-card img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
-		transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
-	}
-
-	.blurhash-canvas {
-		position: absolute;
-		top: 0;
-		left: 0;
-		display: block;
-		width: 100% !important;
-		height: 100% !important;
-		object-fit: cover;
-		z-index: 0;
-	}
-
-	.image-card {
-		position: relative;
-		border-radius: 8px;
-		background-color: var(--bg-light);
-		overflow: hidden;
-		cursor: pointer;
-		height: var(--grid-base, 250px);
 	}
 
 	.image-card img {
@@ -139,11 +121,23 @@
 		display: block;
 		z-index: 1;
 		opacity: 0;
+		border-radius: 8px;
 		transition: opacity 0.4s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.image-card img.loaded {
 		opacity: 1;
+	}
+
+	.blurhash-canvas {
+		position: absolute;
+		top: 0;
+		left: 0;
+		display: block;
+		width: 100% !important;
+		height: 100% !important;
+		object-fit: cover;
+		z-index: 0;
 	}
 
 	.badge {
@@ -160,25 +154,59 @@
 	}
 
 	.badge.flag {
-		top: 12px;
-		left: 12px;
+		top: var(--badge-offset);
+		left: var(--badge-offset);
 	}
 
+	.selection-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+        pointer-events: none;
+        backdrop-filter: blur(1px);
+    }
+
+    .selection-overlay .check-icon {
+        font-size: 2.3rem;
+        color: color-mix(in srgb, var(--success) 70%, var(--bg));
+        font-variation-settings: 'FILL' 1;
+        filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+        animation: popIn 0.15s ease-out;
+    }
+
+    @keyframes popIn {
+        from {
+            transform: scale(0.7);
+            opacity: 0;
+        }
+        to {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
 	.badge.rating {
-		top: 12px;
-		right: 12px;
+		top: var(--badge-offset);
+		right: var(--badge-offset);
 		background: var(--bg-dark);
 		color: var(--info);
 	}
 
 	.badge.keep {
-		background: var(--success);
-		color: var(--bg-dark)
+		background: var(--bg-dark);
+		color: var(--success);
 	}
 
 	.badge.reject {
-		background: var(--danger);
-		color: var(--text);
+		background: var(--bg-dark);
+		color: var(--danger);
 	}
 
 	.icon-filled {

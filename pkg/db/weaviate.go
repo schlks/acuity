@@ -521,7 +521,7 @@ func (w *WeaviateClient) GetVectors(ctx context.Context, galleryIDs []int) ([]Im
 					{Name: "vector"},
 				},
 			},
-		)
+		).WithLimit(10000)
 
 	if len(galleryIDs) > 0 {
 		var operands []*filters.WhereBuilder

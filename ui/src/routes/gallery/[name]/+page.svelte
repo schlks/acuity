@@ -4,6 +4,7 @@
 	import { carousel } from '$lib/stores/carousel.svelte';
 	import ImageCard from '$lib/components/ImageCard.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
+	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
 
 	let { data } = $props();
 	let searchQuery = $state('');
@@ -35,10 +36,15 @@
 		return p;
 	});
 	let galleryImages = $state([]);
+	let selectedImages = $state([]);
+	let batchIsOpen = $state(false);
 	let hasMore = $state(false);
 	let currentInfinitePage = $state(1);
 	let isLoadingMore = $state(false);
 	let searchTimeout;
+	let focusedIndex = $state<number>(0);
+	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
+	let isKeyboardMode = $state(false);
 
 	$effect(() => {
 		galleryImages = data.images.images || [];
@@ -48,6 +54,39 @@
 			infiniteScroll = data.settings.infinite_scroll;
 		}
 	});
+
+	$effect(() => {
+		if (carousel.isOpen && galleryImages.length > 0) {
+			const imagesLeft = galleryImages.length - carousel.currentIndex - 1;
+			if (imagesLeft <= 20 && !isLoadingMore && hasMore) {
+				loadMore();
+			}
+		}
+	});
+
+	$effect(() => {
+		if (focusedIndex !== null) {
+			updateFocusBox();
+		}
+	})
+
+	function updateFocusBox() {
+		if (focusedIndex === null || galleryImages.length === 0) {
+			focusBox.visible = false;
+			return;
+		}
+
+		const el = document.querySelector(`[data-index="${focusedIndex}"]`) as HTMLElement;
+		if (el) {
+			focusBox = {
+				x: el.offsetLeft,
+				y: el.offsetTop,
+				w: el.offsetWidth,
+				h: el.offsetHeight,
+				visible: true
+			};
+		}
+	}
 
 	function viewPort(node, callback) {
 		const observer = new IntersectionObserver(
@@ -141,6 +180,47 @@
 		isLoadingMore = false;
 	}
 
+	async function setRating(rating: number) {
+		const img = galleryImages[focusedIndex];
+		if (!img || !img.id) return;
+
+		const formData = new FormData();
+		formData.append('rating', rating.toString());
+
+		try {
+			const res = await fetch(`/api/image/${img.id}`, {
+				method: 'POST',
+				body: formData
+			});
+			if (res.ok) {
+				galleryImages[focusedIndex] = { ...img, rating };
+			}
+		} catch (error) {
+			console.error("Rating Error:", error);
+		}
+	}
+
+	async function setFlag(flag: number) {
+		const img = galleryImages[focusedIndex];
+		if (!img || !img.id) return;
+
+		const formData = new FormData();
+		if (img.flag === flag) flag = 0;
+		formData.append('flag', flag.toString());
+
+		try {
+			const res = await fetch(`/api/image/${img.id}/flag`, {
+				method: 'POST',
+				body: formData
+			});
+			if (res.ok) {
+				galleryImages[focusedIndex] = { ...img, flag };
+			}
+		} catch (error) {
+			console.error("Flag Error:", error);
+		}
+	}
+
 	async function rescanGallery() {
 		if (!confirm('Scan this gallery for new Images?')) return;
 		await fetch(`/api/gallery/${data.gallery.name}/scan`, { method: 'POST' });
@@ -152,7 +232,142 @@
 		await fetch(`/api/gallery/${data.gallery.name}/unflag`, { method: 'POST' });
 		await invalidateAll();
 	}
+
+	function toggleSelectedCurrent() {
+		const img = galleryImages[focusedIndex];
+		if (!img || !img.id) return;
+
+		const isSelected = selectedImages.some(i => i.id === img.id);
+
+		if (isSelected) {
+			selectedImages = selectedImages.filter(i => i.id !== img.id);
+		} else {
+			selectedImages = [...selectedImages, img];
+		}
+	}
+
+	function navigate(step: number) {
+		isKeyboardMode = true;
+		const nextIndex = focusedIndex + step;
+		if (nextIndex >= 0 && nextIndex < galleryImages.length) {
+			focusedIndex = nextIndex;
+			const el = document.querySelector(`[data-index="${focusedIndex}"]`);
+			el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+		}
+	}
+
+	function navigateVert(direction: 'up' | 'down') {
+		isKeyboardMode = true;
+		const currentEl = document.querySelector(`[data-index="${focusedIndex}"]`) as HTMLElement;
+		if (!currentEl) return;
+
+		const currLeft = currentEl.offsetLeft;
+		const currRight = currLeft + currentEl.offsetWidth;
+		const currCenter = (currLeft + currRight) / 2;
+		const currTop = currentEl.offsetTop
+
+		const allCards = Array.from(document.querySelectorAll('.gallery-grid [data-index]')) as HTMLElement[];
+
+		let targetRowCards: HTMLElement[] = [];
+
+		if (direction === 'down') {
+			const belowTops = allCards.map(c => c.offsetTop).filter(top => top > currTop + 20);
+			if (belowTops.length === 0) return;
+			const nextRowTop = Math.min(...belowTops);
+			targetRowCards = allCards.filter(c => Math.abs(c.offsetTop - nextRowTop) < 20);
+		} else {
+			const aboveTops = allCards.map(c => c.offsetTop).filter(top => top < currTop - 20);
+			if (aboveTops.length === 0) return;
+			const prevRowTop = Math.max(...aboveTops);
+			targetRowCards = allCards.filter(c => Math.abs(c.offsetTop - prevRowTop) < 20);
+		}
+
+		let bestCard: HTMLElement | null = null;
+		let highestScore = -Infinity;
+
+		for (const card of targetRowCards) {
+			const candLeft = card.offsetLeft;
+			const candRight = candLeft + card.offsetWidth;
+			const candCenter = (candLeft + candRight) / 2;
+
+			const overlap = Math.max(0, Math.min(currRight, candRight) - Math.max(currLeft, candLeft));
+			const distance = Math.abs(candCenter - currCenter);
+			const score = overlap - distance;
+
+			if (score > highestScore) {
+				highestScore = score;
+				bestCard = card;
+			}
+		}
+
+		if (bestCard) {
+			const attr = bestCard.getAttribute('data-index')
+			const newIndex = attr !== null ? Number(attr) : NaN;
+			if (!isNaN(newIndex)) {
+				focusedIndex = newIndex;
+				bestCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+			}
+		}
+	}
+
+	function handleMouseMove(e: MouseEvent) {
+		if (Math.abs(e.movementX) > 0 || Math.abs(e.movementY) > 0) {
+			isKeyboardMode = false;
+		}
+	}
+
+	function handleKeyDown(e: KeyboardEvent) {
+		const tag = (e.target as HTMLElement)?.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+		if (carousel.isOpen || batchIsOpen) return;
+
+		if (galleryImages.length === 0) return;
+
+		switch (e.key) {
+			case 'ArrowRight':
+			case 'l':
+				navigate(1);
+				break;
+			case 'ArrowLeft':
+			case 'h':
+				navigate(-1);
+				break;
+			case 'ArrowDown':
+			case 'j':
+				e.preventDefault();
+				navigateVert('down');
+				break;
+			case 'ArrowUp':
+			case 'k':
+				e.preventDefault();
+				navigateVert('up');
+				break;
+			case 'Enter':
+				carousel.open(galleryImages, focusedIndex);
+				break;
+			case '0': case '1': case '2': case '3': case '4': case '5':
+				setRating(Number(e.key));
+				break;
+			case 'm':
+				setFlag(1);
+				break;
+			case 'n':
+				setFlag(-1);
+				break;
+			case 'u':
+				setFlag(0);
+				break;
+			case 's':
+			case ' ':
+				e.preventDefault();
+				toggleSelectedCurrent();
+				break;
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleKeyDown} onmousemove={handleMouseMove} />
 
 <div class="gallery-header">
 	<h1>{data.gallery.heading || data.gallery.name}</h1>
@@ -166,6 +381,10 @@
 		>
 			{data.gallery.count} images
 		</button>
+		
+		{#if selectedImages.length > 0}
+			<span class="selected-count">{selectedImages.length}</span>
+		{/if}
 
 		<div class="divider"></div>
 
@@ -181,9 +400,19 @@
 		<button class="btn-icon" title="Remove flags" onclick={removeFlags}>
 			<span class="material-symbols-outlined">block</span>
 		</button>
-		<button class="btn-icon" title="Batch Actions">
-			<span class="material-symbols-outlined">more_vert</span>
-		</button>
+
+		<div style="position: relative;">
+			<button class="btn-icon" class:active={batchIsOpen} title="Batch Actions" onclick={() => batchIsOpen = !batchIsOpen}>
+				<span class="material-symbols-outlined">more_vert</span>
+			</button>
+
+			{#if batchIsOpen}
+				<BatchActionDialog
+					selectedImages={selectedImages}
+					onClose={() => batchIsOpen = false}
+				/>
+			{/if}
+		</div>
 	</div>
 
 	<div class="search-container">
@@ -304,10 +533,31 @@
 	</div>
 {/if}
 
-<div class="gallery-grid medium" class:loading={$navigating}>
+<div class="gallery-grid medium" class:keyboard-nav={isKeyboardMode} class:loading={$navigating}>
 	<hr />
+	{#if focusBox.visible && isKeyboardMode}
+		<div
+			class="floating-focus"
+			style="transform: translate({focusBox.x}px, {focusBox.y}px); width: {focusBox.w}px; height: {focusBox.h}px;"
+		></div>
+	{/if}
+
 	{#each galleryImages as image, index (image.filepath)}
-		<ImageCard {image} onclick={() => carousel.open(galleryImages, index)}/>
+		<ImageCard
+			{image}
+			dataIndex={index}
+			onmouseenter={() => {
+				if (!isKeyboardMode) {
+					focusedIndex = index;
+				}
+			}}
+			isFocused={focusedIndex === index} 
+			isSelected={selectedImages.some(i => i.id === image.id)}
+			onclick={() => {
+				focusedIndex = index;
+				carousel.open(galleryImages, index);
+			}}
+		/>
 	{/each}
 </div>
 
@@ -353,7 +603,7 @@
 
 <style>
 	span {
-		font-size: 0.9rem;
+		font-size: 1rem;
 	}
 
 	.gallery-header {
@@ -425,6 +675,31 @@
 		color: var(--bg-dark);
 	}
 
+	.selected-count {
+		position: relative;
+		color: var(--text-muted);
+		font-size: 0.9rem;
+		padding: 4px 12px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 28px;
+		cursor: default;
+		user-select: none;
+		z-index: 1
+	}
+
+	.selected-count::before {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		height: 2px;
+		background: var(--info);
+		z-index: -1;
+	}
+
 	.btn-icon {
 		display: flex;
 		align-items: center;
@@ -458,6 +733,24 @@
 	}
 
 	.btn-icon:hover::before {
+		height: 100%;
+		border-radius: 8px;
+	}
+
+	.btn-icon.active::before {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		height: 2px;
+		background: var(--tertiary);
+		border-radius: 0px;
+		z-index: -1;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.btn-icon.active:hover::before {
 		height: 100%;
 		border-radius: 8px;
 	}
@@ -813,5 +1106,31 @@
 		display: flex;
 		justify-content: center;
 		align-items: center;
+	}
+
+	.gallery-grid {
+		position: relative;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 16px;
+		padding: 0 24px 24px;
+	}
+
+	.gallery-grid.keyboard-nav :global(.image-card) {
+		pointer-events: none;
+	}
+
+	.floating-focus {
+		position: absolute;
+		top: 0;
+		left: 0;
+		pointer-events: none;
+		border-radius: 8px;
+		box-shadow: inset 0 0 0 3px var(--primary), 0 0 25px color-mix(in srgb, var(--primary) 40%, transparent);
+		z-index: 10;
+		transition:
+			transform 0.18s cubic-bezier(0.2, 0, 0, 1),
+			width 0.18s cubic-bezier(0.2, 0, 0, 1),
+			height 0.18s cubic-bezier(0.2, 0, 0, 1);
 	}
 </style>

@@ -57,7 +57,7 @@
 	<div class="info-grid">
 		<div class="grid-item">
 			<span class="label">Aperture</span>
-			<span class="value">{image.aperture ? `&fnof/${image.aperture}` : '--'}</span>
+			<span class="value">{image.aperture ? `\u1D453/${image.aperture}` : '--'}</span>
 		</div>
 		<div class="grid-item">
 			<span class="label">Shutter Speed</span>

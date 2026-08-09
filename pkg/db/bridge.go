@@ -300,6 +300,10 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 				heigth = imageSize.Height
 			} else {
 				slog.Error("failed to get image size with imagesize", slog.String("file", path), slog.Any("error", err))
+				if size, imgErr := bimgImg.Size(); imgErr == nil {
+					width = size.Width
+					heigth = size.Height
+				}
 			}
 
 			var resolution int

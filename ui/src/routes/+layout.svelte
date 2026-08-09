@@ -1,14 +1,14 @@
 <script lang="ts">
-	import logo from '$lib/assets/logo.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Carousel from '$lib/components/Carousel.svelte';
+	import ProgressOverlay from '$lib/components/ProgressOverlay.svelte';
 	import '../app.css';
 
 	let { data, children } = $props();
 </script>
 
 <svelte:head>
-	<link rel="icon" href={logo} />
+	<link rel="icon" href=/logo.svg />
 </svelte:head>
 
 <div class="app-layout">
@@ -20,3 +20,4 @@
 </div>
 
 <Carousel />
+<ProgressOverlay />

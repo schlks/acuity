@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -31,7 +30,6 @@ import (
 
 type Server struct {
 	Bridge   *db.Bridge
-	Template *template.Template
 	Config   *config.Config
 }
 
@@ -62,11 +60,10 @@ type searchResult struct {
 }
 
 // NewServer creates a new server
-func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config *config.Config, tmpl *template.Template) *Server {
+func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config *config.Config) *Server {
 	service := db.NewBridge(sdatabase, wdatabase)
 	server := &Server{
 		Bridge:   service,
-		Template: tmpl,
 		Config:   config,
 	}
 
@@ -410,7 +407,18 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	if isRawExtension(filepath.Ext(image)) {
 		// First try extracting the embedded high-quality JPEG
 		if previewBytes, err := extractRawPreview(image); err == nil {
-			w.Header().Set("Content-Type", "image/jpeg")
+			mimeType := http.DetectContentType(previewBytes)
+			
+			// Firefox supports no TIFF images natively! If exiftool extracted a TIFF preview, convert it to JPEG.
+			if mimeType == "image/tiff" {
+				options := bimg.Options{ Type: bimg.JPEG, Quality: 90 }
+				if convertedBytes, err := bimg.NewImage(previewBytes).Process(options); err == nil {
+					previewBytes = convertedBytes
+					mimeType = "image/jpeg"
+				}
+			}
+			
+			w.Header().Set("Content-Type", mimeType)
 			w.Write(previewBytes)
 			return
 		}
@@ -585,9 +593,6 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 	hasActive, progresses, refreshGalleries := check()
 
 	if !hasActive {
-		if err := s.Template.ExecuteTemplate(w, "progress.html", nil); err != nil {
-			slog.Error("progress cannot be loaded", slog.Any("error", err))
-		}
 		return
 	}
 
@@ -600,9 +605,7 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 			hasActive, progresses, refreshGalleries = check()
 			if !hasActive {
 				w.Header().Set("HX-Trigger", "reload-main")
-				if err := s.Template.ExecuteTemplate(w, "progress.html", nil); err != nil {
-					slog.Error("progress cannot be loaded", slog.Any("error", err))
-				}
+				slog.Error("progress cannot be loaded", slog.Any("error", err))
 				return
 			}
 		}
@@ -1080,9 +1083,12 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		flagFilter := "any"
-		if strings.HasPrefix(criteria, "flag_") {
-			flagFilter = strings.TrimPrefix(criteria, "flag_")
+		flagFilter, ok := strings.CutPrefix(criteria, "flag_")
+		if !ok {
+			message := "Failed to parse Form"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusBadRequest)
+			return
 		}
 
 		files, err := s.Bridge.GetGalleryFiles(sourceGalleryName, "", "", 0, 100_000, flagFilter, "")
@@ -1109,21 +1115,21 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if action == "move" || action == "copy" {
-		isNew := r.FormValue("is_new") == "true"
+		// isNew := r.FormValue("is_new") == "true"
 
-		if isNew {
-			targetGalleryName = r.FormValue("new_name")
-			path := r.FormValue("path")
+		// if isNew {
+		// 	targetGalleryName = r.FormValue("new_name")
+		// 	path := r.FormValue("path")
 
-			if err := s.Bridge.CreateGallery(ctx, targetGalleryName, path); err != nil {
-				message := "Failed to create new Gallery"
-				slog.Error(message, slog.Any("error", err))
-				http.Error(w, message, http.StatusInternalServerError)
-				return
-			}
-		} else {
+		// 	if err := s.Bridge.CreateGallery(ctx, targetGalleryName, path); err != nil {
+		// 		message := "Failed to create new Gallery"
+		// 		slog.Error(message, slog.Any("error", err))
+		// 		http.Error(w, message, http.StatusInternalServerError)
+		// 		return
+		// 	}
+		// } else {
 			targetGalleryName = r.FormValue("name")
-		}
+		//}
 
 		targetID, err, ok := s.Bridge.GetGalleryID(targetGalleryName)
 		if err != nil || !ok {

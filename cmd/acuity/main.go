@@ -1,23 +1,15 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
-	"errors"
 	"fmt"
-	"html/template"
-	"image/jpeg"
 	"log/slog"
 	"math"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/buckket/go-blurhash"
 
 	"acuity/internal/config"
 	"acuity/pkg/db"
@@ -197,60 +189,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	funcMap := template.FuncMap{
-		"formatSize":        formatSize,
-		"formatRes":         formatResolution,
-		"formatDate":        formatDate,
-		"formatExt":         formatExt,
-		"formatAperture":    formatAperture,
-		"formatShutter":     formatShutter,
-		"formatLens":        formatLens,
-		"formatFocalLength": formatFocalLength,
-		"formatIso":         formatIso,
-		"blurhashDataURI": func(hash string) template.CSS {
-			if hash == "" {
-				return ""
-			}
-			img, err := blurhash.Decode(hash, 32, 32, 1)
-			if err != nil {
-				return ""
-			}
-			var buf bytes.Buffer
-			if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
-				return ""
-			}
-			return template.CSS("url('data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()) + "')")
-		},
-		"formatDeepest": func(path string) string {
-			if path == "" {
-				return ""
-			}
-			return filepath.Base(filepath.Dir(path))
-		},
-		"getConfig": func() *config.Config { return Config },
-		"dict": func(values ...interface{}) (map[string]interface{}, error) {
-			if len(values)%2 != 0 {
-				return nil, errors.New("invalid dict call")
-			}
-			dict := make(map[string]interface{}, len(values)/2)
-			for i := 0; i < len(values); i += 2 {
-				key, ok := values[i].(string)
-				if !ok {
-					return nil, errors.New("dict keys must be strings")
-				}
-				dict[key] = values[i+1]
-			}
-			return dict, nil
-		},
-	}
-
 	webDir := os.Getenv("WEB_DIR")
 	if webDir == "" {
 		webDir = "web"
 	}
-	templates := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join(webDir, "templates/*.html")))
+	// templates := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join(webDir, "templates/*.html")))
 
-	webServer := web.NewServer(sClient, wClient, Config, templates)
+	webServer := web.NewServer(sClient, wClient, Config)
 
 	mux := http.NewServeMux()
 	webServer.RegisterRoutes(mux)

@@ -5,7 +5,7 @@
   "default_sort_order": "desc",
   "grid_size": "medium",
   "images_per_page": 200,
-  "infinite_scroll": true,
+  "infinite_scroll": false,
   "port": "3000",
   "weaviate_host": "weaviate",
   "weaviate_port": ":50050"

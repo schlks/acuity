@@ -9,6 +9,6 @@ if %errorlevel% neq 0 (
 
 REM Run Docker commands
 echo Docker is ready, starting...
-if not exist "acuity.db" type nul > "acuity.db"
+
 docker compose pull
 docker compose up -d

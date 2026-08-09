@@ -1,15 +1,34 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import logo from '$lib/assets/logo.svg';
 	import SettingsDialog from "./SettingsDialog.svelte";
-
+	import AddGalleryDialog from "./AddGalleryDialog.svelte";
+	
 	let { galleries } = $props();
 	let showSettings = $state(false);
+	let showAddGallery = $state(false);
+
+
+	async function deleteGallery(name: string) {
+		if (!confirm(`Do you really want to delete the "${name}"`))
+
+		try {
+			const res = await fetch(`/api/gallery/${encodeURIComponent(name)}`, {
+				method: 'DELETE'
+			});
+			if (res.ok) {
+				window.location.href = '/';
+			} else {
+				alert("Failed to delete Gallery")
+			}
+		} catch (error) {
+			console.error(error);
+		}
+	}
 </script>
 
 <aside class="sidebar-left">
 	<a href="/" class="logo-link">
-		<img src={logo} alt="Acuity Logo" width="32" height="32" />
+		<img src=/logo.svg alt="Acuity Logo" width="32" height="32" />
 		<h1>Acuity</h1>
 	</a>
 
@@ -18,22 +37,33 @@
 	<nav class="nav-list">
 		<div class="nav-scroll">
 			{#each galleries as gallery}
-				<a
-					href="/gallery/{encodeURIComponent(gallery.name)}"
-					class="nav-item"
-					class:active={$page.params.name === gallery.name}
-				>
-					<span class="material-symbols-outlined">folder</span>
-					{gallery.name}
-				</a>
+				<div class="gallery-item-wrapper">
+					<a
+						href="/gallery/{encodeURIComponent(gallery.name)}"
+						class="nav-item"
+						class:active={$page.params.name === gallery.name}
+					>
+						<span class="material-symbols-outlined">folder</span>
+						{gallery.name}
+					</a>
+					<button class="delete-btn" onclick={() => deleteGallery(gallery.name)} title="delete gallery">
+						<span class="material-symbols-outlined">delete</span>
+					</button>
+				</div>
 			{/each}
 
-			<button class="nav-item add-btn">
-				<span class="material-symbols-outlined">add</span>
-				Add Gallery
-			</button>
-		</div>
+			<hr />
 
+			<div class="settings-container">
+				{#if showAddGallery}
+					<AddGalleryDialog onClose={() => showAddGallery = false} />
+				{/if}
+				<button class="nav-item add-btn" class:active={showAddGallery} onclick={() => showAddGallery = !showAddGallery}>
+					<span class="material-symbols-outlined">add</span>
+					Add Gallery
+				</button>
+			</div>
+		</div>
 		<div class="nav-bottom">
 			<a href="/gallery/global/duplicates" class="nav-item" class:active={$page.url.pathname === '/gallery/global/duplicates'}>
 				<span class="material-symbols-outlined">search</span>
@@ -90,7 +120,7 @@
 		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 16px;
 	}
 
 	.nav-bottom {
@@ -170,10 +200,46 @@
 		color: var(--text-muted);
 		font-size: 0.9rem;
 		padding: 6px 12px;
-		margin-top: 16px;
 	}
 
 	.settings-container {
 		position: relative;
 	}
+
+	.gallery-item-wrapper {
+        display: flex;
+        align-items: center;
+        position: relative;
+        width: 90%;
+        margin: 0 auto;
+    }
+
+    .gallery-item-wrapper .nav-item {
+        width: 100%; /* Link nimmt den vollen Platz ein */
+    }
+
+    .delete-btn {
+        position: absolute;
+        right: 8px;
+        background: transparent;
+        border: none;
+        color: var(--danger);
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s, transform 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        border-radius: 4px;
+        z-index: 2; /* Über dem Link */
+    }
+
+    .gallery-item-wrapper:hover .delete-btn {
+        opacity: 1;
+    }
+
+    .delete-btn:hover {
+        background: rgba(255, 0, 0, 0.1);
+    }
 </style>

@@ -1,9 +1,9 @@
 FROM oven/bun:latest AS ui-builder
-WORKER /ui
-COPY ui/package.json ui/bun-lockb ./
+WORKDIR /ui
+COPY ui/package.json ui/bun.lock ./
 RUN bun install
 COPY ui/ .
-RUM bun run build
+RUN bun run build
 
 FROM golang:1.26-alpine AS go-builder
 RUN apk add --no-cache vips-dev gcc musl-dev glycin-loaders-all upx vips-heif
