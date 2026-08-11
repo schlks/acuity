@@ -1,41 +1,172 @@
 <script lang="ts">
-	import type { PageData } from './$types';
-	import ImageCard from '$lib/components/ImageCard.svelte';
+	import { untrack } from 'svelte';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { invalidateAll } from '$app/navigation';
+	import { carousel } from '$lib/stores/carousel.svelte';
+	import ImageCard from '$lib/components/ImageCard.svelte';
+	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
+	import Spinner from '$lib/components/Spinner.svelte';
 
-	let { data }: { data: PageData } = $props();
 	let searchThreshold = $state($page.url.searchParams.get('threshold') || '0.1');
 	let searchTimeout: ReturnType<typeof setTimeout>;
 	let isDropdownOpen = $state(false);
+	let batchIsOpen = $state(false);
+	let selectedImages = $state<any[]>([]);
+	let selectedGalleries = $state<string[]>($page.url.searchParams.getAll('galleries'));
+
+	let duplicatesData = $state<any>(null);
+	let isLoading = $state(true);
+	let abortController: AbortController | null = null;
+	let lastUrl = '';
+
+	let galleries = $derived(duplicatesData?.Galleries || $page.data?.galleries || []);
+
+	async function loadDuplicates() {
+		if (abortController) {
+			abortController.abort();
+		}
+		const controller = new AbortController();
+		abortController = controller;
+
+		isLoading = true;
+		try {
+			const params = new URLSearchParams();
+			params.set('threshold', searchThreshold.toString());
+
+			const imageID = $page.url.searchParams.get('imageID');
+			if (imageID) {
+				params.set('imageID', imageID);
+			}
+
+			selectedGalleries.forEach(g => params.append('galleries', g));
+
+			const res = await fetch(`/api/gallery/${$page.params.name}/duplicates?${params.toString()}`, { signal: controller.signal });
+			if (res.ok) {
+				const data = await res.json();
+				if (abortController === controller) {
+					duplicatesData = data;
+				}
+			} else {
+				if (abortController === controller) {
+					duplicatesData = { Groups: [], Galleries: [] };
+				}
+			}
+		} catch (e: any) {
+			if (e.name === 'AbortError') return;
+			console.error('Failed to load duplicates:', e);
+			if (abortController === controller) {
+				duplicatesData = { Groups: [], Galleries: [] };
+			}
+		} finally {
+			if (abortController === controller) {
+				isLoading = false;
+			}
+		}
+	}
+
+	$effect(() => {
+		const currentHref = $page.url.href;
+		if (currentHref !== lastUrl) {
+			lastUrl = currentHref;
+			untrack(() => {
+				const currentUrl = $page.url;
+				searchThreshold = currentUrl.searchParams.get('threshold') || '0.1';
+				selectedGalleries = currentUrl.searchParams.getAll('galleries');
+				selectedImages = [];
+				loadDuplicates();
+			});
+		}
+	});
+
+	function toggleSelect(image: any) {
+		if (selectedImages.some(i => i.id === image.id)) {
+			selectedImages = selectedImages.filter(i => i.id !== image.id);
+		} else {
+			selectedImages = [...selectedImages, image];
+		}
+	}
 
 	function toggleGallery(id: number) {
-		let url = new URL(location.href);
-		let currentGalleries = url.searchParams.getAll('galleries');
-		let idStr = id.toString();
-
-		if (currentGalleries.includes(idStr)) {
-			currentGalleries = currentGalleries.filter(g => g !== idStr);
+		const idStr = id.toString();
+		if (selectedGalleries.includes(idStr)) {
+			selectedGalleries = selectedGalleries.filter(g => g !== idStr);
 		} else {
-			currentGalleries.push(idStr);
+			selectedGalleries = [...selectedGalleries, idStr];
 		}
-
-		url.searchParams.delete('galleries');
-		currentGalleries.forEach(g => url.searchParams.append('galleries', g));
-
-		goto(url.toString(), { keepFocus: true, noScroll: true});
+		loadDuplicates();
 	}
 
 	function handleDebounceSearch() {
 		clearTimeout(searchTimeout);
 		searchTimeout = setTimeout(() => {
-			let url = new URL(location.href);
-			url.searchParams.set('threshold', searchThreshold.toString());
+			loadDuplicates();
+		}, 400);
+	}
 
-			goto(url.toString(), { keepFocus: true, noScroll: true });
-		}, 500);
+	async function runBatchAction(action: 'delete' | 'move' | 'copy', criteria = 'selected') {
+		if (criteria === 'selected' && selectedImages.length === 0) return;
+
+		if (action === 'delete') {
+			const count = criteria === 'selected' ? `${selectedImages.length} selected` : 'all matching';
+			if (!confirm(`Do you really want to delete ${count} images?`)) return;
+		}
+
+		const formData = new FormData();
+		formData.append('criteria', criteria);
+		formData.append('batch_action', action);
+		formData.append('source_gallery', $page.params.name);
+
+		if (criteria === 'selected') {
+			const ids = selectedImages.map(img => img.id ?? img.ID).join(',');
+			formData.append('image_ids', ids);
+		}
+
+		const res = await fetch('/api/gallery/batch', {
+			method: 'POST',
+			body: formData
+		});
+
+		if (res.ok) {
+			await invalidateAll();
+			selectedImages = [];
+			await loadDuplicates();
+		} else {
+			console.error('Batch Action failed:', await res.text());
+		}
+	}
+
+	function handleKeyDown(e: KeyboardEvent) {
+		const tag = (e.target as HTMLElement)?.tagName;
+		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+		if (carousel.isOpen || batchIsOpen) return;
+
+		switch (e.key) {
+			case 'b':
+				batchIsOpen = !batchIsOpen;
+				break;
+			case 'Delete':
+			case 'Backspace':
+				e.preventDefault();
+				if (selectedImages.length > 0) {
+					runBatchAction('delete', 'selected');
+				}
+				break;
+		}
+	}
+
+	function handleGlobalClick(e: MouseEvent) {
+		const target = e.target as HTMLElement;
+		if (!target || typeof target.closest !== 'function') return;
+
+		if (!target.closest('.batch-dialog, .dropdown-menu, .gallery-filter-dropdown, .btn-icon')) {
+			batchIsOpen = false;
+			isDropdownOpen = false;
+		}
 	}
 </script>
+
+<svelte:window onclick={handleGlobalClick} onkeydown={handleKeyDown} />
 
 <div class="duplicates-container">
 	<div class="header-section">
@@ -45,9 +176,28 @@
 			<h1>Duplicates</h1>
 		{/if}
 
-		<form method="GET" class="control-bar">
-			{#if $page.url.searchParams.has('imageID')}
-				<input type="hidden" name="imageID" value={$page.url.searchParams.get('imageID')} />
+		<form method="GET" class="control-bar" onsubmit={(e) => e.preventDefault()}>
+			<div style="position: relative;">
+				<button
+					type="button"
+					class="btn-icon"
+					class:active={batchIsOpen}
+					title="Batch Actions (b)"
+					onclick={() => batchIsOpen = !batchIsOpen}
+				>
+					<span class="material-symbols-outlined">more_vert</span>
+				</button>
+
+				{#if batchIsOpen}
+					<BatchActionDialog
+						{selectedImages}
+						onClose={() => batchIsOpen = false}
+					/>
+				{/if}
+			</div>
+
+			{#if selectedImages.length > 0}
+				<span class="selected-count">{selectedImages.length}</span>
 			{/if}
 
 			<div class="threshold-wrapper" title="Search Precision" class:active={searchThreshold != 0.1}>
@@ -58,23 +208,24 @@
 					max="1.0"
 					step="0.01"
 					bind:value={searchThreshold}
-					onchange={handleDebounceSearch}
+					oninput={handleDebounceSearch}
 				/>
 			</div>
-			{#if data.duplicatesData.Galleries}
+
+			{#if galleries.length > 0}
 				<div class="dropdown-wrapper">
 					<button type="button" class="dropdown-btn" onclick={() => isDropdownOpen = !isDropdownOpen}>
-						<span>Galleries ({Object.keys(data.duplicatesData.SelectedGalleries || {}).length})</span>
+						<span>Galleries ({selectedGalleries.length})</span>
 						<span class="material-symbols-outlined">expand_more</span>
 					</button>
 					
 					{#if isDropdownOpen}
 						<div class="dropdown-menu">
-							{#each data.duplicatesData.Galleries as gallery}
+							{#each galleries as gallery}
 								<label class="gallery-checkbox">
 									<input
 										type="checkbox"
-										checked={data.duplicatesData.SelectedGalleries && data.duplicatesData.SelectedGalleries[gallery.id]}
+										checked={selectedGalleries.includes(gallery.id?.toString()) || (duplicatesData?.SelectedGalleries && duplicatesData.SelectedGalleries[gallery.id])}
 										onchange={() => toggleGallery(gallery.id)}
 									/>
 									<span>{gallery.name}</span>
@@ -84,40 +235,68 @@
 					{/if}
 				</div>
 			{/if}
+
 		</form>
 	</div>
 	
 	<hr />
 
-	{#if data.duplicatesData.Images && data.duplicatesData.Images.length > 0}
+	{#if isLoading}
+		<div class="loading-state">
+			<Spinner />
+			<p>Searching for duplicates...</p>
+		</div>
+	{:else if duplicatesData?.Images && duplicatesData.Images.length > 0}
 		<div class="duplicates-group">
 			<div class="group-header">
 				<h3>Duplicates for selected Image</h3>
-				<span class="badge">{data.duplicatesData.Images.length} Images</span>
+				<span class="badge">{duplicatesData.Images.length} Images</span>
 			</div>
 			<div class="gallery-grid">
-				{#each data.duplicatesData.Images as image}
-					<ImageCard {image} />
+				{#each duplicatesData.Images as image, imgIndex}
+					<ImageCard 
+						{image}
+						showMeta={true}
+						isSelected={selectedImages.some(i => i.id === image.id)}
+						onclick={(e) => {
+							if (e.shiftKey) {
+								toggleSelect(image);
+							} else {
+								carousel.open(duplicatesData.Images, imgIndex);
+							}
+						}}
+					/>
 				{/each}
 			</div>
 		</div>
-	{:else if data.duplicatesData.Groups && data.duplicatesData.Groups.length > 0}
-		{#each data.duplicatesData.Groups as group, index}
+	{:else if duplicatesData?.Groups && duplicatesData.Groups.length > 0}
+		{#each duplicatesData.Groups as group, index}
 			<div class="duplicates-group">
 				<div class="group-header">
 					<h3>Set {index + 1}</h3>
 					<span class="badge">{group.length} Images</span>
 				</div>
 				<div class="gallery-grid">
-					{#each group as image}
-						<ImageCard {image} />
+					{#each group as image, imgIndex}
+						<ImageCard 
+							{image}
+							isSelected={selectedImages.some(i => i.id === image.id)}
+							onclick={(e) => {
+								if (e.shiftKey) {
+									toggleSelect(image);
+								} else {
+									carousel.open(group, imgIndex);
+								}
+							}}
+							showMeta={true}
+						/>
 					{/each}
 				</div>
 			</div>
 		{/each}
 	{:else}
 		<div class="empty-state">
-			<span class="material-symbols-outlined icon-large">check_circle</span>
+			<span class="material-symbols-outlined icon-large">task_alt</span>
 			<p>No Duplicates found within the current threshold.</p>
 		</div>
 	{/if}
@@ -159,18 +338,40 @@
 		text-decoration-color: var(--secondary);
 		text-decoration-thickness: 2px;
 		text-underline-offset: 3px;
-
 	}
 
 	.control-bar {
 		padding: 12px 24px;
 		border-radius: 12px;
 		border: 1px solid var(--border);
+		display: flex;
+		align-items: center;
+		gap: 16px;
 	}
 
-	.input-wrapper:hover input::placeholder,
-	.input-wrapper:focus-within input::placeholder {
-		color: color-mix(in srgb, var(--bg-dark) 60%, transparent);
+	.selected-count {
+		position: relative;
+		color: var(--text-muted);
+		font-size: 0.9rem;
+		padding: 4px 12px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 28px;
+		cursor: default;
+		user-select: none;
+		z-index: 1;
+	}
+
+	.selected-count::before {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		height: 2px;
+		background: var(--info);
+		z-index: -1;
 	}
 
 	.threshold-wrapper {
@@ -178,6 +379,8 @@
 		align-items: center;
 		gap: 12px;
 		padding: 0 25px;
+		height: 40px;
+		box-sizing: border-box;
 		position: relative;
 		background: transparent;
 		color: var(--text-muted);
@@ -255,60 +458,60 @@
 		-moz-appearance: textfield;
 	}
 
-	.label-text {
-		font-size: 0.95rem;
-		color: var(--text-muted);
-	}
-
-	input[type="number"] {
-		background-color: var(--bg);
-		color: var(--text);
-		border: 1px solid var(--bg);
-		padding: 8px 12px;
-		border-radius: 8px;
-		font-family: inherit;
-		font-size: 0.95rem;
-		width: 80px;
-		outline: none;
-		transition: border-color 0.2s;
-	}
-
-	input[type=number]:focus {
-		border-color: var(--primary);
-	}
-
-	button.btn-primary {
+	.btn-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		position: relative;
-		z-index: 1;
-		font-family: inherit;
-		font-size: 0.95rem;
-		border-radius: 8px;
-		padding: 8px 24px;
-		cursor: pointer;
-		border: none;
 		background: transparent;
-		color: var(--text);
-		transition: color 0.3s;
+		color: var(--text-muted);
+		padding: 8px;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		transition:
+			background-color 0.2s,
+			color 0.2s,
+			box-shadow 0.2s,
+			border-color 0.2s;
 	}
 
-	button.btn-primary::before {
+	.btn-icon:hover {
+		color: var(--bg-dark);
+	}
+
+	.btn-icon::before {
 		content: '';
 		position: absolute;
 		bottom: 0;
 		left: 0;
 		width: 100%;
 		height: 2px;
-		border-radius: 0px;
 		background: var(--primary);
+		border-radius: 0px;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
-	button.btn-primary:hover {
-		color: var(--bg-dark);
+	.btn-icon:hover::before {
+		height: 100%;
+		border-radius: 8px;
 	}
 
-	button.btn-primary:hover::before {
+	.btn-icon.active::before {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		height: 2px;
+		background: var(--tertiary);
+		border-radius: 0px;
+		z-index: -1;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.btn-icon.active:hover::before {
 		height: 100%;
 		border-radius: 8px;
 	}
@@ -353,6 +556,21 @@
 		gap: 16px;
 	}
 
+	.duplicates-group .gallery-grid :global(.image-card) {
+		flex-grow: 0 !important;
+		flex-shrink: 0;
+	}
+
+	.loading-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 80px 0;
+		gap: 16px;
+		color: var(--text-muted);
+	}
+
 	.empty-state {
 		display: flex;
 		flex-direction: column;
@@ -369,10 +587,6 @@
 		opacity: 0.8;
 	}
 
-	hr {
-		padding: 0px 0px 12px 0px;
-	}
-
 	.dropdown-wrapper {
 		position: relative;
 	}
@@ -382,6 +596,8 @@
 		align-items: center;
 		justify-content: space-between;
 		min-width: 180px;
+		height: 40px;
+		box-sizing: border-box;
 		padding: 8px 12px;
 		background: var(--bg-light);
 		border: 1px solid var(--border);
@@ -389,6 +605,21 @@
 		color: var(--text);
 		cursor: pointer;
 		font-size: 0.9rem;
+	}
+
+	.dropdown-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		background: var(--bg-dark);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 8px;
+		min-width: 200px;
+		z-index: 100;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+		max-height: 250px;
+		overflow-y: auto;
 	}
 
 	.gallery-checkbox {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto, invalidateAll } from '$app/navigation';
 	import SettingsDialog from "./SettingsDialog.svelte";
 	import AddGalleryDialog from "./AddGalleryDialog.svelte";
 	
@@ -9,14 +10,17 @@
 
 
 	async function deleteGallery(name: string) {
-		if (!confirm(`Do you really want to delete the "${name}"`))
+		if (!confirm(`Do you really want to delete the "${name}"`)) return;
 
 		try {
 			const res = await fetch(`/api/gallery/${encodeURIComponent(name)}`, {
 				method: 'DELETE'
 			});
 			if (res.ok) {
-				window.location.href = '/';
+				await invalidateAll();
+				if ($page.params.name === name) {
+					await goto('/');
+				}
 			} else {
 				alert("Failed to delete Gallery")
 			}
@@ -24,7 +28,19 @@
 			console.error(error);
 		}
 	}
+
+	function handleGlobalClick(e: MouseEvent) {
+		const target = e.target as HTMLElement;
+		if (!target || typeof target.closest !== 'function') return;
+
+		if (!target.closest('.settings-panel, .dialog-panel, .settings-container, .nav-item.add-btn')) {
+			showSettings = false;
+			showAddGallery = false;
+		}
+	}
 </script>
+
+<svelte:window onclick={handleGlobalClick} />
 
 <aside class="sidebar-left">
 	<a href="/" class="logo-link">

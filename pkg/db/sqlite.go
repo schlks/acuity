@@ -38,6 +38,7 @@ type SImage struct {
 	ShutterSpeed string  `db:"shutter_speed" json:"shutter_speed"`
 	Iso          string  `db:"iso" json:"iso"`
 	Flash        bool    `db:"flash" json:"flash"`
+	Distance	*float64 `db:"-" json:"distance,omitempty"`
 }
 
 type Gallery struct {
@@ -274,15 +275,21 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 }
 
 func (s *SQLiteClient) RemoveGallery(id int) error {
-	query := `
-		DELETE FROM galleries WHERE id = ?;
-		DELETE FROM images WHERE gallery_id = ?;`
-
-	_, err := s.DB.Exec(query, id, id)
+	tx, err := s.DB.Beginx()
 	if err != nil {
 		return err
 	}
-	return nil
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM images WHERE gallery_id = ?", id); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM galleries WHERE id = ?", id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (s *SQLiteClient) RemoveImage(id int) error {

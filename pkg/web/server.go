@@ -521,7 +521,7 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"load-gallery": {"value": "%s"}}`, newName))
+	s.writeJSON(w, map[string]any{"success": true, "name": newName}, http.StatusOK)
 }
 
 func progressesEqual(p1, p2 []Progress) bool {
@@ -704,15 +704,11 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	imageIDStr := r.FormValue("imageID")
 	name := r.PathValue("name")
+	imageIDStr := r.FormValue("imageID")
 	if imageIDStr == "" {
-		if name == "global" {
-			s.handleGlobalDuplicates(w, r)
-			return
-		} else {
-			http.Error(w, "Failed to get Image ID", http.StatusBadRequest)
-		}
+		s.handleGlobalDuplicates(w, r)
+		return
 	}
 
 	imageID, err := strconv.Atoi(imageIDStr)
@@ -787,6 +783,14 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 	selectedGalleries := make(map[int]bool)
 	for _, idStr := range r.Form["galleries"] {
 		if id, err := strconv.Atoi(idStr); err == nil {
+			galleryIDs = append(galleryIDs, id)
+			selectedGalleries[id] = true
+		}
+	}
+
+	name := r.PathValue("name")
+	if len(galleryIDs) == 0 && name != "" && name != "global" {
+		if id, err, ok := s.Bridge.GetGalleryID(name); err == nil && ok {
 			galleryIDs = append(galleryIDs, id)
 			selectedGalleries[id] = true
 		}

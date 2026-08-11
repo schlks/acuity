@@ -1,14 +1,37 @@
-<script>
+<script lang="ts">
 	import { decode } from 'blurhash';
 
-	let { image, onclick, onmouseenter, isFocused, isSelected, dataIndex } = $props();
+	let { image, onclick, onmouseenter, isFocused, isSelected, dataIndex, showMeta = false } = $props();
 
 	let canvasElement = $state(null);
 	let isLoaded = $state(false);
 
+	function formatSize(bytes: number | string) {
+		const num = Number(bytes);
+		if (!num || isNaN(num) || num <= 0) return '';
+		if (num < 1024 * 1024) {
+			return (num / 1024).toFixed(0) + ' KB';
+		}
+		return (num / (1024 * 1024)).toFixed(1) + ' MB';
+	}
+
+	function formatResolution(res: number | string) {
+		const num = Number(res);
+		if (!num || isNaN(num) || num <= 0) return '';
+		if (num >= 1_000_000) {
+			return (num / 1_000_000).toFixed(1) + ' MP';
+		}
+		return (num / 1_000).toFixed(0) + ' kP';
+	}
+
+	$effect(() => {
+		const path = image.filepath;
+		isLoaded = false;
+	});
+
 	$effect(() => {
 		if (canvasElement && image.blurhash && !isLoaded) {
-			const pixels = decode(image.blurhash, 32, 32)
+			const pixels = decode(image.blurhash, 32, 32);
 			const ctx = canvasElement.getContext('2d');
 			const imageData = ctx.createImageData(32, 32);
 			imageData.data.set(pixels);
@@ -61,67 +84,80 @@
 
 	{#if isSelected}
 		<div class="selection-overlay">
-			<span class="material-symbols-outlined check-icon">check_circle</span>
+			<span class="material-symbols-outlined check-icon">select_check_box</span>
+		</div>
+	{/if}
+
+	{#if showMeta && (image.size || image.resolution)}
+		<div class="meta-badge">
+			{#if image.resolution}<span>{formatResolution(image.resolution)}</span>{/if}
+			{#if image.resolution && image.size}<span class="meta-dot">•</span>{/if}
+			{#if image.size}<span>{formatSize(image.size)}</span>{/if}
+		</div>
+	{/if}
+
+	{#if image.distance !== undefined && image.distance !== null}
+		<div class="badge similarity" title="Distance: {image.distance.toFixed(3)}">
+			<span class="material-symbols-outlined">auto_awesome</span>
+			{Math.round((1 - image.distance) * 100)}%
 		</div>
 	{/if}
 </div>
 
 <style>
-	.image-card::before {
-		content: '';
-		position: absolute;
-		top: 0; left: 0; right: 0; bottom: 0;
-		background: transparent;
-		z-index: 2;
-		pointer-events: none;
-		clip-path: circle(0% at 0% 100%);
-		transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), clip-path 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+	:global(.image-card) {
+		scroll-margin-top: 200px;
+		scroll-margin-bottom: 200px;
 	}
 
 	.image-card {
 		position: relative;
 		border-radius: 8px;
+		clip-path: inset(0 round 8px);
 		background-color: var(--bg-light);
-		overflow: hidden;
 		cursor: pointer;
 		height: var(--grid-base, 250px);
 		--badge-offset: 12px;
 	}
 
-	.image-card::after {
+	.image-card::before {
 		content: '';
 		position: absolute;
-		top: 0; left: 0; right: 0; bottom: 0;
-
-		box-shadow: inset 0 0 0 3px var(--primary);
-		border-radius: inherit;
-		z-index: 3;
+		inset: 0;
+		background: color-mix(in srgb, var(--primary) 15%, transparent);
+		z-index: 2;
 		pointer-events: none;
-
 		clip-path: circle(0% at 0% 100%);
 		transition: clip-path 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
-	.image-card:hover::before {
-		clip-path: circle(150% at 0% 100%);
-		background: color-mix(in srgb, var(--primary) 15%, transparent);
+	.image-card::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border: 4px solid var(--primary);
+		border-radius: 8px;
+		box-sizing: border-box;
+		z-index: 3;
+		pointer-events: none;
+		clip-path: circle(0% at 0% 100%);
+		transition: clip-path 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
-	.image-card:hover:after {
-		clip-path: circle(150% at 0% 100%);
+	.image-card:hover::before,
+	.image-card:hover::after {
+		clip-path: circle(250% at 0% 100%);
 	}
 
 	.image-card img {
 		position: absolute;
-		top: 0;
-		left: 0;
+		inset: 0;
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
 		display: block;
 		z-index: 1;
 		opacity: 0;
-		border-radius: 8px;
 		transition: opacity 0.4s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
@@ -131,8 +167,7 @@
 
 	.blurhash-canvas {
 		position: absolute;
-		top: 0;
-		left: 0;
+		inset: 0;
 		display: block;
 		width: 100% !important;
 		height: 100% !important;
@@ -175,7 +210,7 @@
 
     .selection-overlay .check-icon {
         font-size: 2.3rem;
-        color: color-mix(in srgb, var(--success) 70%, var(--bg));
+        color: color-mix(in srgb, var(--tertiary) 70%, var(--bg));
         font-variation-settings: 'FILL' 1;
         filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
         animation: popIn 0.15s ease-out;
@@ -211,5 +246,46 @@
 
 	.icon-filled {
 		font-variation-settings: 'FILL' 1;
+	}
+
+	.meta-badge {
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		margin-right: 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 5px;
+		padding: 3px 8px;
+		background: rgba(0, 0, 0, 0.65);
+		backdrop-filter: blur(6px);
+		border-radius: 6px;
+		font-size: 0.72rem;
+		color: var(--text);
+		font-weight: 500;
+		letter-spacing: 0.2px;
+		pointer-events: none;
+		z-index: 2;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+	}
+
+	.meta-dot {
+		opacity: 0.5;
+	}
+
+	.badge.similarity {
+		bottom: var(--badge-offset);
+		left: 50%;
+		transform: translateX(-50%);
+		background: color-mix(in srgb, var(--bg-dark) 70%, transparent);
+		color: var(--info);
+		font-size: 0.9rem;
+		padding: 4px 10px;
+		gap: 4px;
+	}
+
+	.badge.similarity .material-symbols-outlined {
+		font-size: 1rem;
 	}
 </style>

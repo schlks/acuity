@@ -126,20 +126,18 @@ func (w *WeaviateClient) RemoveGalleryImages(ctx context.Context, galleryID int)
 		WithOperator(filters.Equal).
 		WithValueInt(int64(galleryID))
 
-	response, err := w.Client.Batch().ObjectsBatchDeleter().
-		WithClassName(className).
-		WithWhere(filter).
-		WithOutput("minimal").
-		Do(ctx)
-	if err != nil {
-		return fmt.Errorf("batch delete failed for gallery %d: %w", galleryID, err)
-	}
+	for {
+		response, err := w.Client.Batch().ObjectsBatchDeleter().
+			WithClassName(className).
+			WithWhere(filter).
+			WithOutput("minimal").
+			Do(ctx)
+		if err != nil {
+			return fmt.Errorf("batch delete failed for gallery %d: %w", galleryID, err)
+		}
 
-	if response.Results != nil && response.Results.Matches > 0 && len(response.Results.Objects) > 0 {
-		for _, obj := range response.Results.Objects {
-			if obj.Errors != nil {
-				return fmt.Errorf("error deleting an object: %v", obj.Errors)
-			}
+		if response.Results == nil || response.Results.Successful == 0 {
+			break
 		}
 	}
 	return nil
@@ -200,6 +198,9 @@ func (w *WeaviateClient) getData(result *models.GraphQLResponse) []WImage {
 }
 
 func (w *WeaviateClient) getQueryWithWhere(distance bool, galleryID int, page int, imagesPerPage int) (*graphql.GetBuilder, *filters.WhereBuilder) {
+	if imagesPerPage <= 0 {
+		imagesPerPage = 1000
+	}
 	additional := []graphql.Field{
 		{Name: "id"},
 	}
@@ -257,6 +258,9 @@ func (w *WeaviateClient) WriteBatchDB(ctx context.Context, batch []*models.Objec
 }
 
 func (w *WeaviateClient) SearchImage(ctx context.Context, search string, galleryID int, imagesPerPage int, threshold float32) ([]WImage, error) {
+	if strings.TrimSpace(search) == "" {
+		return []WImage{}, nil
+	}
 	nearText := w.Client.GraphQL().
 		NearTextArgBuilder().
 		WithConcepts([]string{search}).

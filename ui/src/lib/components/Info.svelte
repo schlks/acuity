@@ -2,8 +2,15 @@
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { carousel } from '$lib/stores/carousel.svelte';
+	import { page } from '$app/stores';
 	
 	let { image } = $props();
+	let galleryName = $derived(
+		$page.data?.galleries?.find((g: any) => g.id === image.gallery_id)?.name ||
+		$page.data?.gallery?.name ||
+		$page.params.name ||
+		'global'
+	)
 
 	function formatSize(bytes: number) {
 		if (!bytes) return '0 MB';
@@ -104,7 +111,7 @@
 	<hr />
 
 	<div class="info-actions">
-		<a href="/gallery/global/duplicates?imageID={image.id}" class="action-btn" onclick={() => carousel.close()}>
+		<a href="/gallery/{galleryName}/duplicates?imageID={image.id}" class="action-btn" onclick={() => carousel.close()}>
 			<span class="material-symbols-outlined">search</span>
 		</a>
 		<button class="action-btn danger" onclick={deleteImage}>

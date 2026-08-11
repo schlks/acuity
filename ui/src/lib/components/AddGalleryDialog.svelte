@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
-	import { invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 
 	let { onClose } = $props();
 
@@ -45,6 +45,7 @@
 
 		await invalidateAll();
 		onClose();
+		await goto(`/gallery/${encodeURIComponent(name)}`)
 	}
 </script>
 

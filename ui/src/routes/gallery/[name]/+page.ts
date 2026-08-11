@@ -1,3 +1,5 @@
+import { error } from '@sveltejs/kit';
+
 export async function load({ fetch, params, url }) {
 	const page = url.searchParams.get('page') || '1';
 	const flagFilter = url.searchParams.get('flagFilter') || '';
@@ -31,8 +33,14 @@ export async function load({ fetch, params, url }) {
 		fetch(`/api/settings`)
 	]);
 
+	if (!galleryRes.ok) {
+		throw error(galleryRes.status, 'Gallery not found or could not be loaded');
+	}
 	const galleryData = await galleryRes.json();
-	const imagesData = await imagesRes.json();
+	const imagesData = imagesRes.ok ? await imagesRes.json() : { images: [], has_page: false, current_page: 1};
+	if (!settingsRes.ok) {
+		throw error(settingsRes.status, 'Settings could not be loaded');
+	}
 	const settingsData = await settingsRes.json();
 
 	return {

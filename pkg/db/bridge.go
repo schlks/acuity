@@ -412,8 +412,11 @@ func (b *Bridge) SearchImages(ctx context.Context, search string, galleryID int,
 	for _, img := range images {
 		sImage, err := b.sDB.GetImageByPath(img.Path)
 		if err != nil {
-			return nil, err
+			slog.Error("Somthing went wrong", slog.Any("Error", err))
+			continue
 		}
+		dist := img.Distance
+		sImage.Distance = &dist
 		sImages = append(sImages, sImage)
 	}
 	return sImages, nil
@@ -432,8 +435,11 @@ func (b *Bridge) SearchImages64(ctx context.Context, search string, galleryID in
 	for _, img := range images {
 		sImage, err := b.sDB.GetImageByPath(img.Path)
 		if err != nil {
-			return nil, err
+			slog.Error("Somthing went wrong", slog.Any("Error", err))
+			continue
 		}
+		dist := img.Distance
+		sImage.Distance = &dist
 		sImages = append(sImages, sImage)
 	}
 	return sImages, nil
@@ -528,6 +534,9 @@ func (b *Bridge) FindDublicates(ctx context.Context, imageID int, galleryID int,
 	if err != nil {
 		return nil, err
 	}
+	if count <= 0 {
+		count = 1000
+	}
 	var sImages []SImage
 	images, err := b.wDB.FindDuplicates(ctx, uuidStr, galleryID, count, threshold)
 	if err != nil {
@@ -539,6 +548,8 @@ func (b *Bridge) FindDublicates(ctx context.Context, imageID int, galleryID int,
 			slog.Error("Failed to get Image", slog.String("Image", img.Path), slog.Any("error", err))
 			continue
 		}
+		dist := img.Distance
+		image.Distance = &dist
 		sImages = append(sImages, image)
 	}
 	return sImages, nil
@@ -684,43 +695,132 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 		return nil, err
 	}
 
-	var groups [][]SImage
-	visited := make(map[string]bool)
+	var validImages []ImageVector
+	for _, img := range allImages {
+		if len(img.Vector) > 0 {
+			norm := floats.Norm(img.Vector, 2)
+			if norm > 0 {
+				floats.Scale(1.0/norm, img.Vector)
+				validImages = append(validImages, img)
+			}
+		}
+	}
 
-	for i, imgA := range allImages {
-		if visited[imgA.ID] || len(imgA.Vector) == 0 {
+	n := len(validImages)
+	if n == 0 {
+		return nil, nil
+	}
+
+	type matchPair struct {
+		i, j int
+		dist float64
+	}
+
+	numWorkers := runtime.NumCPU()
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	chunkSize := (n + numWorkers - 1) / numWorkers
+	var wg sync.WaitGroup
+	matchesChan := make(chan []matchPair, numWorkers)
+
+	for w := 0; w < numWorkers; w++ {
+		start := w * chunkSize
+		end := start + chunkSize
+		if start >= n {
+			break
+		}
+		if end > n {
+			end = n
+		}
+
+		wg.Add(1)
+		go func(s, e int) {
+			defer wg.Done()
+			var localMatches []matchPair
+			for i := s; i < e; i++ {
+				vecA := validImages[i].Vector
+				lenA := len(vecA)
+				for j := i + 1; j < n; j++ {
+					vecB := validImages[j].Vector
+					if lenA != len(vecB) {
+						continue
+					}
+					var dot float64
+					for k := 0; k < lenA; k++ {
+						dot += vecA[k] * vecB[k]
+					}
+					dist := 1.0 - dot
+					if dist <= threshold {
+						localMatches = append(localMatches, matchPair{i: i, j: j, dist: dist})
+					}
+				}
+			}
+			matchesChan <- localMatches
+		}(start, end)
+	}
+
+	wg.Wait()
+	close(matchesChan)
+
+	adj := make(map[int][]matchPair)
+	for chunk := range matchesChan {
+		for _, m := range chunk {
+			adj[m.i] = append(adj[m.i], m)
+		}
+	}
+
+	var groups [][]SImage
+	visited := make(map[int]bool)
+	imageMap := make(map[string]SImage)
+
+	for i := 0; i < n; i++ {
+		if visited[i] {
+			continue
+		}
+		matches, ok := adj[i]
+		if !ok || len(matches) == 0 {
 			continue
 		}
 
-		var currentGroup []SImage
-
-		for j := i + 1; j < len(allImages); j++ {
-			imgB := allImages[j]
-			if visited[imgB.ID] || len(imgB.Vector) == 0 {
-				continue
-			}
-
-			distance := 1.0 - (floats.Dot(imgA.Vector, imgB.Vector) / (floats.Norm(imgA.Vector, 2) * floats.Norm(imgB.Vector, 2)))
-			if distance <= threshold {
-				if len(currentGroup) == 0 {
-					sImageA, err := b.sDB.GetImageByPath(imgA.Path)
-					if err != nil {
-						return nil, err
-					}
-					currentGroup = append(currentGroup, sImageA)
-				}
-				sImageB, err := b.sDB.GetImageByPath(imgB.Path)
-				if err != nil {
-					return nil, err
-				}
-				currentGroup = append(currentGroup, sImageB)
-				visited[imgB.ID] = true
+		visited[i] = true
+		groupIndices := []int{i}
+		for _, m := range matches {
+			if !visited[m.j] {
+				visited[m.j] = true
+				groupIndices = append(groupIndices, m.j)
 			}
 		}
 
-		if len(currentGroup) > 0 {
-			visited[imgA.ID] = true
-			groups = append(groups, currentGroup)
+		if len(groupIndices) > 1 {
+			var currentGroup []SImage
+			rootVec := validImages[i].Vector
+			for idx, gIdx := range groupIndices {
+				imgVec := validImages[gIdx]
+				sImg, ok := imageMap[imgVec.Path]
+				if !ok {
+					var fetchErr error
+					sImg, fetchErr = b.sDB.GetImageByPath(imgVec.Path)
+					if fetchErr != nil {
+						continue
+					}
+					imageMap[imgVec.Path] = sImg
+				}
+				dist := 0.0
+				if idx > 0 {
+					var dot float64
+					for k := 0; k < len(rootVec); k++ {
+						dot += rootVec[k] * imgVec.Vector[k]
+					}
+					dist = 1.0 - dot
+				}
+				sImg.Distance = &dist
+				currentGroup = append(currentGroup, sImg)
+			}
+			if len(currentGroup) > 1 {
+				groups = append(groups, currentGroup)
+			}
 		}
 	}
 

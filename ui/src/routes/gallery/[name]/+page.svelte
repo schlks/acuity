@@ -2,9 +2,11 @@
 	import { invalidateAll, goto } from '$app/navigation';
 	import { page, navigating } from '$app/stores';
 	import { carousel } from '$lib/stores/carousel.svelte';
+	import { tick } from 'svelte';
 	import ImageCard from '$lib/components/ImageCard.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
+	import CullingMode from '$lib/components/CullingMode.svelte';
 
 	let { data } = $props();
 	let searchQuery = $state('');
@@ -13,7 +15,22 @@
 	let currentPage = $derived(Number(data.images.current_page || 1));
 	let currentFlag = $derived($page.url.searchParams.get('flagFilter') || '');
 	let currentSort = $derived($page.url.searchParams.get('sortBy') || 'name');
-	let currentOrder = $derived($page.url.searchParams.get('sortOrder') || 'asc');
+	let currentOrder = $derived($page.url.searchParams.get('sortOrder') || 'desc');
+	let hasActiveFilters = $derived(
+		Boolean(
+			$page.url.searchParams.get('q') || 
+			$page.url.searchParams.get('flagFilter') || 
+			$page.url.searchParams.get('sortBy') || 
+			$page.url.searchParams.get('folderFilter') || 
+			$page.url.searchParams.get('sortOrder')
+		)
+	);
+
+	function resetFilters() {
+		searchQuery = '';
+		searchThreshold = 0.9;
+		goto($page.url.pathname);
+	}
 	let pageButtons = $derived.by(() => {
 		let p = [];
 		let last = data.images.last_page || 1;
@@ -45,6 +62,12 @@
 	let focusedIndex = $state<number>(0);
 	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
 	let isKeyboardMode = $state(false);
+	let isCullingOpen = $state(false);
+	let jumpInputIndex = $state<number | null>(null);
+	let jumpPageVal = $state<number | string>('');
+	let isEditingName = $state(false);
+	let editedName = $state('');
+	let editInputEl = $state<HTMLInputElement | null>(null);
 
 	$effect(() => {
 		galleryImages = data.images.images || [];
@@ -69,6 +92,20 @@
 			updateFocusBox();
 		}
 	})
+
+	function startEditingName() {
+		editedName = data.gallery?.heading || data.gallery?.name || '';
+		isEditingName = true;
+		requestAnimationFrame(() => {
+			editInputEl?.focus();
+			editInputEl?.select();
+		});
+	}
+
+	function cancelEditingName() {
+		isEditingName = false;
+		editedName = '';
+	}
 
 	function updateFocusBox() {
 		if (focusedIndex === null || galleryImages.length === 0) {
@@ -96,6 +133,7 @@
 				}
 			},
 			{
+				root: node.closest('.main-content'),
 				rootMargin: '1500px'
 			}
 		);
@@ -122,11 +160,46 @@
 		document.querySelector('.main-content').scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
-	function changePage(newPage) {
+	async function saveGalleryName() {
+		const newName = editedName.trim();
+		if (!newName || newName === data.gallery.name) {
+			cancelEditingName();
+			return;
+		}
+
+		const formData = new FormData();
+		formData.append('name', newName);
+
+		try {
+			const res = await fetch(`/api/gallery/${encodeURIComponent(data.gallery.name)}/edit`, {
+				method: 'POST',
+				body: formData
+			});
+			if (res.ok) {
+				isEditingName = false;
+				await invalidateAll();
+				await goto(`/gallery/${encodeURIComponent(newName)}`);
+			} else {
+				alert('Failed to rename gallery');
+			}
+		} catch(e) {
+			console.error('Rename error:', e);
+		}
+	}
+
+	async function changePage(newPage: number, toBottom: boolean = false) {
 		if (newPage < 1) return;
 
-		goto(`?page=${newPage}`);
-		document.querySelector('.main-content').scrollTo({ top: 0, behavior: 'smooth' });
+		await goto(`?page=${newPage}`);
+		await tick();
+
+		const container = document.querySelector('.main-content')
+		if (container) {
+			container.scrollTo({
+				top: toBottom ? container.scrollHeight : 0,
+				behavior: 'smooth'
+			});
+		}
 	}
 
 	function handleSearch(event) {
@@ -166,18 +239,35 @@
 		isLoadingMore = true;
 
 		let url = new URL(location.href);
-		url.searchParams.set('page', currentInfinitePage + 1);
-
-		const res = await fetch(
-			`/api/gallery/${data.gallery.name}/images?${url.searchParams.toString()}`
-		);
-		if (res.ok) {
-			const json = await res.json();
-			galleryImages.push(...json.images);
-			hasMore = json.has_page;
-			currentInfinitePage = json.current_page;
+		if (url.searchParams.get('q')) {
+			isLoadingMore = false;
+			return;
 		}
-		isLoadingMore = false;
+		url.searchParams.set('page', (Number(currentInfinitePage) + 1).toString());
+
+		try {
+		const res = await fetch(`/api/gallery/${data.gallery.name}/images?${url.searchParams.toString()}`);
+			if (res.ok) {
+				const json = await res.json();
+				galleryImages.push(...json.images);
+				hasMore = json.has_page;
+				currentInfinitePage = json.current_page;
+
+				await tick();
+
+				const trigger = document.querySelector('.infinite-trigger');
+				if (trigger && hasMore) {
+					const rect = trigger.getBoundingClientRect();
+					if (rect.top <= window.innerHeight + 800) {
+						isLoadingMore = false;
+						loadMore();
+						return;
+					}
+				}
+			}
+		} finally {
+			isLoadingMore = false;
+		}
 	}
 
 	async function setRating(rating: number) {
@@ -233,6 +323,31 @@
 		await invalidateAll();
 	}
 
+	async function runBatchAction(action: 'delete' | 'move' | 'copy', criteria = 'selected') {
+		if (criteria === 'selected' && selectedImages.length === 0) return;
+
+		if (action === 'delete') {
+			const count = criteria === 'selected' ? `${selectedImages.length} selected` : 'all matching';
+			if (!confirm(`Do you really want to delete ${count} images?`)) return;
+		}
+
+		const formData = new FormData();
+		formData.append('criteria', criteria);
+		formData.append('batch_action', action);
+		formData.append('source_gallery', data.gallery.name);
+
+		if (criteria === 'selected') {
+			const ids = selectedImages.map(img => img.id ?? img.ID).join(',');
+			formData.append('image_ids', ids);
+		}
+
+		const res = await fetch('/api/gallery/batch', { method: 'POST', body: formData });
+		if (res.ok) {
+			await invalidateAll();
+			selectedImages = [];
+		}
+	}
+
 	function toggleSelectedCurrent() {
 		const img = galleryImages[focusedIndex];
 		if (!img || !img.id) return;
@@ -246,13 +361,40 @@
 		}
 	}
 
+	function checkRow(index: number) {
+		const currentCard = document.querySelector(`[data-index="${index}"]`) as HTMLElement;
+		const firstCard = document.querySelector(`[data-index="0"]`) as HTMLElement;
+		const lastCard = document.querySelector(`[data-index="${galleryImages.length - 1}"]`) as HTMLElement;
+
+		if (!currentCard || !firstCard || !lastCard) return { isFirstRow: false, isLastRow: false };
+
+		const isFirstRow = Math.abs(currentCard.offsetTop - firstCard.offsetTop) < 20;
+		const isLastRow = Math.abs(currentCard.offsetTop - lastCard.offsetTop) < 20;
+
+		return { isFirstRow, isLastRow };
+	}
+
 	function navigate(step: number) {
 		isKeyboardMode = true;
 		const nextIndex = focusedIndex + step;
 		if (nextIndex >= 0 && nextIndex < galleryImages.length) {
+			const container = document.querySelector('.main-content');
+			const { isFirstRow, isLastRow } = checkRow(nextIndex);
+			if (isFirstRow) {
+				container?.scrollTo({ top: 0, behavior: 'smooth' });
+			} else if (isLastRow) {
+				container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+			} else {
+				const el = document.querySelector(`[data-index="${nextIndex}"]`);
+				el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+			}
 			focusedIndex = nextIndex;
-			const el = document.querySelector(`[data-index="${focusedIndex}"]`);
-			el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+		} else {
+			const targetPage = currentPage + step;
+    		if (!infiniteScroll && targetPage >= 1 && targetPage <= (data.images.last_page || 1)) {
+				changePage(targetPage, step < 0);
+        		focusedIndex = step < 0 ? galleryImages.length - 1 : 0;
+    		}
 		}
 	}
 
@@ -272,18 +414,31 @@
 
 		if (direction === 'down') {
 			const belowTops = allCards.map(c => c.offsetTop).filter(top => top > currTop + 20);
-			if (belowTops.length === 0) return;
+			if (belowTops.length === 0) {
+				if (!infiniteScroll && currentPage < data.images.last_page) {
+					changePage(currentPage + 1, false);
+					focusedIndex = 0;
+				}
+				return;
+			}
 			const nextRowTop = Math.min(...belowTops);
 			targetRowCards = allCards.filter(c => Math.abs(c.offsetTop - nextRowTop) < 20);
 		} else {
 			const aboveTops = allCards.map(c => c.offsetTop).filter(top => top < currTop - 20);
-			if (aboveTops.length === 0) return;
+			if (aboveTops.length === 0) {
+				if (!infiniteScroll && currentPage > 1) {
+					changePage(currentPage - 1, true);
+					focusedIndex = galleryImages.length - 1;
+				}
+				return;
+			}
 			const prevRowTop = Math.max(...aboveTops);
 			targetRowCards = allCards.filter(c => Math.abs(c.offsetTop - prevRowTop) < 20);
 		}
 
 		let bestCard: HTMLElement | null = null;
 		let highestScore = -Infinity;
+		let newIndex = null;
 
 		for (const card of targetRowCards) {
 			const candLeft = card.offsetLeft;
@@ -301,11 +456,21 @@
 		}
 
 		if (bestCard) {
-			const attr = bestCard.getAttribute('data-index')
-			const newIndex = attr !== null ? Number(attr) : NaN;
+			if (newIndex === null) {
+				const attr = bestCard.getAttribute('data-index')
+				newIndex = attr !== null ? Number(attr) : NaN;
+			}
 			if (!isNaN(newIndex)) {
+				const container = document.querySelector('.main-content');
+				const { isFirstRow, isLastRow } = checkRow(newIndex);
+				if (isFirstRow) {
+					container?.scrollTo({ top: 0, behavior: 'smooth' });
+				} else if (isLastRow) {
+					container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+				} else {
+					bestCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+				}
 				focusedIndex = newIndex;
-				bestCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 			}
 		}
 	}
@@ -320,7 +485,7 @@
 		const tag = (e.target as HTMLElement)?.tagName;
 		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-		if (carousel.isOpen || batchIsOpen) return;
+		if (carousel.isOpen || batchIsOpen || isCullingOpen) return;
 
 		if (galleryImages.length === 0) return;
 
@@ -363,14 +528,51 @@
 				e.preventDefault();
 				toggleSelectedCurrent();
 				break;
+			case 'c':
+				isCullingOpen = true;
+				break;
+			case 'b':
+				batchIsOpen = !batchIsOpen;
+				break;
+			case 'Delete':
+			case 'Backspace':
+				e.preventDefault();
+				if (selectedImages.length > 0) {
+					runBatchAction('delete', 'selected');
+				}
+				break;
+		}
+	}
+
+	function handleGlobalClick(e: MouseEvent) {
+		const target = e.target as HTMLElement;
+		if (!target || typeof target.closest !== 'function') return;
+
+		if (!target.closest('.batch-dialog, .inline-edit-form, .btn-icon, .page-dots-btn, .page-input-wrapper')) {
+			batchIsOpen = false;
+			if (isEditingName) cancelEditingName();
+			jumpInputIndex = null;
 		}
 	}
 </script>
 
-<svelte:window onkeydown={handleKeyDown} onmousemove={handleMouseMove} />
+<svelte:window onclick={handleGlobalClick} onkeydown={handleKeyDown} onmousemove={handleMouseMove} />
 
 <div class="gallery-header">
-	<h1>{data.gallery.heading || data.gallery.name}</h1>
+	{#if isEditingName}
+		<form class="inline-edit-form" onsubmit={(e) => { e.preventDefault(); saveGalleryName(); }}>
+			<input
+				bind:this={editInputEl}
+				bind:value={editedName}
+				class="inline-edit-input"
+				onkeydown={(e) => { if (e.key === 'Escape') cancelEditingName(); }}
+				onblur={saveGalleryName}
+			/>
+			<button type="submit" style="display: none;"></button>
+		</form>
+	{:else}
+		<h1 ondblclick={startEditingName} title="Double Click to rename">{data.gallery.heading || data.gallery.name}</h1>
+	{/if}
 
 	<div class="header-actions">
 		<button
@@ -388,11 +590,19 @@
 
 		<div class="divider"></div>
 
-		<button class="btn-icon" title="Edit Gallery">
-			<span class="material-symbols-outlined">edit</span>
+		<button class="btn-icon" class:active={isEditingName} title="Edit Gallery Name" onclick={isEditingName ? saveGalleryName : startEditingName}>
+			<span class="material-symbols-outlined">{isEditingName ? 'check' : 'edit'}</span>
 		</button>
 		<button class="btn-icon" title="Rescan Gallery" onclick={rescanGallery}>
 			<span class="material-symbols-outlined">refresh</span>
+		</button>
+		<button class="btn-icon" title="Culling Mode" onclick={() => {
+			const nextUnflagged = galleryImages.findIndex(img => !img.flag);
+
+			focusIndex = nextUnflagged !== -1 ? nextUndlagged : 0;
+			isCullingOpen = true;
+		}}>
+			<span class="material-symbols-outlined">bolt</span>
 		</button>
 
 		<div class="divider"></div>
@@ -523,6 +733,17 @@
 			>
 				<span class="material-symbols-outlined">arrow_downward</span>
 			</button>
+
+			{#if hasActiveFilters}
+				<div class="divider"></div>
+				<button
+					class="filter-pill reset-pill"
+					onclick={resetFilters}
+					title="Reset all filters and search"
+				>
+					<span class="material-symbols-outlined">filter_alt_off</span>
+				</button>
+			{/if}
 		</div>
 	</div>
 </div>
@@ -533,33 +754,70 @@
 	</div>
 {/if}
 
-<div class="gallery-grid medium" class:keyboard-nav={isKeyboardMode} class:loading={$navigating}>
-	<hr />
-	{#if focusBox.visible && isKeyboardMode}
-		<div
-			class="floating-focus"
-			style="transform: translate({focusBox.x}px, {focusBox.y}px); width: {focusBox.w}px; height: {focusBox.h}px;"
-		></div>
-	{/if}
+{#if galleryImages.length === 0 && !$navigating}
+	<div class="empty-state">
+		<span class="material-symbols-outlined empty-icon">
+			{$page.url.searchParams.get('q') ? 'search_off' : currentFlag ? 'filter_alt_off' : 'photo_library'}
+		</span>
+		<h3>
+			{$page.url.searchParams.get('q') 
+				? 'No results found' 
+				: currentFlag 
+					? 'No images match the filter' 
+					: 'This gallery is empty'}
+		</h3>
+		<p>
+			{#if $page.url.searchParams.get('q')}
+				No matching images found for "{searchQuery}". Try a different search term or adjust the threshold.
+			{:else if currentFlag}
+				There are no images matching your current flag filter.
+			{:else}
+				No image files have been indexed in this folder yet.
+			{/if}
+		</p>
+		
+		{#if $page.url.searchParams.get('q') || currentFlag}
+			<button class="empty-action-btn" onclick={() => goto(`/gallery/${data.gallery.name}`)}>
+				<span class="material-symbols-outlined">restart_alt</span>
+				Reset filters
+			</button>
+		{:else}
+			<button class="empty-action-btn" onclick={rescanGallery}>
+				<span class="material-symbols-outlined">sync</span>
+				Scan gallery
+			</button>
+		{/if}
+	</div>
+{:else}
+	<div class="gallery-grid medium" class:keyboard-nav={isKeyboardMode} class:loading={$navigating}>
+		<hr />
+		{#if focusBox.visible && isKeyboardMode}
+			<div
+				class="floating-focus"
+				style="transform: translate({focusBox.x}px, {focusBox.y}px); width: {focusBox.w}px; height: {focusBox.h}px;"
+			></div>
+		{/if}
 
-	{#each galleryImages as image, index (image.filepath)}
-		<ImageCard
-			{image}
-			dataIndex={index}
-			onmouseenter={() => {
-				if (!isKeyboardMode) {
+		{#each galleryImages as image, index (image.filepath)}
+			<ImageCard
+				{image}
+				dataIndex={index}
+				onmouseenter={() => {
+					if (!isKeyboardMode) {
+						focusedIndex = index;
+					}
+				}}
+				isFocused={focusedIndex === index} 
+				isSelected={selectedImages.some(i => i.id === image.id)}
+				showMeta={false}
+				onclick={() => {
 					focusedIndex = index;
-				}
-			}}
-			isFocused={focusedIndex === index} 
-			isSelected={selectedImages.some(i => i.id === image.id)}
-			onclick={() => {
-				focusedIndex = index;
-				carousel.open(galleryImages, index);
-			}}
-		/>
-	{/each}
-</div>
+					carousel.open(galleryImages, index);
+				}}
+			/>
+		{/each}
+	</div>
+{/if}
 
 {#if infiniteScroll && hasMore}
 	<div use:viewPort={loadMore} class="infinite-trigger">
@@ -571,7 +829,7 @@
 	</div>
 {/if}
 
-{#if !infiniteScroll}
+{#if !infiniteScroll && galleryImages.length > 0}
 	<div class="pagination">
 		{#if currentPage > 1}
 			<button class="filter-pill" onclick={() => changePage(currentPage - 1)}>
@@ -579,9 +837,52 @@
 			</button>
 		{/if}
 		<div class="page-numbers">
-			{#each pageButtons as btn}
+			{#each pageButtons as btn, i}
 				{#if btn === '...'}
-					<span class="page-dots">...</span>
+					<button
+						type="button"
+						class="filter-pill page-dots-btn"
+						class:active={jumpInputIndex === i}
+						title="Jump to Page..."
+						onclick={() => {
+							if (jumpInputIndex !== i) {
+								jumpInputIndex = i;
+								jumpPageVal = '';
+							}
+						}}
+					>
+						{#if jumpInputIndex === i}
+							<input
+								type="number"
+								class="page-jump-input"
+								min="1"
+								max={data.images.last_page || 1}
+								placeholder="#"
+								bind:value={jumpPageVal}
+								autofocus
+								onkeydown={(e) => {
+									if (e.key === 'Enter') {
+										const target = Number(jumpPageVal);
+										if (target >= 1 && target <= (data.images.last_page || 1)) {
+											changePage(target);
+										}
+										jumpInputIndex = null;
+									} else if (e.key === 'Escape') {
+										jumpInputIndex = null;
+									}
+								}}
+								onblur={() => {
+									const target = Number(jumpPageVal);
+									if (jumpPageVal && target >= 1 && target <= (data.images.last_page || 1)) {
+										changePage(target);
+									}
+									jumpInputIndex = null;
+								}}
+							/>
+						{:else}
+							<span>...</span>
+						{/if}
+					</button>
 				{:else}
 					<button
 						class="filter-pill"
@@ -600,6 +901,13 @@
 		{/if}
 	</div>
 {/if}
+
+<CullingMode
+	bind:isOpen={isCullingOpen}
+	bind:images={galleryImages}
+	bind:currentIndex={focusedIndex}
+	onClose={() => isCullingOpen = false}
+/>
 
 <style>
 	span {
@@ -629,6 +937,31 @@
 		text-decoration-thickness: 4px;
 		text-underline-offset: 6px;
 		padding: 0px 0px 24px 0px;
+		cursor: pointer;
+	}
+
+	.inline-edit-form {
+		grid-area: title;
+		margin-bottom: 24px;
+		display: flex;
+		align-items: center;
+	}
+
+	.inline-edit-input {
+		font-size: 3.5rem;
+		font-weight: 700;
+		line-height: 1.1;
+		letter-spacing: -1px;
+		text-transform: uppercase;
+		color: var(--text);
+		background: var(--bg-dark);
+		border: 2px solid var(--primary);
+		border-radius: 8px;
+		padding: 4px 16px;
+		outline: none;
+		box-shadow: 0 0 20px color-mix(in srgb, var(--primary) 35%, transparent);
+		font-family: inherit;
+		max-width: 600px;
 	}
 
 	.image-count {
@@ -1011,10 +1344,50 @@
 		border-color: color-mix(in srgb, var(--info) 40%, transparent);
 	}
 
-	.page-dots {
-		color: var(--text-muted);
-		padding: 0 4px;
+	.page-dots-btn {
 		letter-spacing: 2px;
+		font-size: 1.1rem;
+		padding: 0;
+	}
+
+	.page-dots-btn .page-jump-input {
+		width: 100%;
+		height: 100%;
+		background: transparent;
+		border: none;
+		color: var(--bg-dark);
+		text-align: center;
+		font-size: 0.95rem;
+		font-weight: 600;
+		padding: 0;
+		outline: none;
+		-moz-appearance: textfield;
+	}
+
+	.page-dots-btn .page-jump-input::-webkit-inner-spin-button,
+	.page-dots-btn .page-jump-input::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+
+	.page-dots-btn.active::before {
+		height: 100%;
+		border-radius: 8px;
+		background: var(--primary);
+	}
+
+	.filter-pill.page-dots-btn.active::before {
+		height: 100%;
+		border-radius: 8px;
+		background: var(--tertiary);
+	}
+
+	.filter-pill.reset-pill {
+		color: var(--danger);
+	}
+
+	.filter-pill.reset-pill::before {
+		background: var(--danger);
 	}
 
 	.filter-icons {
@@ -1093,11 +1466,8 @@
 	}
 
 	.gallery-grid.loading {
+		opacity: 0.5;
 		pointer-events: none;
-	}
-
-	.gallery-grid.loading :global(img) {
-		opacity: 0;
 	}
 
 	.infinite-trigger {
@@ -1132,5 +1502,59 @@
 			transform 0.18s cubic-bezier(0.2, 0, 0, 1),
 			width 0.18s cubic-bezier(0.2, 0, 0, 1),
 			height 0.18s cubic-bezier(0.2, 0, 0, 1);
+	}
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 80px 24px;
+		text-align: center;
+		color: var(--text-muted);
+		gap: 12px;
+		max-width: 460px;
+		margin: 60px auto;
+	}
+
+	.empty-state .empty-icon {
+		font-size: 3.5rem;
+		color: color-mix(in srgb, var(--primary) 70%, transparent);
+		margin-bottom: 6px;
+	}
+
+	.empty-state h3 {
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: var(--text);
+		margin: 0;
+	}
+
+	.empty-state p {
+		font-size: 0.95rem;
+		line-height: 1.5;
+		margin: 0;
+	}
+
+	.empty-state .empty-action-btn {
+		margin-top: 12px;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 20px;
+		background: color-mix(in srgb, var(--primary) 15%, transparent);
+		border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+		border-radius: 10px;
+		color: var(--text);
+		font-size: 0.95rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.empty-state .empty-action-btn:hover {
+		background: var(--primary);
+		color: var(--bg-dark);
+		border-color: var(--primary);
+		transform: translateY(-1px);
 	}
 </style>

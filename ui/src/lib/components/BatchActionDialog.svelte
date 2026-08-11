@@ -26,7 +26,7 @@ let { onClose, selectedImages = [] } = $props();
 		} 
 
 		if (criteria === 'selected') {
-			const ids = selectedImages.map(img => img.ID).join(',');
+			const ids = selectedImages.map(img => img.id ?? img.ID).join(',');
 			formData.append('image_ids', ids);
 		}
 
