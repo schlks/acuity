@@ -1,0 +1,14 @@
+.git
+.idea
+.vscode
+tmp
+bin
+data
+*.db
+*.db-shm
+*.db-wal
+*.pdf
+.env
+.air.toml
+config.json
+acuity_source.pdf
