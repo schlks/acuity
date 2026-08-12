@@ -267,7 +267,7 @@
 		font-size: 0.72rem;
 		color: var(--text);
 		font-weight: 500;
-		letter-spacing: 0.2rem;
+		letter-spacing: 0.02em;
 		pointer-events: none;
 		z-index: 2;
 		border: 1px solid rgba(255, 255, 255, 0.1);

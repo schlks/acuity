@@ -1,29 +1,29 @@
 package main
 
 import (
-	"context"
-	"net/http"
-	"acuity/internal/config"
-	"os"
+	"acuity/pkg/config"
 	"acuity/pkg/db"
 	"acuity/pkg/web"
+	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
-	ctx context.Context
+	ctx    context.Context
 	config *config.Config
-	mux *http.ServeMux
+	mux    *http.ServeMux
 }
 
 func NewApp(cfg *config.Config) *App {
 	return &App{
 		config: cfg,
-		mux: http.NewServeMux(),
+		mux:    http.NewServeMux(),
 	}
 }
 
@@ -68,7 +68,12 @@ func (a *App) startup(ctx context.Context) {
 
 	webServer.RegisterRoutes(a.mux)
 	slog.Info(fmt.Sprintf("Acuity Web-Interface listening on http://localhost:%s", a.config.Port))
-	go http.ListenAndServe(":"+a.config.Port, a.mux)
+	go func() {
+		err := http.ListenAndServe(":"+a.config.Port, a.mux)
+		if err != nil {
+
+		}
+	}()
 }
 
 func (a *App) SelectDirectory() (string, error) {

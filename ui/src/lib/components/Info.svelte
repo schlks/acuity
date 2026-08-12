@@ -2,13 +2,13 @@
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { carousel } from '$lib/stores/carousel.svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	
 	let { image } = $props();
 	let galleryName = $derived(
-		$page.data?.galleries?.find((g: any) => g.id === image.gallery_id)?.name ||
-		$page.data?.gallery?.name ||
-		$page.params.name ||
+		page.data?.galleries?.find((g: any) => g.id === image.gallery_id)?.name ||
+		page.data?.gallery?.name ||
+		page.params.name ||
 		'global'
 	)
 
@@ -176,7 +176,7 @@
 		left: 0;
 		width: 100%;
 		height: 2px;
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		background: var(--primary); /* Standard-Farbe für Suchen */
@@ -251,7 +251,7 @@
 	.label {
 		font-size: 0.75rem;
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.03em;
 		color: var(--text-muted, #aaa);
 	}
 

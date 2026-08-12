@@ -749,13 +749,13 @@
 	</div>
 </div>
 
-{#if navigating}
+{#if navigating.to}
 	<div class="loader-container">
 		<Spinner />
 	</div>
 {/if}
 
-{#if galleryImages.length === 0 && !navigating}
+{#if galleryImages.length === 0 && !navigating.to}
 	<div class="empty-state">
 		<span class="material-symbols-outlined empty-icon">
 			{page.url.searchParams.get('q') ? 'search_off' : currentFlag ? 'filter_alt_off' : 'photo_library'}
@@ -790,7 +790,7 @@
 		{/if}
 	</div>
 {:else}
-	<div class="gallery-grid medium" class:keyboard-nav={isKeyboardMode} class:loading={navigating}>
+	<div class="gallery-grid medium" class:keyboard-nav={isKeyboardMode} class:loading={!!navigating.to}>
 		<hr />
 		{#if focusBox.visible && isKeyboardMode}
 			<div

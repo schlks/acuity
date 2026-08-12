@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"image/jpeg"
 	"fmt"
+	"image/jpeg"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -45,7 +45,7 @@ type ImagePayload struct {
 type ImageInfo struct {
 	SImage  SImage `json:"SImage"`
 	Gallery string `json:"gallery,omitempty"`
-	Name string 	 `json:"name,omitempty"`
+	Name    string `json:"name,omitempty"`
 }
 
 func NewBridge(sDB *SQLiteClient, wDB *WeaviateClient) *Bridge {
@@ -112,7 +112,7 @@ func (b *Bridge) getSeenFilePaths(known []string, folderPath string) ([]string, 
 	return filePaths, missingPaths, nil
 }
 
-func (b *Bridge) CreateGallery(ctx context.Context, name string, folderPath string) error {
+func (b *Bridge) CreateGallery(name string, folderPath string) error {
 	if err := os.MkdirAll(folderPath, 0o755); err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (b *Bridge) CreateGallery(ctx context.Context, name string, folderPath stri
 		return nil
 	}
 
-	if err := b.UpdateFolder(ctx, name); err != nil {
+	if err := b.UpdateFolder(name); err != nil {
 		return err
 	}
 
@@ -140,7 +140,7 @@ func (b *Bridge) DeleteGallery(ctx context.Context, id int) error {
 	return nil
 }
 
-func (b *Bridge) UpdateFolder(ctx context.Context, name string) error {
+func (b *Bridge) UpdateFolder(name string) error {
 	gallery, err := b.sDB.GetGalleryByName(name)
 	if err != nil {
 		return err
@@ -293,24 +293,24 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 			stat, err := os.Stat(path)
 
 			bimgImg := bimg.NewImage(data)
-			var width, heigth int
+			var width, height int
 			imageSize, err := imagesize.ExtractFileInfo(path)
 			if err == nil {
 				width = imageSize.Width
-				heigth = imageSize.Height
+				height = imageSize.Height
 			} else {
 				slog.Error("failed to get image size with imagesize", slog.String("file", path), slog.Any("error", err))
 				if size, imgErr := bimgImg.Size(); imgErr == nil {
 					width = size.Width
-					heigth = size.Height
+					height = size.Height
 				}
 			}
 
 			var resolution int
 			var aspectRatio float64
-			if width > 0 && heigth > 0 {
-				resolution = width * heigth
-				aspectRatio = float64(width) / float64(heigth)
+			if width > 0 && height > 0 {
+				resolution = width * height
+				aspectRatio = float64(width) / float64(height)
 			}
 
 			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
@@ -366,7 +366,7 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 	}
 
 	if err := eg.Wait(); err != nil {
-		slog.Error("Errors occured while importing images", slog.Any("error", err))
+		slog.Error("Errors occurred while importing images", slog.Any("error", err))
 	}
 
 	close(resultChan)
@@ -412,7 +412,7 @@ func (b *Bridge) SearchImages(ctx context.Context, search string, galleryID int,
 	for _, img := range images {
 		sImage, err := b.sDB.GetImageByPath(img.Path)
 		if err != nil {
-			slog.Error("Somthing went wrong", slog.Any("Error", err))
+			slog.Error("Something went wrong", slog.Any("Error", err))
 			continue
 		}
 		dist := img.Distance
@@ -422,30 +422,7 @@ func (b *Bridge) SearchImages(ctx context.Context, search string, galleryID int,
 	return sImages, nil
 }
 
-func (b *Bridge) SearchImages64(ctx context.Context, search string, galleryID int, threshold float32) ([]SImage, error) {
-	count, err := b.sDB.GetGalleryCount(galleryID)
-	if err != nil {
-		return nil, err
-	}
-	images, err := b.wDB.SearchImage64(ctx, search, galleryID, count, threshold)
-	if err != nil {
-		return nil, err
-	}
-	var sImages []SImage
-	for _, img := range images {
-		sImage, err := b.sDB.GetImageByPath(img.Path)
-		if err != nil {
-			slog.Error("Somthing went wrong", slog.Any("Error", err))
-			continue
-		}
-		dist := img.Distance
-		sImage.Distance = &dist
-		sImages = append(sImages, sImage)
-	}
-	return sImages, nil
-}
-
-func (b *Bridge) GetAllImages(ctx context.Context, galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]SImage, error) {
+func (b *Bridge) GetAllImages(galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]SImage, error) {
 	return b.sDB.GetAllImages(galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
 }
 
@@ -524,7 +501,7 @@ func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 	return nil
 }
 
-func (b *Bridge) FindDublicates(ctx context.Context, imageID int, galleryID int, threshold float32) ([]SImage, error) {
+func (b *Bridge) FindDuplicates(ctx context.Context, imageID int, galleryID int, threshold float32) ([]SImage, error) {
 	sImage, err := b.sDB.GetImageByID(imageID)
 	if err != nil {
 		return nil, err
@@ -567,7 +544,10 @@ func (b *Bridge) ChangeGallery(ctx context.Context, newID int, sImages []SImage)
 			fileName := filepath.Base(img.FilePath)
 			newPath := filepath.Join(targetGallery.Path, fileName)
 
-			os.MkdirAll(targetGallery.Path, 0o755)
+			err := os.MkdirAll(targetGallery.Path, 0o755)
+			if err != nil {
+				return err
+			}
 
 			if err := os.Rename(img.FilePath, newPath); err == nil {
 				img.FilePath = newPath
@@ -575,7 +555,10 @@ func (b *Bridge) ChangeGallery(ctx context.Context, newID int, sImages []SImage)
 				input, err := os.ReadFile(img.FilePath)
 				if err == nil {
 					if err := os.WriteFile(newPath, input, 0o644); err == nil {
-						os.Remove(img.FilePath)
+						err := os.Remove(img.FilePath)
+						if err != nil {
+							return err
+						}
 						img.FilePath = newPath
 					} else {
 						return fmt.Errorf("failed to write file %s: %w", newPath, err)
@@ -610,7 +593,10 @@ func (b *Bridge) CopyToGallery(ctx context.Context, newID int, sImages []SImage)
 			fileName := filepath.Base(img.FilePath)
 			newPath := filepath.Join(targetGallery.Path, fileName)
 
-			os.MkdirAll(targetGallery.Path, 0o755)
+			err := os.MkdirAll(targetGallery.Path, 0o755)
+			if err != nil {
+				return err
+			}
 
 			input, err := os.ReadFile(img.FilePath)
 			if err == nil {
@@ -651,9 +637,9 @@ func (b *Bridge) GetImageInfo(imageID int) (ImageInfo, error) {
 	}
 
 	imageInfo := ImageInfo{
-		SImage: sImage,
+		SImage:  sImage,
 		Gallery: gallery.Name,
-		Name: name,
+		Name:    name,
 	}
 
 	return imageInfo, nil
@@ -716,16 +702,13 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 		dist float64
 	}
 
-	numWorkers := runtime.NumCPU()
-	if numWorkers < 1 {
-		numWorkers = 1
-	}
+	numWorkers := max(runtime.NumCPU(), 1)
 
 	chunkSize := (n + numWorkers - 1) / numWorkers
 	var wg sync.WaitGroup
 	matchesChan := make(chan []matchPair, numWorkers)
 
-	for w := 0; w < numWorkers; w++ {
+	for w := range numWorkers {
 		start := w * chunkSize
 		end := start + chunkSize
 		if start >= n {
@@ -748,7 +731,7 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 						continue
 					}
 					var dot float64
-					for k := 0; k < lenA; k++ {
+					for k := range lenA {
 						dot += vecA[k] * vecB[k]
 					}
 					dist := 1.0 - dot
@@ -775,7 +758,7 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 	visited := make(map[int]bool)
 	imageMap := make(map[string]SImage)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if visited[i] {
 			continue
 		}
@@ -810,7 +793,7 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 				dist := 0.0
 				if idx > 0 {
 					var dot float64
-					for k := 0; k < len(rootVec); k++ {
+					for k := range rootVec {
 						dot += rootVec[k] * imgVec.Vector[k]
 					}
 					dist = 1.0 - dot

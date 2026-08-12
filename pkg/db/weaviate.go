@@ -24,8 +24,8 @@ type WeaviateClient struct {
 }
 
 type ImageVector struct {
-	ID     string `json:"id"`
-	Path   string `json:"path"`
+	ID     string    `json:"id"`
+	Path   string    `json:"path"`
 	Vector []float64 `json:"vector"`
 }
 
@@ -70,7 +70,7 @@ func (w *WeaviateClient) WaitForReady(timeout time.Duration) error {
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timout waiting for weaviate %v", ctx.Err())
+			return fmt.Errorf("timeout waiting for weaviate %v", ctx.Err())
 		case <-time.After(10 * time.Second):
 			slog.Info("Waiting for Weaviate Server...")
 		}
@@ -82,7 +82,7 @@ func (w *WeaviateClient) InitSchema() error {
 
 	exists, err := w.Client.Schema().ClassExistenceChecker().WithClassName(className).Do(ctx)
 	if err != nil {
-		return fmt.Errorf("error checking existance: %v", err)
+		return fmt.Errorf("error checking existence: %v", err)
 	}
 
 	if !exists {
@@ -266,7 +266,7 @@ func (w *WeaviateClient) SearchImage(ctx context.Context, search string, gallery
 		WithConcepts([]string{search}).
 		WithDistance(threshold)
 
-	query, whereFilter := w.getQueryWithWhere( true, galleryID, 0, imagesPerPage)
+	query, whereFilter := w.getQueryWithWhere(true, galleryID, 0, imagesPerPage)
 
 	if whereFilter != nil {
 		query = query.
@@ -348,7 +348,6 @@ func (w *WeaviateClient) ChangeGallery(ctx context.Context, newID int, images []
 	g := new(errgroup.Group)
 	g.SetLimit(w.Worker)
 	for _, img := range images {
-		img := img
 		g.Go(func() error {
 			props := map[string]any{
 				"gallery_id": newID,
@@ -372,10 +371,9 @@ func (w *WeaviateClient) CopyToGallery(ctx context.Context, newGalleryID int, im
 	g.SetLimit(w.Worker)
 
 	for _, img := range images {
-		img := img // Copy for closure
 		g.Go(func() error {
 			newPath := img.Path
-			info, err := w.GetInfo(ctx, img.ID)
+			info, err := w.GetInfo(ctx)
 			if err != nil {
 				return err
 			}
@@ -498,7 +496,7 @@ func (w *WeaviateClient) GetAll(ctx context.Context, galleryID int, sortBy strin
 	return images, nil
 }
 
-func (w *WeaviateClient) GetInfo(ctx context.Context, imageID string) (WImage, error) {
+func (w *WeaviateClient) GetInfo(ctx context.Context) (WImage, error) {
 	query, _ := w.getQueryWithWhere(false, -1, 0, 1)
 	result, err := query.Do(ctx)
 	if err != nil {

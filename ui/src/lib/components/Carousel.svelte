@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { carousel } from '$lib/stores/carousel.svelte';
-	import { fade, fly, scale } from 'svelte/transition';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import Info from '$lib/components/Info.svelte';
 
@@ -14,7 +13,6 @@
 	
 	$effect(() => {
 		if (carousel.isOpen && filmstripContainer) {
-			const idx = carousel.currentIndex;
 			requestAnimationFrame(() => updateFocusBox());
 			const activeThumb = filmstripContainer.querySelector(`[data-thumb-index="${carousel.currentIndex}"]`) as HTMLElement;
 			activeThumb?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
@@ -22,12 +20,8 @@
 	});
 
 	$effect(() => {
-		const _ = carousel.currentIndex;
-		if (!carousel.isOpen) {
-			resetZoom();
-		} else {
-			resetZoom();
-		}
+        carousel.currentIndex;
+        resetZoom();
 	})
 
 	function resetZoom() {
@@ -475,7 +469,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}

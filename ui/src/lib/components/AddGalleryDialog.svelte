@@ -41,7 +41,7 @@
 		}
 	}
 
-	async function handleImport(e) {
+	async function handleImport(e: Event) {
 		e.preventDefault();
 		errorMsg = '';
 		
@@ -56,7 +56,7 @@
 
 		if (!res.ok) {
 			const text = await res.text();
-			errorMsg = text || 'Failed to craate gallery';
+			errorMsg = text || 'Failed to create gallery';
 			return;
 		}
 
@@ -116,11 +116,6 @@
 		margin-bottom: 16px;
 	}
 
-	.settings-panel.down {
-		top: 100%;
-		margin-top: 16px;
-	}
-	
 	.settings-panel h3 {
 		margin-top: 0;
 		margin-bottom: 16px;
@@ -224,7 +219,7 @@
 		left: 0;
 		width: 100%;
 		height: 2px;
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}

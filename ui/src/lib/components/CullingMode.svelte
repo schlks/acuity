@@ -30,7 +30,6 @@
 
 	$effect(() => {
 		if (isOpen && filmstripContainer) {
-			const idx = currentIndex;
 			requestAnimationFrame(() => updateFocusBox());
 			const activeThumb = filmstripContainer.querySelector(`[data-thumb-index="${currentIndex}"]`) as HTMLElement;
 			activeThumb?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });

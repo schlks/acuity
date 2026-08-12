@@ -21,30 +21,30 @@ type SQLiteClient struct {
 }
 
 type SImage struct {
-	ID           int     `db:"id" json:"id"`
-	GalleryID    int     `db:"gallery_id" json:"gallery_id"`
-	FilePath     string  `db:"filepath" json:"filepath"`
-	Blurhash     string  `db:"blurhash" json:"blurhash"`
-	Rating       int     `db:"rating" json:"rating"`
-	Flag         int     `db:"flag" json:"flag"`
-	Extension    string  `db:"extension" json:"extension"`
-	Date         string  `db:"date" json:"date"`
-	Taken        string  `db:"taken" json:"taken"`
-	Size         float64 `db:"size" json:"size"`
-	Resolution   int     `db:"resolution" json:"resolution"`
-	AspectRatio  float64 `db:"aspect_ratio" json:"aspect_ratio"`
-	CameraMake   string  `db:"camera_make" json:"camera_make"`
-	LensMake     string  `db:"lens_make" json:"lens_make"`
-	FocalLength  string  `db:"focal_length" json:"focal_length"`
-	Aperture     string  `db:"aperture" json:"aperture"`
-	ShutterSpeed string  `db:"shutter_speed" json:"shutter_speed"`
-	Iso          string  `db:"iso" json:"iso"`
-	Flash        bool    `db:"flash" json:"flash"`
-	Distance	*float64 `db:"-" json:"distance,omitempty"`
+	ID           int      `db:"id" json:"id"`
+	GalleryID    int      `db:"gallery_id" json:"gallery_id"`
+	FilePath     string   `db:"filepath" json:"filepath"`
+	Blurhash     string   `db:"blurhash" json:"blurhash"`
+	Rating       int      `db:"rating" json:"rating"`
+	Flag         int      `db:"flag" json:"flag"`
+	Extension    string   `db:"extension" json:"extension"`
+	Date         string   `db:"date" json:"date"`
+	Taken        string   `db:"taken" json:"taken"`
+	Size         float64  `db:"size" json:"size"`
+	Resolution   int      `db:"resolution" json:"resolution"`
+	AspectRatio  float64  `db:"aspect_ratio" json:"aspect_ratio"`
+	CameraMake   string   `db:"camera_make" json:"camera_make"`
+	LensMake     string   `db:"lens_make" json:"lens_make"`
+	FocalLength  string   `db:"focal_length" json:"focal_length"`
+	Aperture     string   `db:"aperture" json:"aperture"`
+	ShutterSpeed string   `db:"shutter_speed" json:"shutter_speed"`
+	Iso          string   `db:"iso" json:"iso"`
+	Flash        bool     `db:"flash" json:"flash"`
+	Distance     *float64 `db:"-" json:"distance,omitempty"`
 }
 
 type Gallery struct {
-	ID   int `json:"id"`
+	ID   int    `json:"id"`
 	Name string `json:"name"`
 	Path string `json:"path"`
 }
@@ -107,13 +107,21 @@ func NewSqliteDB(path string) (*SQLiteClient, error) {
 		_ = os.MkdirAll(dir, 0755)
 	}
 	db, err := sqlx.Open("sqlite", path)
-	// db, err := sqlx.Connect("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
-	db.Exec("PRAGMA journal_mode=WAL;")
-	db.Exec("PRAGMA synchronous=NORMAL;")
-	db.Exec("PRAGMA busy_timeout=5000;")
+
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL;",
+		"PRAGMA synchronous=NORMAL;",
+		"PRAGMA busy_timeout=5000;",
+	}
+	for _, pragma := range pragmas {
+		if _, err = db.Exec(pragma); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+	}
 
 	return &SQLiteClient{DB: db}, nil
 }
@@ -173,7 +181,12 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func(tx *sqlx.Tx) {
+		err := tx.Rollback()
+		if err != nil {
+
+		}
+	}(tx)
 
 	query, err := tx.PrepareNamed(`
 		INSERT INTO images (gallery_id, filepath, blurhash, rating, flag, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, focal_length, aperture, shutter_speed, 
@@ -187,9 +200,18 @@ iso, flash)
 				date = :date;
 	`)
 	if err != nil {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			return err
+		}
 		return err
 	}
+	defer func(query *sqlx.NamedStmt) {
+		err := query.Close()
+		if err != nil {
+
+		}
+	}(query)
 
 	for _, img := range images {
 		_, err := query.Exec(img)
@@ -284,7 +306,11 @@ func (s *SQLiteClient) RemoveGallery(id int) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func(tx *sqlx.Tx) {
+		err := tx.Rollback()
+		if err != nil {
+		}
+	}(tx)
 
 	if _, err := tx.Exec("DELETE FROM images WHERE gallery_id = ?", id); err != nil {
 		return err
@@ -383,7 +409,11 @@ func (s *SQLiteClient) GetKnownPaths(galleryID int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+		}
+	}(rows)
 
 	var paths []string
 	for rows.Next() {
@@ -437,13 +467,25 @@ func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func(tx *sqlx.Tx) {
+		err := tx.Rollback()
+		if err != nil {
+		}
+	}(tx)
 
 	query, err := tx.Prepare("UPDATE images SET gallery_id = ? WHERE id = ?")
 	if err != nil {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			return err
+		}
 		return err
 	}
+	defer func(query *sql.Stmt) {
+		err := query.Close()
+		if err != nil {
+		}
+	}(query)
 
 	for _, img := range sImages {
 		_, err := query.Exec(newGalleryID, img.ID)

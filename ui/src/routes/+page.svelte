@@ -1,9 +1,8 @@
 <script lang="ts">
-    import type { PageData } from './$types';
 
 	let searchQuery = $state('');
 
-	function handleSearch(event) {
+	function handleSearch(event: SubmitEvent | Event) {
 		event.preventDefault();
 		console.log("Submitting search to API for:", searchQuery);
 	}

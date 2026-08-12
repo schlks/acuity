@@ -1,10 +1,9 @@
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { invalidateAll } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 
 let { onClose, selectedImages = [] } = $props();
 
@@ -12,14 +11,14 @@ let { onClose, selectedImages = [] } = $props();
 	let action = $state("copy");
 	let targetGallery = $state('');
 
-	async function executeBatch(e) {
+	async function executeBatch(e: SubmitEvent | Event) {
 		e.preventDefault();
 
 		const formData = new FormData();
 
 		formData.append('criteria', criteria);
 		formData.append('batch_action', action);
-		formData.append('source_gallery', $page.params.name);
+		formData.append('source_gallery', page.params.name);
 
 		if (action === 'move' || action === 'copy') {
 			formData.append('name', targetGallery)
@@ -76,7 +75,7 @@ let { onClose, selectedImages = [] } = $props();
 				<label>
 					Target Gallery:
 					<select bind:value={targetGallery}>
-						{#each $page.data.galleries as gallery}
+						{#each page.data.galleries as gallery}
 							<option value={gallery.name}>{gallery.name}</option>
 						{/each}
 					</select>
@@ -84,7 +83,7 @@ let { onClose, selectedImages = [] } = $props();
 			</div>
 		{/if}
 
-		<button type="submit" style="display: none;"></button>
+		<button title="submit" type="submit" style="display: none;"></button>
 		
 		<div class="actions">
 			<button type="button" class="btn-cancel" onclick={onClose}>Cancel</button>
@@ -128,18 +127,7 @@ let { onClose, selectedImages = [] } = $props();
 		color: var(--text-muted);
 	}
 
-	.form-group.row-layout {
-		flex-direction: row;
-		align-items: center;
-		justify-content: space-between;
-	}
-
-	.label-text {
-		font-size: 0.9rem;
-		color: var(--text-muted);
-	}
-
-	select, input[type="number"] {
+	select {
 		background-color: var(--bg);
 		color: var(--text);
 		border: 1px solid var(--bg);
@@ -152,11 +140,11 @@ let { onClose, selectedImages = [] } = $props();
 		transition: border-color 0.2s;
 	}
 
-	select:focus, input[type="number"]:focus {
+	select:focus {
 		border-color: var(--primary);
 	}
 
-	select.changed, input[type="number"].changed {
+	select.changed {
 		border-color: var(--tertiary);
 	}
 
@@ -187,7 +175,7 @@ let { onClose, selectedImages = [] } = $props();
 		left: 0;
 		width: 100%;
 		height: 2px;
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}

@@ -5,41 +5,51 @@
     import { fly, fade } from 'svelte/transition';
 
     let progresses = $state([]);
+    let isPolling = false;
     let lastStr = "";
     let completed = $state(false);
 
     async function pollProgress() {
-        try {
-            const res = await fetch(`/api/progress?last=${encodeURIComponent(lastStr)}`);
-            if (res.ok) {
-                const contentType = res.headers.get("content-type");
-                if (contentType && contentType.includes("application/json")) {
-                    const data = await res.json();
-                    progresses = data.progresses || [];
-                    lastStr = data.last_str || "";
-                } else {
-                    if (progresses.length > 0) {
-                        await invalidateAll();
-                        completed = true;
-                        // Warte 1,5 Sekunden bevor es ausgeblendet wird
-                        await new Promise(r => setTimeout(r, 1500));
-                        completed = false;
+        while (isPolling) {
+            try {
+                const res = await fetch(`/api/progress?last=${encodeURIComponent(lastStr)}`);
+                if (res.ok) {
+                    const contentType = res.headers.get("content-type");
+                    if (contentType && contentType.includes("application/json")) {
+                        const data = await res.json();
+                        progresses = data.progresses || [];
+                        lastStr = data.last_str || "";
+                    } else {
+                        if (progresses.length > 0) {
+                            await invalidateAll();
+                            completed = true;
+                            // Warte 1,5 Sekunden bevor es ausgeblendet wird
+                            await new Promise(r => setTimeout(r, 1500));
+                            completed = false;
+                        }
+                        progresses = [];
+                        lastStr = "";
+                        await new Promise(r => setTimeout(r, 2000));
                     }
-                    progresses = [];
-                    lastStr = "";
-                    await new Promise(r => setTimeout(r, 2000));
+                } else {
+                    await new Promise(r => setTimeout(r, 5000));
                 }
-            } else {
+            } catch (e) {
                 await new Promise(r => setTimeout(r, 5000));
             }
-        } catch (e) {
-            await new Promise(r => setTimeout(r, 5000));
         }
-        
-        pollProgress();
+
+        onMount(() => {
+            isPolling = true;
+            pollProgress();
+
+            return () => {
+                isPolling = false;
+            }
+        })
     }
 
-    async function cancelImport(name) {
+    async function cancelImport(name: string) {
         await fetch(`/api/gallery/${encodeURIComponent(name)}/scan`, {
             method: 'DELETE'
         });

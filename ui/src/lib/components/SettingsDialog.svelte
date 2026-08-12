@@ -24,8 +24,9 @@
 		}
 	});
 
-	async function saveSettings(e) {
+	async function saveSettings(e: SubmitEvent | Event) {
 		e.preventDefault();
+        config.images_per_page = Number(config.images_per_page) || 100;
 		await fetch('/api/settings', {
 			method: 'POST',
 			body: JSON.stringify(config)
@@ -36,7 +37,7 @@
 	}
 
 	async function wipeDatabases() {
-		if (confirm("Do you want to delete all databases irreversably?")) {
+		if (confirm("Do you want to delete all databases irreversibly?")) {
 			await fetch('/api/reset', { method: 'POST' });
 		}
 	}
@@ -75,9 +76,9 @@
 				Images on Page:
 				<input
 					type="number"
-					min="50"
+					min="1"
 					max="1000"
-					step="50"
+					step="any"
 					bind:value={config.images_per_page}
 					class:changed={config.images_per_page !== originalConfig.images_per_page}
 				/>
@@ -203,7 +204,7 @@
 		left: 0;
 		width: 100%;
 		height: 2px;
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
