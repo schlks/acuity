@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/viper"
 )
@@ -24,11 +25,26 @@ type Config struct {
 	Debug            bool   `mapstructure:"debug" json:"debug"`
 }
 
+func GetAppDir() string {
+	if custom := os.Getenv("CONFIG_DIR"); custom != "" {
+		return custom
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "data"
+	}
+	appDir := filepath.Join(configDir, "acuity")
+	_ = os.MkdirAll(appDir, 0755)
+	return appDir
+}
 func Load() (*Config, error) {
+	appDir := GetAppDir()
+	defaultDBPath := filepath.Join(appDir, "acuity.db")
+
 	viper.SetDefault("port", "3000")
 	viper.SetDefault("weaviate_host", "localhost")
 	viper.SetDefault("weaviate_port", ":50050")
-	viper.SetDefault("db_path", "data/acuity.db")
+	viper.SetDefault("db_path", defaultDBPath)
 	viper.SetDefault("images_per_page", 100)
 	viper.SetDefault("default_sort_by", "name")
 	viper.SetDefault("default_sort_order", "desc")
@@ -37,15 +53,9 @@ func Load() (*Config, error) {
 	viper.SetDefault("debug", false)
 
 
-	configDir := os.Getenv("CONFIG_DIR")
-	if configDir == "" {
-		configDir = "data"
-	}
-	// Ensure the config directory exists
-	_ = os.MkdirAll(configDir, 0755)
 
 	viper.SetConfigName("config")
-	viper.AddConfigPath(configDir)
+	viper.AddConfigPath(appDir)
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
 
@@ -53,7 +63,7 @@ func Load() (*Config, error) {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := errors.AsType[viper.ConfigFileNotFoundError](err); ok {
 			// Datei existiert nicht, wir legen eine neue an
-			configFile := configDir + "/config.json"
+			configFile := appDir + "/config.json"
 			if writeErr := viper.SafeWriteConfigAs(configFile); writeErr != nil {
 				return nil, writeErr
 			}

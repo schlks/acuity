@@ -6,6 +6,8 @@ package db
 import (
 	"database/sql"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode"
@@ -101,6 +103,9 @@ func naturalCompare(a, b string) int {
 }
 
 func NewSqliteDB(path string) (*SQLiteClient, error) {
+	if dir := filepath.Dir(path); dir != "" {
+		_ = os.MkdirAll(dir, 0755)
+	}
 	db, err := sqlx.Open("sqlite", path)
 	// db, err := sqlx.Connect("sqlite", path)
 	if err != nil {
