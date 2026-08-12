@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/h2non/bimg"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -17,7 +18,9 @@ import (
 var assets embed.FS
 
 func main() {
-	_ = os.Setenv("WEBKIT_FORCE_COMPOSITING_MODE", "1")
+	_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	bimg.Initialize()
+	defer bimg.Shutdown()
 
 	Config, err := config.Load()
 	if err != nil {
@@ -55,7 +58,7 @@ func main() {
 
 		Linux: &linux.Options{
 			WindowIsTranslucent: false,
-			WebviewGpuPolicy:    linux.WebviewGpuPolicyAlways,
+			WebviewGpuPolicy:    linux.WebviewGpuPolicyOnDemand,
 		},
 	})
 

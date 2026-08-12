@@ -142,7 +142,7 @@ type SubFolder struct {
 
 type GalleryView struct {
 	db.Gallery
-	SubFolders []*SubFolder
+	SubFolders []*SubFolder `json:"sub_folders"`
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, data any, status int) {
@@ -424,6 +424,8 @@ func extractRawPreview(path string) ([]byte, error) {
 	return nil, fmt.Errorf("no preview found")
 }
 
+var thumbSemaphore = make(chan struct{}, 4)
+
 func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string, error) {
 	cacheBase, err := os.UserCacheDir()
 	if err != nil {
@@ -449,6 +451,9 @@ func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string
 			return thumbPath, nil
 		}
 	}
+
+	thumbSemaphore <- struct{}{}
+	defer func() { <-thumbSemaphore }()
 
 	var buffer []byte
 	if isRawExtension(filepath.Ext(imagePath)) {
