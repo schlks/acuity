@@ -1,25 +1,25 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import { carousel } from '$lib/stores/carousel.svelte';
 	import ImageCard from '$lib/components/ImageCard.svelte';
 	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 
-	let searchThreshold = $state($page.url.searchParams.get('threshold') || '0.1');
+	let searchThreshold = $state(page.url.searchParams.get('threshold') || '0.1');
 	let searchTimeout: ReturnType<typeof setTimeout>;
 	let isDropdownOpen = $state(false);
 	let batchIsOpen = $state(false);
 	let selectedImages = $state<any[]>([]);
-	let selectedGalleries = $state<string[]>($page.url.searchParams.getAll('galleries'));
+	let selectedGalleries = $state<string[]>(page.url.searchParams.getAll('galleries'));
 
 	let duplicatesData = $state<any>(null);
 	let isLoading = $state(true);
 	let abortController: AbortController | null = null;
 	let lastUrl = '';
 
-	let galleries = $derived(duplicatesData?.Galleries || $page.data?.galleries || []);
+	let galleries = $derived(duplicatesData?.Galleries || page.data?.galleries || []);
 
 	async function loadDuplicates() {
 		if (abortController) {
@@ -33,14 +33,14 @@
 			const params = new URLSearchParams();
 			params.set('threshold', searchThreshold.toString());
 
-			const imageID = $page.url.searchParams.get('imageID');
+			const imageID = page.url.searchParams.get('imageID');
 			if (imageID) {
 				params.set('imageID', imageID);
 			}
 
 			selectedGalleries.forEach(g => params.append('galleries', g));
 
-			const res = await fetch(`/api/gallery/${$page.params.name}/duplicates?${params.toString()}`, { signal: controller.signal });
+			const res = await fetch(`/api/gallery/${page.params.name}/duplicates?${params.toString()}`, { signal: controller.signal });
 			if (res.ok) {
 				const data = await res.json();
 				if (abortController === controller) {
@@ -65,11 +65,11 @@
 	}
 
 	$effect(() => {
-		const currentHref = $page.url.href;
+		const currentHref = page.url.href;
 		if (currentHref !== lastUrl) {
 			lastUrl = currentHref;
 			untrack(() => {
-				const currentUrl = $page.url;
+				const currentUrl = page.url;
 				searchThreshold = currentUrl.searchParams.get('threshold') || '0.1';
 				selectedGalleries = currentUrl.searchParams.getAll('galleries');
 				selectedImages = [];
@@ -114,7 +114,7 @@
 		const formData = new FormData();
 		formData.append('criteria', criteria);
 		formData.append('batch_action', action);
-		formData.append('source_gallery', $page.params.name);
+		formData.append('source_gallery', page.params.name || '');
 
 		if (criteria === 'selected') {
 			const ids = selectedImages.map(img => img.id ?? img.ID).join(',');
@@ -170,7 +170,7 @@
 
 <div class="duplicates-container">
 	<div class="header-section">
-		{#if $page.url.searchParams.has('imageID')}
+		{#if page.url.searchParams.has('imageID')}
 			<h1>Similar Images</h1>
 		{:else}
 			<h1>Duplicates</h1>
@@ -200,7 +200,7 @@
 				<span class="selected-count">{selectedImages.length}</span>
 			{/if}
 
-			<div class="threshold-wrapper" title="Search Precision" class:active={searchThreshold != 0.1}>
+			<div class="threshold-wrapper" title="Search Precision" class:active={searchThreshold != '0.1'}>
 				<span class="material-symbols-outlined">tune</span>
 				<input
 					type="number"
@@ -281,7 +281,7 @@
 						<ImageCard 
 							{image}
 							isSelected={selectedImages.some(i => i.id === image.id)}
-							onclick={(e) => {
+							onclick={(e: { shiftKey: any; }) => {
 								if (e.shiftKey) {
 									toggleSelect(image);
 								} else {
@@ -315,7 +315,7 @@
 		justify-content: space-between;
 		align-items: center;
 		border-bottom: 1px solid var(--border);
-		padding-bottom: 24px 24px 0px 24px;
+		padding-bottom: 24px;
 	}
 
 	.header-section h1 {
@@ -330,7 +330,7 @@
 		text-decoration-color: var(--secondary);
 		text-decoration-thickness: 4px;
 		text-underline-offset: 6px;
-		padding: 0px 0px 24px 0px;
+		padding: 0 0 24px 0;
 	}
 	
 	h3 {
@@ -397,7 +397,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -419,7 +419,7 @@
 
 	.threshold-wrapper.active::before {
 		height: 2px;
-		border-radius: 0px;
+		border-radius: 0;
 		background: var(--tertiary);
 	}
 
@@ -455,6 +455,7 @@
 		margin: 0;
 	}
 	.threshold-wrapper input[type="number"] {
+        appearance: textfield;
 		-moz-appearance: textfield;
 	}
 
@@ -488,7 +489,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -506,7 +507,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--tertiary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -554,11 +555,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 16px;
-	}
-
-	.duplicates-group .gallery-grid :global(.image-card) {
-		flex-grow: 0 !important;
-		flex-shrink: 0;
 	}
 
 	.loading-state {

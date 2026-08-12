@@ -4,7 +4,9 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,8 +31,8 @@ import (
 )
 
 type Server struct {
-	Bridge   *db.Bridge
-	Config   *config.Config
+	Bridge *db.Bridge
+	Config *config.Config
 }
 
 type Progress struct {
@@ -41,30 +43,30 @@ type Progress struct {
 }
 
 type searchResult struct {
-	GalleryName      string            `json:"gallery_name,omitempty"`
-	Images           []db.SImage       `json:"images,omitempty"`
-	QueryImage       db.ImageInfo 	   `json:"query_image"`
-	Query            string            `json:"query,omitempty"`
-	Threshold        float64           `json:"threshold,omitempty"`
-	CurrentPage      int               `json:"current_page"`
-	PrevPage         int               `json:"prev_page,omitempty"`
-	NextPage         int               `json:"next_page,omitempty"`
-	HasNext          bool              `json:"has_page,omitempty"`
-	LastPage         int               `json:"last_page,omitempty"`
-	Count            int               `json:"count,omitempty"`
-	Folder           string            `json:"folder,omitempty"`
-	IsInfiniteAppend bool              `json:"is_inf_append,omitempty"`
-	ReturnTo         string            `json:"return_to,omitempty"`
-	SearchType       string            `json:"search-type,omitempty"`
-	Galleries        []db.Gallery      `json:"galleries"`
+	GalleryName      string       `json:"gallery_name,omitempty"`
+	Images           []db.SImage  `json:"images,omitempty"`
+	QueryImage       db.ImageInfo `json:"query_image"`
+	Query            string       `json:"query,omitempty"`
+	Threshold        float64      `json:"threshold,omitempty"`
+	CurrentPage      int          `json:"current_page"`
+	PrevPage         int          `json:"prev_page,omitempty"`
+	NextPage         int          `json:"next_page,omitempty"`
+	HasNext          bool         `json:"has_page,omitempty"`
+	LastPage         int          `json:"last_page,omitempty"`
+	Count            int          `json:"count,omitempty"`
+	Folder           string       `json:"folder,omitempty"`
+	IsInfiniteAppend bool         `json:"is_inf_append,omitempty"`
+	ReturnTo         string       `json:"return_to,omitempty"`
+	SearchType       string       `json:"search-type,omitempty"`
+	Galleries        []db.Gallery `json:"galleries"`
 }
 
 // NewServer creates a new server
 func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config *config.Config) *Server {
 	service := db.NewBridge(sdatabase, wdatabase)
 	server := &Server{
-		Bridge:   service,
-		Config:   config,
+		Bridge: service,
+		Config: config,
 	}
 
 	// Background task for periodic gallery scans (every hour)
@@ -131,13 +133,12 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 
 		uiFS.ServeHTTP(w, r)
 	})
-
 }
 
 type SubFolder struct {
-	Name       string
-	Path       string
-	SubFolders []*SubFolder
+	Name       string       `json:"name"`
+	Path       string       `json:"path"`
+	SubFolders []*SubFolder `json:"sub_folders"`
 }
 
 type GalleryView struct {
@@ -357,7 +358,7 @@ func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Config = &newConfig
-	
+
 	if err := config.Save(s.Config); err != nil {
 		slog.Error("failed to save config", slog.Any("error", err))
 	}
@@ -397,6 +398,65 @@ func extractRawPreview(path string) ([]byte, error) {
 	return nil, fmt.Errorf("no preview found")
 }
 
+func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string, error) {
+	cacheBase, err := os.UserCacheDir()
+	if err != nil {
+		cacheBase = filepath.Dir(s.Config.DBPath)
+	}
+	cacheDir := filepath.Join(cacheBase, "acuity", "thumbs")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return "", err
+	}
+
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%s:%d", imagePath, targetWidth)))
+	hashStr := hex.EncodeToString(h.Sum(nil))
+	thumbPath := filepath.Join(cacheDir, hashStr+".jpg")
+
+	sourceStat, err := os.Stat(imagePath)
+	if err != nil {
+		return "", err
+	}
+
+	if thumbStat, err := os.Stat(thumbPath); err == nil {
+		if thumbStat.ModTime().After(sourceStat.ModTime()) {
+			return thumbPath, nil
+		}
+	}
+
+	var buffer []byte
+	if isRawExtension(filepath.Ext(imagePath)) {
+		preview, err := extractRawPreview(imagePath)
+		if err == nil {
+			buffer = preview
+		}
+	}
+	if len(buffer) == 0 {
+		buf, err := os.ReadFile(imagePath)
+		if err != nil {
+			return "", err
+		}
+		buffer = buf
+	}
+
+	options := bimg.Options{
+		Width:   targetWidth,
+		Quality: 80,
+		Type:    bimg.JPEG,
+	}
+
+	newImage, err := bimg.NewImage(buffer).Process(options)
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.WriteFile(thumbPath, newImage, 0o644); err != nil {
+		return "", err
+	}
+
+	return thumbPath, nil
+}
+
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	image := query.String(r, "path", "")
 	if image == "" {
@@ -404,20 +464,31 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isThumb := r.URL.Query().Get("thumb") == "true"
+	if isThumb {
+		thumbPath, err := s.getOrCreateThumbnail(image, 500)
+		if err == nil && thumbPath != "" {
+			w.Header().Set("Cache-Control", "public, max-age=604800")
+			w.Header().Set("Content-Type", "image/jpeg")
+			http.ServeFile(w, r, thumbPath)
+			return
+		}
+	}
+
 	if isRawExtension(filepath.Ext(image)) {
 		// First try extracting the embedded high-quality JPEG
 		if previewBytes, err := extractRawPreview(image); err == nil {
 			mimeType := http.DetectContentType(previewBytes)
-			
+
 			// Firefox supports no TIFF images natively! If exiftool extracted a TIFF preview, convert it to JPEG.
 			if mimeType == "image/tiff" {
-				options := bimg.Options{ Type: bimg.JPEG, Quality: 90 }
+				options := bimg.Options{Type: bimg.JPEG, Quality: 90}
 				if convertedBytes, err := bimg.NewImage(previewBytes).Process(options); err == nil {
 					previewBytes = convertedBytes
 					mimeType = "image/jpeg"
 				}
 			}
-			
+
 			w.Header().Set("Content-Type", mimeType)
 			w.Write(previewBytes)
 			return
@@ -1132,7 +1203,7 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 		// 		return
 		// 	}
 		// } else {
-			targetGalleryName = r.FormValue("name")
+		targetGalleryName = r.FormValue("name")
 		//}
 
 		targetID, err, ok := s.Bridge.GetGalleryID(targetGalleryName)

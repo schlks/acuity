@@ -60,7 +60,7 @@
                 <h3>Import Complete!</h3>
             {:else}
                 <Spinner />
-                <h3>Importing Galleries</h3>
+                <h3>Importing Gallery</h3>
                 <div class="progress-list">
                     {#each progresses as p}
                         <div class="progress-item">
@@ -103,7 +103,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        min-width: 320px;
+        min-width: 420px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     }
 
@@ -125,6 +125,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 20px;
         background: var(--bg);
         padding: 12px 16px;
         border-radius: 8px;
@@ -135,12 +136,16 @@
         color: var(--text);
         font-weight: 500;
         font-size: 1rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .progress-stats {
         display: flex;
         align-items: center;
         gap: 8px;
+        flex-shrink: 0;
     }
 
     .percent {

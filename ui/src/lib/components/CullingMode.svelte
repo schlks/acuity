@@ -218,7 +218,7 @@
 			{#if focusBox.visible}
 				<div
 					class="floating-focus"
-					style="transform: translate({focusBox.x}px, {focusBox.y}px); width: {focusBox.w}px; height: {focusBox.h}px;"
+					style="transform: translate3d({focusBox.x}px, {focusBox.y}px, 0); width: {focusBox.w}px; height: {focusBox.h}px;"
 				></div>
 			{/if}
 
@@ -229,7 +229,7 @@
 					data-thumb-index={i}
 					onclick={() => currentIndex = i}
 				>
-					<img src="/api/image?path={encodeURIComponent(img.filepath)}" alt="" loading="lazy" />
+					<img src="/api/image?path={encodeURIComponent(img.filepath)}&thumb=true" alt="" loading="lazy" />
 					
 					{#if img.flag === 1}
 						<span class="thumb-flag keep">
@@ -256,8 +256,7 @@
 	.culling-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(10, 10, 12, 0.96);
-		backdrop-filter: blur(12px);
+		background: rgba(10, 10, 12, 0.98);
 		z-index: 2000;
 		display: flex;
 		flex-direction: column;
@@ -380,7 +379,6 @@
 		border-radius: 8px;
 		font-weight: 600;
 		font-size: 0.95rem;
-		backdrop-filter: blur(8px);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 		animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 	}
@@ -402,13 +400,12 @@
 		display: flex;
 		align-items: center;
 		gap: 4px;
-		background: rgba(0, 0, 0, 0.75);
+		background: rgba(0, 0, 0, 0.85);
 		color: var(--warning);
 		padding: 6px 12px;
 		border-radius: 8px;
 		font-weight: 700;
 		font-size: 1rem;
-		backdrop-filter: blur(8px);
 	}
 
 	.star-icon {

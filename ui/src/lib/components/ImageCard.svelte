@@ -1,38 +1,44 @@
 <script lang="ts">
 	import { decode } from 'blurhash';
+	import { formatSize, formatResolution } from '$lib/format';
+    import type { GalleryImage } from "$lib/types";
 
-	let { image, onclick, onmouseenter, isFocused, isSelected, dataIndex, showMeta = false } = $props();
+    export interface ImageCardProps {
+        image: GalleryImage;
+        onclick?: (e: MouseEvent) => void;
+        onmouseenter?: (e: MouseEvent) => void;
+        isFocused?: boolean;
+        isSelected?: boolean;
+        dataIndex?: number;
+        showMeta?: boolean;
+    }
 
-	let canvasElement = $state(null);
+    let {
+        image,
+        onclick,
+        onmouseenter,
+        isFocused = false,
+        isSelected = false,
+        dataIndex,
+        showMeta = false
+    }: ImageCardProps = $props();
+
+	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let isLoaded = $state(false);
-
-	function formatSize(bytes: number | string) {
-		const num = Number(bytes);
-		if (!num || isNaN(num) || num <= 0) return '';
-		if (num < 1024 * 1024) {
-			return (num / 1024).toFixed(0) + ' KB';
-		}
-		return (num / (1024 * 1024)).toFixed(1) + ' MB';
-	}
-
-	function formatResolution(res: number | string) {
-		const num = Number(res);
-		if (!num || isNaN(num) || num <= 0) return '';
-		if (num >= 1_000_000) {
-			return (num / 1_000_000).toFixed(1) + ' MP';
-		}
-		return (num / 1_000).toFixed(0) + ' kP';
-	}
+	let lastPath = $state(image.filepath)
 
 	$effect(() => {
-		const path = image.filepath;
-		isLoaded = false;
+		if (image.filepath !== lastPath) {
+			lastPath = image.filepath;
+			isLoaded = false;
+		}
 	});
 
 	$effect(() => {
 		if (canvasElement && image.blurhash && !isLoaded) {
 			const pixels = decode(image.blurhash, 32, 32);
 			const ctx = canvasElement.getContext('2d');
+            if (!ctx) return;
 			const imageData = ctx.createImageData(32, 32);
 			imageData.data.set(pixels);
 			ctx.putImageData(imageData, 0, 0);
@@ -57,12 +63,11 @@
 	></canvas>
 
 	<img
-		src="/api/image?path={encodeURIComponent(image.filepath)}"
+		src="/api/image?path={encodeURIComponent(image.filepath)}&thumb=true"
 		alt=""
 		loading="lazy"
 		class:loaded={isLoaded}
 		onload={() => isLoaded = true}
-		onerror={() => isLoaded = true}
 	/>
 
 	{#if image.rating > 0}
@@ -90,7 +95,7 @@
 
 	{#if showMeta && (image.size || image.resolution)}
 		<div class="meta-badge">
-			{#if image.resolution}<span>{formatResolution(image.resolution)}</span>{/if}
+			{#if image.resolution}<span>{formatResolution(image.resolution, image.aspect_ratio)}</span>{/if}
 			{#if image.resolution && image.size}<span class="meta-dot">•</span>{/if}
 			{#if image.size}<span>{formatSize(image.size)}</span>{/if}
 		</div>
@@ -205,7 +210,6 @@
         justify-content: center;
         z-index: 2;
         pointer-events: none;
-        backdrop-filter: blur(1px);
     }
 
     .selection-overlay .check-icon {
@@ -258,13 +262,12 @@
 		justify-content: center;
 		gap: 5px;
 		padding: 3px 8px;
-		background: rgba(0, 0, 0, 0.65);
-		backdrop-filter: blur(6px);
+		background: rgba(0, 0, 0, 0.85);
 		border-radius: 6px;
 		font-size: 0.72rem;
 		color: var(--text);
 		font-weight: 500;
-		letter-spacing: 0.2px;
+		letter-spacing: 0.2rem;
 		pointer-events: none;
 		z-index: 2;
 		border: 1px solid rgba(255, 255, 255, 0.1);

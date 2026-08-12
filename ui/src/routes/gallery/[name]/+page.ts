@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 
 export async function load({ fetch, params, url }) {
+    const folder = url.searchParams.get('folder') || '';
 	const page = url.searchParams.get('page') || '1';
 	const flagFilter = url.searchParams.get('flagFilter') || '';
 	const sortBy = url.searchParams.get('sortBy') || '';
@@ -24,12 +25,13 @@ export async function load({ fetch, params, url }) {
 		if (flagFilter) query.set('flagFilter', flagFilter);
 		if (sortBy) query.set('sortBy', sortBy);
 		if (sortOrder) query.set('sortOrder', sortOrder);
+        if (folder) query.set('folder', folder);
 
 		imagesRes = await fetch(`/api/gallery/${params.name}/images?${query.toString()}`);
 	}
 
 	const [galleryRes, settingsRes] = await Promise.all([
-		fetch(`/api/gallery/${params.name}`),
+		fetch(`/api/gallery/${params.name}${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`),
 		fetch(`/api/settings`)
 	]);
 

@@ -247,7 +247,7 @@
 					<img
 						class="carousel-image"
 						class:loaded={loadedImages[item.image.id]}
-						style={item.offset === 0 ? `transform: translate(${pan.x}px, ${pan.y}px) scale(${zoom}); cursor: ${zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'};` : ''}
+						style={item.offset === 0 ? `transform: translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom}); cursor: ${zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'};` : ''}
 						draggable="false"
 						decoding="async"
 						src={`/api/image?path=${encodeURIComponent(item.image.filepath)}`}
@@ -290,7 +290,7 @@
 			{#if focusBox.visible}
 				<div
 					class="floating-focus"
-					style="transform: translate({focusBox.x}px, {focusBox.y}px); width: {focusBox.w}px; height: {focusBox.h}px;"
+					style="transform: translate3d({focusBox.x}px, {focusBox.y}px, 0); width: {focusBox.w}px; height: {focusBox.h}px;"
 				></div>
 			{/if}
 
@@ -301,7 +301,7 @@
 					data-thumb-index={i}
 					onclick={() => carousel.currentIndex = i}
 				>
-					<img src="/api/image?path={encodeURIComponent(img.filepath)}" alt="" loading="lazy" />
+					<img src="/api/image?path={encodeURIComponent(img.filepath)}&thumb=true" alt="" loading="lazy" />
 					
 					{#if img.flag === 1}
 						<span class="thumb-flag keep">
@@ -335,8 +335,7 @@
 		left: 0;
 		width: 100%;
 		height: 100%;
-		background: rgba(0, 0, 0, 0.6);
-		backdrop-filter: blur(24px);
+		background: rgba(9, 9, 9, 0.96);
 		z-index: 1000;
 		display: flex;
 		align-items: center;
@@ -390,24 +389,26 @@
 		display: flex;
 		justify-content: center;
 		align-items: center;
+		backface-visibility: hidden;
+		transform: translateZ(0);
 		will-change: transform, opacity;
 		transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease;
 	}
 
 	.image-wrapper.center {
-		transform: translateX(0);
+		transform: translate3d(0, 0, 0);
 		opacity: 1;
 		z-index: 2;
 	}
 
 	.image-wrapper.left {
-		transform: translateX(-35px);
+		transform: translate3d(-35px, 0, 0);
 		opacity: 0;
 		z-index: 1;
 	}
 
 	.image-wrapper.right {
-		transform: translateX(35px);
+		transform: translate3d(35px, 0, 0);
 		opacity: 0;
 		z-index: 1;
 	}
@@ -515,8 +516,7 @@
 		left: 0;
 		right: 0;
 		height: 80px;
-		background: color-mix(in srgb, var(--bg-dark) 10%, transparent);
-		backdrop-filter: blur(12px);
+		background: rgba(15, 15, 15, 0.95);
 		border-top: 1px solid var(--border);
 		display: flex;
 		align-items: center;

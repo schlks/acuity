@@ -1,35 +1,37 @@
 <script lang="ts">
 	import { invalidateAll, goto } from '$app/navigation';
-	import { page, navigating } from '$app/stores';
+	import { page, navigating } from '$app/state';
 	import { carousel } from '$lib/stores/carousel.svelte';
 	import { tick } from 'svelte';
 	import ImageCard from '$lib/components/ImageCard.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
 	import CullingMode from '$lib/components/CullingMode.svelte';
+    import type { GalleryImage } from '$lib/types/GalleryImage';
+    import type {ActionReturn} from "svelte/action";
 
 	let { data } = $props();
 	let searchQuery = $state('');
-	let searchThreshold = $state($page.url.searchParams.get('threshold') || '0.9');
+	let searchThreshold = $state(page.url.searchParams.get('threshold') || '0.9');
 	let infiniteScroll = $state(data.settings?.infinite_scroll || false);
 	let currentPage = $derived(Number(data.images.current_page || 1));
-	let currentFlag = $derived($page.url.searchParams.get('flagFilter') || '');
-	let currentSort = $derived($page.url.searchParams.get('sortBy') || 'name');
-	let currentOrder = $derived($page.url.searchParams.get('sortOrder') || 'desc');
+	let currentFlag = $derived(page.url.searchParams.get('flagFilter') || '');
+	let currentSort = $derived(page.url.searchParams.get('sortBy') || 'name');
+	let currentOrder = $derived(page.url.searchParams.get('sortOrder') || 'desc');
 	let hasActiveFilters = $derived(
 		Boolean(
-			$page.url.searchParams.get('q') || 
-			$page.url.searchParams.get('flagFilter') || 
-			$page.url.searchParams.get('sortBy') || 
-			$page.url.searchParams.get('folderFilter') || 
-			$page.url.searchParams.get('sortOrder')
+			page.url.searchParams.get('q') ||
+			page.url.searchParams.get('flagFilter') ||
+			page.url.searchParams.get('sortBy') ||
+			page.url.searchParams.get('folderFilter') ||
+			page.url.searchParams.get('sortOrder')
 		)
 	);
 
 	function resetFilters() {
 		searchQuery = '';
-		searchThreshold = 0.9;
-		goto($page.url.pathname);
+		searchThreshold = '0.9';
+		goto(page.url.pathname);
 	}
 	let pageButtons = $derived.by(() => {
 		let p = [];
@@ -52,13 +54,13 @@
 
 		return p;
 	});
-	let galleryImages = $state([]);
-	let selectedImages = $state([]);
+	let galleryImages = $state<GalleryImage[]>([]);
+	let selectedImages = $state<GalleryImage[]>([]);
 	let batchIsOpen = $state(false);
 	let hasMore = $state(false);
 	let currentInfinitePage = $state(1);
 	let isLoadingMore = $state(false);
-	let searchTimeout;
+	let searchTimeout: number | undefined;
 	let focusedIndex = $state<number>(0);
 	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
 	let isKeyboardMode = $state(false);
@@ -125,7 +127,7 @@
 		}
 	}
 
-	function viewPort(node, callback) {
+	function viewPort(node: Element, callback: { (): Promise<void>; (): void; }): ActionReturn {
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0].isIntersecting) {
@@ -145,7 +147,7 @@
 		};
 	}
 
-	function applyFilter(key, value) {
+	function applyFilter(key: string, value: string | null) {
 		let currentUrl = new URL(location.href);
 		if (currentUrl.searchParams.get(key) === value) {
 			currentUrl.searchParams.delete(key);
@@ -154,10 +156,10 @@
 		} else {
 			currentUrl.searchParams.delete(key);
 		}
-		currentUrl.searchParams.set('page', 1);
+		currentUrl.searchParams.set('page', '1');
 
 		goto(currentUrl.toString());
-		document.querySelector('.main-content').scrollTo({ top: 0, behavior: 'smooth' });
+		document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
 	async function saveGalleryName() {
@@ -202,10 +204,9 @@
 		}
 	}
 
-	function handleSearch(event) {
+	function handleSearch(event?: SubmitEvent | Event) {
 		if (event) event.preventDefault();
 
-		// Nimm den Fokus vom aktuellen Element (z.B. der Suchleiste) weg
 		if (document.activeElement instanceof HTMLElement) {
 			document.activeElement.blur();
 		}
@@ -219,11 +220,11 @@
 			currentUrl.searchParams.delete('threshold');
 		}
 
-		currentUrl.searchParams.set('page', 1);
+		currentUrl.searchParams.set('page', '1');
 
 		goto(currentUrl.toString());
-		document.querySelector('.main-content').scrollTo({ top: 0, behavior: 'smooth' });
-		document.activeElement.blur();
+		document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+        (document.activeElement as HTMLElement)?.blur();
 	}
 
 	function handleDebounceSearch() {
@@ -260,7 +261,7 @@
 					const rect = trigger.getBoundingClientRect();
 					if (rect.top <= window.innerHeight + 800) {
 						isLoadingMore = false;
-						loadMore();
+						await loadMore();
 						return;
 					}
 				}
@@ -337,7 +338,7 @@
 		formData.append('source_gallery', data.gallery.name);
 
 		if (criteria === 'selected') {
-			const ids = selectedImages.map(img => img.id ?? img.ID).join(',');
+			const ids = selectedImages.map(img => img.id).join(',');
 			formData.append('image_ids', ids);
 		}
 
@@ -466,7 +467,7 @@
 				if (isFirstRow) {
 					container?.scrollTo({ top: 0, behavior: 'smooth' });
 				} else if (isLastRow) {
-					container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+					container?.scrollTo({ top: container?.scrollHeight, behavior: 'smooth' });
 				} else {
 					bestCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 				}
@@ -599,7 +600,7 @@
 		<button class="btn-icon" title="Culling Mode" onclick={() => {
 			const nextUnflagged = galleryImages.findIndex(img => !img.flag);
 
-			focusIndex = nextUnflagged !== -1 ? nextUndlagged : 0;
+			focusedIndex = nextUnflagged !== -1 ? nextUnflagged : 0;
 			isCullingOpen = true;
 		}}>
 			<span class="material-symbols-outlined">bolt</span>
@@ -632,7 +633,7 @@
 				<input type="search" placeholder="Search within gallery..." bind:value={searchQuery} />
 			</div>
 
-			<div class="threshold-wrapper" title="Search Precision" class:active={searchThreshold != 0.9}>
+			<div class="threshold-wrapper" title="Search Precision" class:active={searchThreshold != '0.9'}>
 				<span class="material-symbols-outlined">tune</span>
 				<input
 					type="number"
@@ -748,26 +749,26 @@
 	</div>
 </div>
 
-{#if $navigating}
+{#if navigating}
 	<div class="loader-container">
 		<Spinner />
 	</div>
 {/if}
 
-{#if galleryImages.length === 0 && !$navigating}
+{#if galleryImages.length === 0 && !navigating}
 	<div class="empty-state">
 		<span class="material-symbols-outlined empty-icon">
-			{$page.url.searchParams.get('q') ? 'search_off' : currentFlag ? 'filter_alt_off' : 'photo_library'}
+			{page.url.searchParams.get('q') ? 'search_off' : currentFlag ? 'filter_alt_off' : 'photo_library'}
 		</span>
 		<h3>
-			{$page.url.searchParams.get('q') 
+			{page.url.searchParams.get('q')
 				? 'No results found' 
 				: currentFlag 
 					? 'No images match the filter' 
 					: 'This gallery is empty'}
 		</h3>
 		<p>
-			{#if $page.url.searchParams.get('q')}
+			{#if page.url.searchParams.get('q')}
 				No matching images found for "{searchQuery}". Try a different search term or adjust the threshold.
 			{:else if currentFlag}
 				There are no images matching your current flag filter.
@@ -776,7 +777,7 @@
 			{/if}
 		</p>
 		
-		{#if $page.url.searchParams.get('q') || currentFlag}
+		{#if page.url.searchParams.get('q') || currentFlag}
 			<button class="empty-action-btn" onclick={() => goto(`/gallery/${data.gallery.name}`)}>
 				<span class="material-symbols-outlined">restart_alt</span>
 				Reset filters
@@ -789,7 +790,7 @@
 		{/if}
 	</div>
 {:else}
-	<div class="gallery-grid medium" class:keyboard-nav={isKeyboardMode} class:loading={$navigating}>
+	<div class="gallery-grid medium" class:keyboard-nav={isKeyboardMode} class:loading={navigating}>
 		<hr />
 		{#if focusBox.visible && isKeyboardMode}
 			<div
@@ -936,7 +937,7 @@
 		text-decoration-color: var(--secondary);
 		text-decoration-thickness: 4px;
 		text-underline-offset: 6px;
-		padding: 0px 0px 24px 0px;
+		padding: 0 0 24px 0;
 		cursor: pointer;
 	}
 
@@ -984,7 +985,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -1060,7 +1061,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -1078,7 +1079,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--tertiary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -1117,7 +1118,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -1140,7 +1141,7 @@
 
 	.input-wrapper.active::before {
 		height: 2px;
-		border-radius: 0px;
+		border-radius: 0;
 		background: var(--tertiary);
 	}
 
@@ -1207,7 +1208,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -1229,7 +1230,7 @@
 
 	.threshold-wrapper.active::before {
 		height: 2px;
-		border-radius: 0px;
+		border-radius: 0;
 		background: var(--tertiary);
 	}
 
@@ -1265,6 +1266,7 @@
 		margin: 0;
 	}
 	.threshold-wrapper input[type='number'] {
+        appearance: textfield;
 		-moz-appearance: textfield;
 	}
 
@@ -1289,16 +1291,8 @@
 		padding: 0 24px 24px;
 	}
 
-	.gallery-grid.small {
-		--grid-base: 150px;
-	}
-
 	.gallery-grid.medium {
 		--grid-base: 250px;
-	}
-
-	.gallery-grid.large {
-		--grid-base: 400px;
 	}
 
 	.gallery-grid::after {
@@ -1320,30 +1314,6 @@
 		gap: 8px;
 	}
 
-	.page-btn {
-		background: transparent;
-		border: 1px solid transparent;
-		color: var(--text-muted);
-		font-family: inherit;
-		font-size: 1rem;
-		width: 40px;
-		height: 40px;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.page-btn:hover {
-		background-color: var(--bg-light);
-		color: var(--text);
-	}
-
-	.page-btn.active {
-		background-color: color-mix(in srgb, var(--info) 20%, transparent);
-		color: var(--info);
-		border-color: color-mix(in srgb, var(--info) 40%, transparent);
-	}
-
 	.page-dots-btn {
 		letter-spacing: 2px;
 		font-size: 1.1rem;
@@ -1361,6 +1331,7 @@
 		font-weight: 600;
 		padding: 0;
 		outline: none;
+        appearance: textfield;
 		-moz-appearance: textfield;
 	}
 
@@ -1420,7 +1391,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -1484,10 +1455,6 @@
 		flex-wrap: wrap;
 		gap: 16px;
 		padding: 0 24px 24px;
-	}
-
-	.gallery-grid.keyboard-nav :global(.image-card) {
-		pointer-events: none;
 	}
 
 	.floating-focus {

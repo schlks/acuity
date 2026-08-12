@@ -10,6 +10,7 @@
 }
 
 :root {
+	color-scheme: dark;
 	--bg-dark: #000000;
 	--bg: #090909;
 	--bg-light: #1c1c1c;
@@ -24,10 +25,15 @@
 	--info: #9589f3;
 }
 
+select option {
+	background-color: var(--bg-dark);
+	color: var(--text);
+}
+
 * {
 	box-sizing: border-box;
 	-ms-overflow-style: none;
-	scorllbar-width: none;
+	scrollbar-width: none;
 }
 
 body {
@@ -63,4 +69,5 @@ hr {
 	display: flex;
 	flex-direction: column;
 	overflow-y: auto;
+	scroll-behavior: smooth;
 }

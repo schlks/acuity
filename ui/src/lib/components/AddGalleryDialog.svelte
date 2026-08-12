@@ -24,6 +24,23 @@
 		}
 	});
 
+	async function handleSelectDirectory() {
+		if (typeof window !== 'undefined' && (window as any).go?.main?.App?.SelectDirectory) {
+			try {
+				const selected = await (window as any).go.main.App.SelectDirectory();
+				if (selected) {
+					path = selected;
+					if (!name) {
+						const parts = selected.split(/[/\\]/).filter(Boolean);
+						name = parts[parts.length - 1] || '';
+					}
+				}
+			} catch (err) {
+				console.error("Directory selection error:", err);
+			}
+		}
+	}
+
 	async function handleImport(e) {
 		e.preventDefault();
 		errorMsg = '';
@@ -60,16 +77,17 @@
 			<div class="error-msg">{errorMsg}</div>
 		{/if}
 		<div class="form-group">
-			<label>
-				Name: 
-				<input type="text" bind:value={name} placeholder="z. B. Vacation" required />
-			</label>
+			<label for="gallery-name-input">Name:</label>
+			<input id="gallery-name-input" type="text" bind:value={name} placeholder="z. B. Vacation" required />
 		</div>
 		<div class="form-group">
-			<label>
-				Path: 
-				<input type="text" bind:value={path} placeholder="/home/user/images" required />
-			</label>
+			<label for="gallery-path-input">Path:</label>
+			<div class="input-with-button">
+				<input id="gallery-path-input" type="text" bind:value={path} placeholder="/home/user/images" required />
+				<button type="button" class="btn-browse" onclick={handleSelectDirectory} title="Choose a folder">
+					<span class="material-symbols-outlined">folder_open</span>
+				</button>
+			</div>
 		</div>
 
 		<button type="submit" style="display: none;"></button>
@@ -131,9 +149,36 @@
 	.form-group label {
 		font-size: 0.9rem;
 		color: var(--text-muted);
+	}
+
+	.input-with-button {
 		display: flex;
-		flex-direction: column;
 		gap: 8px;
+	}
+
+	.input-with-button input {
+		flex: 1;
+	}
+
+	.btn-browse {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--bg);
+		border: 1px solid var(--bg);
+		color: var(--primary);
+		padding: 8px 12px;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: border-color 0.2s, background-color 0.2s;
+	}
+
+	.btn-browse:hover {
+		border-color: var(--primary);
+	}
+
+	.btn-browse .material-symbols-outlined {
+		font-size: 20px;
 	}
 
 	input[type="text"] {

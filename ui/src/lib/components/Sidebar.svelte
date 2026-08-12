@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { goto, invalidateAll } from '$app/navigation';
 	import SettingsDialog from "./SettingsDialog.svelte";
 	import AddGalleryDialog from "./AddGalleryDialog.svelte";
@@ -7,6 +7,7 @@
 	let { galleries } = $props();
 	let showSettings = $state(false);
 	let showAddGallery = $state(false);
+    let expandedGalleries = $state<Record<string, boolean>>({});
 
 
 	async function deleteGallery(name: string) {
@@ -18,7 +19,7 @@
 			});
 			if (res.ok) {
 				await invalidateAll();
-				if ($page.params.name === name) {
+				if (page.params.name === name) {
 					await goto('/');
 				}
 			} else {
@@ -53,35 +54,61 @@
 	<nav class="nav-list">
 		<div class="nav-scroll">
 			{#each galleries as gallery}
-				<div class="gallery-item-wrapper">
-					<a
-						href="/gallery/{encodeURIComponent(gallery.name)}"
-						class="nav-item"
-						class:active={$page.params.name === gallery.name}
-					>
-						<span class="material-symbols-outlined">folder</span>
-						{gallery.name}
-					</a>
-					<button class="delete-btn" onclick={() => deleteGallery(gallery.name)} title="delete gallery">
-						<span class="material-symbols-outlined">delete</span>
-					</button>
-				</div>
-			{/each}
+                {@const subFolders = gallery.sub_folders || []}
+                {@const isExpanded = expandedGalleries[gallery.name] ?? (page.params.name === gallery.name)}
+                <div class="gallery-block">
+                    <div class="gallery-item-wrapper">
+                        {#if subFolders.length > 0}
+                            <button
+                                class="toggle-btn"
+                                onclick="{() => expandedGalleries[gallery.name] = !isExpanded}"
+                                title="Toggle Subfolders">
+                                <span class="material-symbols-outlined">{isExpanded ? 'expand_more' : 'chevron_right'}</span>
+                            </button>
+                        {/if}
+                        <a
+                            href="/gallery/{encodeURIComponent(gallery.name)}"
+                            class="nav-item"
+                            class:active={page.params.name === gallery.name}
+                        >
+                            <span class="material-symbols-outlined">folder</span>
+                            {gallery.name}
+                        </a>
+                        <button class="delete-btn" onclick={() => deleteGallery(gallery.name)} title="delete gallery">
+                            <span class="material-symbols-outlined">delete</span>
+                        </button>
+                    </div>
+                    {#if isExpanded && subFolders.length > 0}
+                        <div class="subfolder-list">
+                            {#each subFolders as sub}
+                                <a
+                                    href="/gallery/{encodeURIComponent(gallery.name)}?folder={encodeURIComponent(sub.path)}"
+                                    class="nav-item sub-item"
+                                    class:active={page.params.name === gallery.name && page.url.searchParams.get('folder') === sub.path}
+                                >
+                                    <span class="material-symbols-outlined">folder_open</span>
+                                    <span class="sub-name">{sub.name}</span>
+                                </a>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+                {/each}
 
-			<hr />
+            <hr />
 
-			<div class="settings-container">
-				{#if showAddGallery}
-					<AddGalleryDialog onClose={() => showAddGallery = false} />
-				{/if}
-				<button class="nav-item add-btn" class:active={showAddGallery} onclick={() => showAddGallery = !showAddGallery}>
-					<span class="material-symbols-outlined">add</span>
-					Add Gallery
-				</button>
-			</div>
+            <div class="settings-container">
+                {#if showAddGallery}
+                    <AddGalleryDialog onClose={() => showAddGallery = false} />
+                {/if}
+                <button class="nav-item add-btn" class:active={showAddGallery} onclick={() => showAddGallery = !showAddGallery}>
+                    <span class="material-symbols-outlined">add</span>
+                    Add Gallery
+                </button>
+            </div>
 		</div>
 		<div class="nav-bottom">
-			<a href="/gallery/global/duplicates" class="nav-item" class:active={$page.url.pathname === '/gallery/global/duplicates'}>
+			<a href="/gallery/global/duplicates" class="nav-item" class:active={page.url.pathname === '/gallery/global/duplicates'}>
 				<span class="material-symbols-outlined">search</span>
 				Duplicates
 			</a>
@@ -102,7 +129,7 @@
 
 <style>
 	.sidebar-left {
-		width: 300px;
+		width: 350px;
 		flex-shrink: 0;
 		background-color: var(--bg);
 		border-right: 1px solid var(--border);
@@ -177,7 +204,7 @@
 		width: 100%;
 		height: 2px;
 		background: var(--primary);
-		border-radius: 0px;
+		border-radius: 0;
 		z-index: -1;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
@@ -198,7 +225,7 @@
 
 	.nav-item.active::before {
 		height: 2px;
-		border-radius: 0px;
+		border-radius: 0;
 		background: var(--tertiary);
 	}
 	
@@ -257,5 +284,64 @@
 
     .delete-btn:hover {
         background: rgba(255, 0, 0, 0.1);
+    }
+
+    .gallery-block {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .toggle-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+        margin-right: -4px;
+        border-radius: 4px;
+        transition: color 0.2s, transform 0.2s;
+        z-index: 2;
+    }
+
+    .toggle-btn:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .toggle-btn .material-symbols-outlined {
+        font-size: 1.2rem;
+    }
+
+    .subfolder-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-left: calc(5% + 18px);
+        padding-left: 10px;
+        border-left: 2px solid var(--border);
+        margin-top: 4px;
+        margin-bottom: 4px;
+    }
+
+    .sub-item {
+        font-size: 0.95rem;
+        font-weight: 500;
+        padding: 6px 12px;
+        width: 100%;
+        gap: 8px;
+    }
+
+    .sub-item .material-symbols-outlined {
+        font-size: 1.1rem;
+    }
+
+    .sub-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 </style>
