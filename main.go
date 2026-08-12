@@ -1,10 +1,10 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"log/slog"
 	"math"
-	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -12,8 +12,11 @@ import (
 	"time"
 
 	"acuity/internal/config"
-	"acuity/pkg/db"
-	"acuity/pkg/web"
+
+	"github.com/wailsapp/wails/v2"
+        "github.com/wailsapp/wails/v2/pkg/options"
+        "github.com/wailsapp/wails/v2/pkg/options/assetserver"
+        "github.com/wailsapp/wails/v2/pkg/options/linux"
 )
 
 func formatSize(b float64) string {
@@ -145,7 +148,12 @@ func formatLens(make, model string) string {
 	return strings.TrimSpace(res)
 }
 
+//go:embed all:ui/build
+var assets embed.FS
+
 func main() {
+	_ = os.Setenv("WEBKIT_FORCE_COMPOSITING_MODE", "1")
+
 	Config, err := config.Load()
 	if err != nil {
 		fmt.Println("Failed to load config")
@@ -160,50 +168,34 @@ func main() {
 		slog.SetDefault(logger)
 	}
 
-	wClient, err := db.NewWeaviateClient(Config.WeaviateHost + Config.WeaviatePort)
+
+	app := NewApp(Config)
+	err = wails.Run(&options.App{
+		Title:		"Acuity",
+		Width: 		1280,
+		Height: 	800,
+		MinWidth: 	1024,
+		MinHeight: 	700,
+
+		BackgroundColour: &options.RGBA{R: 9, G: 9, B: 9, A: 255},
+		AssetServer: &assetserver.Options{
+			Assets:  assets,
+			Handler: app.mux,
+		},
+
+		OnStartup: 	app.startup,
+
+		Bind: []any{
+			app,
+		},
+
+		Linux: &linux.Options{
+			WindowIsTranslucent: false,
+			WebviewGpuPolicy:    linux.WebviewGpuPolicyAlways,
+		},
+	})
+
 	if err != nil {
-		slog.Error("Failed to create Weaviate client", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	if err := wClient.WaitForReady(120 * time.Second); err != nil {
-		slog.Error("Failed to wait for Weaviate server", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	slog.Info("Connected to Weaviate server")
-
-	sClient, err := db.NewSqliteDB(Config.DBPath)
-	if err != nil {
-		slog.Error("Failed to open SQLite database", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	if err := sClient.InitTable(); err != nil {
-		slog.Error("Failed to initialize table", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	if err := wClient.InitSchema(); err != nil {
-		slog.Error("Error during schema initialization", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	webDir := os.Getenv("WEB_DIR")
-	if webDir == "" {
-		webDir = "web"
-	}
-	// templates := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join(webDir, "templates/*.html")))
-
-	webServer := web.NewServer(sClient, wClient, Config)
-
-	mux := http.NewServeMux()
-	webServer.RegisterRoutes(mux)
-
-	slog.Info(fmt.Sprintf("Acuity Web-Interface listening on http://localhost:%s", Config.Port))
-	err = http.ListenAndServe(":"+Config.Port, mux)
-	if err != nil {
-		slog.Error("Server crashed", slog.Any("error", err))
-		os.Exit(1)
+		slog.Error("Failed to start Desktop-App", slog.Any("error", err))
 	}
 }
