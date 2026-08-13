@@ -9,8 +9,11 @@
 *.dylib
 *.out
 *.test
-AppDir/
-*.AppImage
+# --- Packaging ---
+packaging/src/
+packaging/pkg/
+packaging/acuity/
+packaging/*.pkg.tar.zst
 *.pkg.tar.zst
 
 # --- Wails Temp Files ---

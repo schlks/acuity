@@ -1,9 +1,0 @@
-FROM golang:alpine
-
-RUN apk add --no-cache vips-dev gcc musl-dev glycin-loaders-all exiftool vips vips-heif
-
-WORKDIR /app
-
-RUN go install github.com/air-verse/air@latest
-
-CMD ["air"]
