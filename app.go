@@ -1,6 +1,7 @@
 package main
 
 import (
+	"acuity/pkg/ai"
 	"acuity/pkg/config"
 	"acuity/pkg/db"
 	"acuity/pkg/web"
@@ -9,7 +10,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -29,18 +29,6 @@ func NewApp(cfg *config.Config) *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	wClient, err := db.NewWeaviateClient(a.config.WeaviateHost + a.config.WeaviatePort)
-	if err != nil {
-		slog.Error("Failed to create Weaviate client", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	if err := wClient.WaitForReady(120 * time.Second); err != nil {
-		slog.Error("Failed to wait for Weaviate server", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	slog.Info("Connected to Weaviate server")
 
 	sClient, err := db.NewSqliteDB(a.config.DBPath)
 	if err != nil {
@@ -53,25 +41,43 @@ func (a *App) startup(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	if err := wClient.InitSchema(); err != nil {
-		slog.Error("Error during schema initialization", slog.Any("error", err))
+	vClient := db.NewVectorClient(sClient, nil)
+	if err := vClient.InitSchema(); err != nil {
+		slog.Error("Failed to initialize vector schema", slog.Any("error", err))
 		os.Exit(1)
 	}
+
+	// Initialize AI models in background (so UI opens instantly and shows setup modal if downloading)
+	go func() {
+		modelPaths, err := ai.EnsureModels()
+		if err != nil {
+			slog.Error("Failed to ensure AI models", slog.Any("error", err))
+			return
+		}
+
+		embedder, err := ai.NewCLIPEmbedder(modelPaths.VisualModelPath, modelPaths.TextualModelPath, modelPaths.OnnxLibPath)
+		if err != nil {
+			slog.Error("Failed to initialize CLIP AI embedder", slog.Any("error", err))
+			return
+		}
+
+		vClient.SetEmbedder(embedder)
+		slog.Info("Local CLIP AI Engine successfully initialized")
+	}()
 
 	webDir := os.Getenv("WEB_DIR")
 	if webDir == "" {
 		webDir = "web"
 	}
-	// templates := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join(webDir, "templates/*.html")))
 
-	webServer := web.NewServer(sClient, wClient, a.config)
-
+	webServer := web.NewServer(sClient, vClient, a.config)
 	webServer.RegisterRoutes(a.mux)
+
 	slog.Info(fmt.Sprintf("Acuity Web-Interface listening on http://localhost:%s", a.config.Port))
 	go func() {
 		err := http.ListenAndServe(":"+a.config.Port, a.mux)
 		if err != nil {
-
+			slog.Error("Web server error", slog.Any("error", err))
 		}
 	}()
 }

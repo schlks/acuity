@@ -3,7 +3,9 @@ package db
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"image/jpeg"
 	"io/fs"
@@ -12,25 +14,21 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/buckket/go-blurhash"
 	"github.com/evanoberholster/imagemeta"
-	"github.com/go-openapi/strfmt"
-	"github.com/google/uuid"
 	"github.com/h2non/bimg"
 	"github.com/pillowskiy/imagesize"
-	"github.com/weaviate/weaviate/entities/models"
 	"golang.org/x/sync/errgroup"
 	"gonum.org/v1/gonum/floats"
 )
 
 type Bridge struct {
 	sDB           *SQLiteClient
-	wDB           *WeaviateClient
+	vDB           *VectorClient
 	ExpectedCount map[int]int
 	CurrentCount  map[int]int
 	cancelFuncs   map[int]context.CancelFunc
@@ -38,8 +36,8 @@ type Bridge struct {
 }
 
 type ImagePayload struct {
-	Weaviate WImage
-	SQLite   SImage
+	SQLite    SImage
+	Embedding []float32
 }
 
 type ImageInfo struct {
@@ -48,10 +46,10 @@ type ImageInfo struct {
 	Name    string `json:"name,omitempty"`
 }
 
-func NewBridge(sDB *SQLiteClient, wDB *WeaviateClient) *Bridge {
+func NewBridge(sDB *SQLiteClient, vDB *VectorClient) *Bridge {
 	return &Bridge{
 		sDB:           sDB,
-		wDB:           wDB,
+		vDB:           vDB,
 		ExpectedCount: make(map[int]int),
 		CurrentCount:  make(map[int]int),
 		cancelFuncs:   make(map[int]context.CancelFunc),
@@ -64,6 +62,8 @@ func (b *Bridge) CancelImport(galleryID int) {
 	if cancel, exists := b.cancelFuncs[galleryID]; exists {
 		cancel()
 		delete(b.cancelFuncs, galleryID)
+		b.ExpectedCount[galleryID] = 0
+		delete(b.CurrentCount, galleryID)
 	}
 }
 
@@ -103,8 +103,8 @@ func (b *Bridge) getSeenFilePaths(known []string, folderPath string) ([]string, 
 	}
 
 	var missingPaths []string
-	for path, wasSeen := range seen {
-		if !wasSeen {
+	for path, exists := range seen {
+		if !exists {
 			missingPaths = append(missingPaths, path)
 		}
 	}
@@ -112,44 +112,30 @@ func (b *Bridge) getSeenFilePaths(known []string, folderPath string) ([]string, 
 	return filePaths, missingPaths, nil
 }
 
-func (b *Bridge) CreateGallery(name string, folderPath string) error {
-	if err := os.MkdirAll(folderPath, 0o755); err != nil {
-		return err
-	}
-
-	if err := b.sDB.InsertGallery(folderPath, name); err != nil {
-		return nil
-	}
-
-	if err := b.UpdateFolder(name); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (b *Bridge) DeleteGallery(ctx context.Context, id int) error {
-	if err := b.sDB.RemoveGallery(id); err != nil {
-		return err
-	}
-
-	if err := b.wDB.RemoveGalleryImages(ctx, id); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (b *Bridge) UpdateFolder(name string) error {
-	gallery, err := b.sDB.GetGalleryByName(name)
+func (b *Bridge) ScanGalleries() error {
+	galleries, err := b.sDB.GetAllGalleries()
 	if err != nil {
 		return err
 	}
 
+	for _, gallery := range galleries {
+		err := b.ScanGallery(gallery.Name)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Bridge) ScanGallery(name string) error {
+	gallery, err := b.sDB.GetGalleryByName(name)
+	if err != nil {
+		return err
+	}
 	b.mu.Lock()
 	if b.ExpectedCount[gallery.ID] != 0 {
 		b.mu.Unlock()
-		return nil
+		return fmt.Errorf("gallery is already being imported")
 	}
 	b.ExpectedCount[gallery.ID] = -1
 	b.mu.Unlock()
@@ -158,23 +144,30 @@ func (b *Bridge) UpdateFolder(name string) error {
 		defer func() {
 			b.mu.Lock()
 			b.ExpectedCount[gallery.ID] = 0
+			delete(b.CurrentCount, gallery.ID)
 			delete(b.cancelFuncs, gallery.ID)
 			b.mu.Unlock()
 		}()
 
-		known, err := b.sDB.GetKnownPaths(gallery.ID)
-		if err != nil {
-			slog.Error("Failed to get file paths", slog.Any("error", err))
-		}
+		importCtx, cancel := context.WithCancel(context.Background())
 
-		filePaths, missingPaths, err := b.getSeenFilePaths(known, gallery.Path)
+		knownPaths, err := b.sDB.GetKnownPaths(gallery.ID)
 		if err != nil {
-			slog.Error("Failed to get file paths", slog.Any("error", err))
+			cancel()
 			return
 		}
 
-		currentCount, _ := b.sDB.GetGalleryCount(gallery.ID)
-		importCtx, cancel := context.WithCancel(context.Background())
+		filePaths, missingPaths, err := b.getSeenFilePaths(knownPaths, gallery.Path)
+		if err != nil {
+			cancel()
+			return
+		}
+
+		currentCount, err := b.sDB.GetGalleryCount(gallery.ID)
+		if err != nil {
+			cancel()
+			return
+		}
 
 		b.mu.Lock()
 		b.ExpectedCount[gallery.ID] = currentCount + len(filePaths) - len(missingPaths)
@@ -213,45 +206,44 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 	resultChan, done := make(chan ImagePayload, batchSize), make(chan struct{})
 
 	go func() {
-		var wBatch []*models.Object
 		var sBatch []SImage
+		var embBatch [][]float32
 
-		var amount int
 		for result := range resultChan {
-			id := uuid.NewMD5(uuid.NameSpaceURL, []byte(result.Weaviate.Path+strconv.Itoa(galleryID))).String()
-			obj := &models.Object{
-				ID:    strfmt.UUID(id),
-				Class: "Image",
-				Properties: map[string]any{
-					"filepath":   result.Weaviate.Path,
-					"image":      result.Weaviate.Base64,
-					"gallery_id": galleryID,
-				},
-			}
-			wBatch, sBatch = append(wBatch, obj), append(sBatch, result.SQLite)
+			sBatch = append(sBatch, result.SQLite)
+			embBatch = append(embBatch, result.Embedding)
 
-			if len(wBatch) >= batchSize {
-				failed := b.wDB.WriteBatchDB(ctx, wBatch)
+			if len(sBatch) >= batchSize {
 				if err := b.sDB.InsertImage(sBatch); err != nil {
 					slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
 				}
-				amount = len(wBatch) - failed
-				if progressCallback != nil {
-					progressCallback(amount)
+				for i, sImg := range sBatch {
+					if len(embBatch[i]) > 0 {
+						if img, err := b.sDB.GetImageByPath(sImg.FilePath); err == nil {
+							_ = b.vDB.InsertVector(img.ID, embBatch[i])
+						}
+					}
 				}
-
-				wBatch, sBatch = make([]*models.Object, 0, batchSize), make([]SImage, 0, batchSize)
-				slog.Info("Wrote Images into the Databases", slog.Int("amount", amount))
+				if progressCallback != nil {
+					progressCallback(len(sBatch))
+				}
+				slog.Info("Wrote Images into SQLite and Vector Store", slog.Int("amount", len(sBatch)))
+				sBatch, embBatch = make([]SImage, 0, batchSize), make([][]float32, 0, batchSize)
 			}
 		}
-		if len(wBatch) > 0 {
-			failed := b.wDB.WriteBatchDB(ctx, wBatch)
-			amount = len(wBatch) - failed
+		if len(sBatch) > 0 {
 			if err := b.sDB.InsertImage(sBatch); err != nil {
 				slog.Error("Failed to insert SQLite batch", slog.Any("error", err))
 			}
+			for i, sImg := range sBatch {
+				if len(embBatch[i]) > 0 {
+					if img, err := b.sDB.GetImageByPath(sImg.FilePath); err == nil {
+						_ = b.vDB.InsertVector(img.ID, embBatch[i])
+					}
+				}
+			}
 			if progressCallback != nil {
-				progressCallback(amount)
+				progressCallback(len(sBatch))
 			}
 		}
 		gallery, err := b.sDB.GetGalleryByID(galleryID)
@@ -268,23 +260,29 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 		close(done)
 	}()
 
-	eg := new(errgroup.Group)
+	eg, gCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(maxWorkers)
 
 	for _, path := range filePaths {
+		select {
+		case <-gCtx.Done():
+			break
+		default:
+		}
+
+		filePath := path
 		eg.Go(func() error {
 			select {
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-gCtx.Done():
+				return gCtx.Err()
 			default:
 			}
 
 			var sImage SImage
-			var wImage WImage
 
 			sImage.GalleryID = galleryID
-			sImage.FilePath = path
-			sImage.Extension = filepath.Ext(path)
+			sImage.FilePath = filePath
+			sImage.Extension = filepath.Ext(filePath)
 
 			data, err := os.ReadFile(path)
 			if err != nil {
@@ -294,16 +292,12 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 
 			bimgImg := bimg.NewImage(data)
 			var width, height int
-			imageSize, err := imagesize.ExtractFileInfo(path)
-			if err == nil {
+			if size, imgErr := bimgImg.Size(); imgErr == nil {
+				width = size.Width
+				height = size.Height
+			} else if imageSize, err := imagesize.ExtractFileInfo(path); err == nil {
 				width = imageSize.Width
 				height = imageSize.Height
-			} else {
-				slog.Error("failed to get image size with imagesize", slog.String("file", path), slog.Any("error", err))
-				if size, imgErr := bimgImg.Size(); imgErr == nil {
-					width = size.Width
-					height = size.Height
-				}
 			}
 
 			var resolution int
@@ -313,26 +307,28 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 				aspectRatio = float64(width) / float64(height)
 			}
 
-			jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
-			if err != nil {
-				return nil
-			}
-
+			// Generate blurhash by resizing & converting to JPEG
+			bhash := ""
 			smallImgOptions := bimg.Options{
 				Width:  128,
 				Height: 128,
 				Crop:   false,
+				Type:   bimg.JPEG,
 			}
-			smallBuffer, err := bimgImg.Process(smallImgOptions)
-			if err != nil {
-				return nil
+			if smallBuffer, err := bimgImg.Process(smallImgOptions); err == nil {
+				if img, err := jpeg.Decode(bytes.NewReader(smallBuffer)); err == nil {
+					if bh, err := blurhash.Encode(4, 3, img); err == nil {
+						bhash = bh
+					}
+				}
 			}
-			img, err := jpeg.Decode(bytes.NewReader(smallBuffer))
-			if err != nil {
-				return nil
-			}
-			bhash, _ := blurhash.Encode(4, 3, img)
 			sImage.Blurhash = bhash
+
+			hash := sha256.Sum256(data)
+			sImage.FileHash = hex.EncodeToString(hash[:])
+			sImage.Width = width
+			sImage.Height = height
+			sImage.Tags = ""
 
 			sImage.Date = time.Now().Format(time.RFC3339)
 			sImage.Taken = sImage.Date
@@ -354,12 +350,16 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 				sImage.Flash = x.ExifIFD.Flash.Fired()
 			}
 
-			wImage.Path = path
-			wImage.Base64 = base64.StdEncoding.EncodeToString(jpegBuffer)
+			var embedding []float32
+			if b.vDB != nil && b.vDB.embedder != nil {
+				if emb, err := b.vDB.embedder.EmbedImage(data); err == nil {
+					embedding = emb
+				}
+			}
 
 			resultChan <- ImagePayload{
-				Weaviate: wImage,
-				SQLite:   sImage,
+				SQLite:    sImage,
+				Embedding: embedding,
 			}
 			return nil
 		})
@@ -382,44 +382,7 @@ func (b *Bridge) GetGalleryID(name string) (int, error, bool) {
 	if err != nil {
 		return 0, err, false
 	}
-
-	return gallery.ID, nil, true
-}
-
-func (b *Bridge) GetGalleryFiles(name string, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]SImage, error) {
-	galleryID, err, ok := b.GetGalleryID(name)
-	if err != nil && !ok {
-		return nil, err
-	}
-	files, err := b.sDB.GetAllImages(galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
-	if err != nil {
-		return nil, err
-	}
-
-	return files, err
-}
-
-func (b *Bridge) SearchImages(ctx context.Context, search string, galleryID int, threshold float32) ([]SImage, error) {
-	count, err := b.sDB.GetGalleryCount(galleryID)
-	if err != nil {
-		return nil, err
-	}
-	images, err := b.wDB.SearchImage(ctx, search, galleryID, count, threshold)
-	if err != nil {
-		return nil, err
-	}
-	var sImages []SImage
-	for _, img := range images {
-		sImage, err := b.sDB.GetImageByPath(img.Path)
-		if err != nil {
-			slog.Error("Something went wrong", slog.Any("Error", err))
-			continue
-		}
-		dist := img.Distance
-		sImage.Distance = &dist
-		sImages = append(sImages, sImage)
-	}
-	return sImages, nil
+	return gallery.ID, nil, false
 }
 
 func (b *Bridge) GetAllImages(galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]SImage, error) {
@@ -434,7 +397,6 @@ func (b *Bridge) ConvertImage(file []byte) (string, error) {
 	}
 
 	base64Image := base64.StdEncoding.EncodeToString(jpegBuffer)
-
 	return base64Image, nil
 }
 
@@ -446,14 +408,11 @@ func (b *Bridge) DeleteImage(ctx context.Context, inputImg SImage) error {
 
 	slog.Info("Deleting image", slog.String("file", image.FilePath))
 
-	uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(image.FilePath+strconv.Itoa(image.GalleryID))).String()
-	wImage := WImage{ID: uuidStr, Path: image.FilePath}
-
 	if err := b.sDB.RemoveImage(image.ID); err != nil {
 		return err
 	}
 
-	if err := b.wDB.RemoveImage(ctx, wImage); err != nil {
+	if err := b.vDB.RemoveImages(ctx, []int{image.ID}); err != nil {
 		return err
 	}
 
@@ -467,7 +426,7 @@ func (b *Bridge) DeleteImage(ctx context.Context, inputImg SImage) error {
 
 func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 	var paths []string
-	var wImages []WImage
+	var imageIDs []int
 
 	for _, inputImg := range images {
 		img, err := b.sDB.GetImageByID(inputImg.ID)
@@ -477,9 +436,7 @@ func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 		}
 
 		slog.Info("Removing Image from Databases", slog.String("Image", img.FilePath))
-		uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(img.FilePath+strconv.Itoa(img.GalleryID))).String()
-		wImages = append(wImages, WImage{ID: uuidStr, Path: img.FilePath})
-
+		imageIDs = append(imageIDs, img.ID)
 		paths = append(paths, img.FilePath)
 
 		if err := b.sDB.RemoveImage(img.ID); err != nil {
@@ -487,7 +444,7 @@ func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 		}
 	}
 
-	if err := b.wDB.RemoveImages(ctx, wImages); err != nil {
+	if err := b.vDB.RemoveImages(ctx, imageIDs); err != nil {
 		return err
 	}
 
@@ -502,34 +459,7 @@ func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 }
 
 func (b *Bridge) FindDuplicates(ctx context.Context, imageID int, galleryID int, threshold float32) ([]SImage, error) {
-	sImage, err := b.sDB.GetImageByID(imageID)
-	if err != nil {
-		return nil, err
-	}
-	uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(sImage.FilePath+strconv.Itoa(sImage.GalleryID))).String()
-	count, err := b.sDB.GetGalleryCount(galleryID)
-	if err != nil {
-		return nil, err
-	}
-	if count <= 0 {
-		count = 1000
-	}
-	var sImages []SImage
-	images, err := b.wDB.FindDuplicates(ctx, uuidStr, galleryID, count, threshold)
-	if err != nil {
-		return nil, err
-	}
-	for _, img := range images {
-		image, err := b.sDB.GetImageByPath(img.Path)
-		if err != nil {
-			slog.Error("Failed to get Image", slog.String("Image", img.Path), slog.Any("error", err))
-			continue
-		}
-		dist := img.Distance
-		image.Distance = &dist
-		sImages = append(sImages, image)
-	}
-	return sImages, nil
+	return b.vDB.FindDuplicates(ctx, imageID, galleryID, 1000, threshold)
 }
 
 func (b *Bridge) ChangeGallery(ctx context.Context, newID int, sImages []SImage) error {
@@ -537,7 +467,6 @@ func (b *Bridge) ChangeGallery(ctx context.Context, newID int, sImages []SImage)
 	if err != nil {
 		return err
 	}
-	var wImages []WImage
 
 	for _, img := range sImages {
 		if img.FilePath != "" {
@@ -555,10 +484,7 @@ func (b *Bridge) ChangeGallery(ctx context.Context, newID int, sImages []SImage)
 				input, err := os.ReadFile(img.FilePath)
 				if err == nil {
 					if err := os.WriteFile(newPath, input, 0o644); err == nil {
-						err := os.Remove(img.FilePath)
-						if err != nil {
-							return err
-						}
+						_ = os.Remove(img.FilePath)
 						img.FilePath = newPath
 					} else {
 						return fmt.Errorf("failed to write file %s: %w", newPath, err)
@@ -567,18 +493,10 @@ func (b *Bridge) ChangeGallery(ctx context.Context, newID int, sImages []SImage)
 					return fmt.Errorf("failed to read file %s: %w", img.FilePath, err)
 				}
 			}
-			uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(img.FilePath+strconv.Itoa(img.GalleryID))).String()
-			wImages = append(wImages, WImage{ID: uuidStr, Path: img.FilePath})
 		}
 	}
 
-	if err := b.sDB.ChangeGallery(newID, sImages); err != nil {
-		return err
-	}
-	if err := b.wDB.ChangeGallery(ctx, newID, wImages); err != nil {
-		return err
-	}
-	return nil
+	return b.sDB.ChangeGallery(newID, sImages)
 }
 
 func (b *Bridge) CopyToGallery(ctx context.Context, newID int, sImages []SImage) error {
@@ -586,7 +504,6 @@ func (b *Bridge) CopyToGallery(ctx context.Context, newID int, sImages []SImage)
 	if err != nil {
 		return err
 	}
-	var wImages []WImage
 
 	for _, img := range sImages {
 		if img.FilePath != "" {
@@ -609,18 +526,10 @@ func (b *Bridge) CopyToGallery(ctx context.Context, newID int, sImages []SImage)
 			} else {
 				return fmt.Errorf("failed to read source %s: %w", img.FilePath, err)
 			}
-			uuidStr := uuid.NewMD5(uuid.NameSpaceURL, []byte(img.FilePath+strconv.Itoa(img.GalleryID))).String()
-			wImages = append(wImages, WImage{ID: uuidStr, Path: img.FilePath})
 		}
 	}
 
-	if err := b.sDB.InsertImage(sImages); err != nil {
-		return err
-	}
-	if err := b.wDB.CopyToGallery(ctx, newID, wImages); err != nil {
-		return err
-	}
-	return nil
+	return b.sDB.InsertImage(sImages)
 }
 
 func (b *Bridge) GetImageInfo(imageID int) (ImageInfo, error) {
@@ -676,7 +585,7 @@ func (b *Bridge) EditGalleryName(id int, newName string) error {
 }
 
 func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, galleryIDs []int) ([][]SImage, error) {
-	allImages, err := b.wDB.GetVectors(ctx, galleryIDs)
+	allImages, err := b.vDB.GetVectors(ctx, galleryIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -744,86 +653,111 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 		}(start, end)
 	}
 
-	wg.Wait()
-	close(matchesChan)
+	go func() {
+		wg.Wait()
+		close(matchesChan)
+	}()
 
-	adj := make(map[int][]matchPair)
-	for chunk := range matchesChan {
-		for _, m := range chunk {
-			adj[m.i] = append(adj[m.i], m)
-		}
+	var allMatches []matchPair
+	for matches := range matchesChan {
+		allMatches = append(allMatches, matches...)
 	}
 
-	var groups [][]SImage
-	visited := make(map[int]bool)
-	imageMap := make(map[string]SImage)
-
+	type unionFind struct {
+		parent []int
+	}
+	uf := unionFind{parent: make([]int, n)}
 	for i := range n {
-		if visited[i] {
-			continue
+		uf.parent[i] = i
+	}
+	var find func(int) int
+	find = func(i int) int {
+		if uf.parent[i] != i {
+			uf.parent[i] = find(uf.parent[i])
 		}
-		matches, ok := adj[i]
-		if !ok || len(matches) == 0 {
-			continue
+		return uf.parent[i]
+	}
+	union := func(i, j int) {
+		rootI := find(i)
+		rootJ := find(j)
+		if rootI != rootJ {
+			uf.parent[rootI] = rootJ
 		}
+	}
 
-		visited[i] = true
-		groupIndices := []int{i}
-		for _, m := range matches {
-			if !visited[m.j] {
-				visited[m.j] = true
-				groupIndices = append(groupIndices, m.j)
-			}
-		}
+	for _, m := range allMatches {
+		union(m.i, m.j)
+	}
 
-		if len(groupIndices) > 1 {
-			var currentGroup []SImage
-			rootVec := validImages[i].Vector
-			for idx, gIdx := range groupIndices {
-				imgVec := validImages[gIdx]
-				sImg, ok := imageMap[imgVec.Path]
-				if !ok {
-					var fetchErr error
-					sImg, fetchErr = b.sDB.GetImageByPath(imgVec.Path)
-					if fetchErr != nil {
-						continue
-					}
-					imageMap[imgVec.Path] = sImg
+	groups := make(map[int][]int)
+	for i := range n {
+		root := find(i)
+		groups[root] = append(groups[root], i)
+	}
+
+	var duplicateGroups [][]SImage
+	for _, memberIndices := range groups {
+		if len(memberIndices) > 1 {
+			var group []SImage
+			for _, idx := range memberIndices {
+				image, err := b.sDB.GetImageByPath(validImages[idx].Path)
+				if err != nil {
+					slog.Error("Failed to get image by path for duplicate group", slog.String("path", validImages[idx].Path), slog.Any("error", err))
+					continue
 				}
-				dist := 0.0
-				if idx > 0 {
-					var dot float64
-					for k := range rootVec {
-						dot += rootVec[k] * imgVec.Vector[k]
-					}
-					dist = 1.0 - dot
-				}
-				sImg.Distance = &dist
-				currentGroup = append(currentGroup, sImg)
+				group = append(group, image)
 			}
-			if len(currentGroup) > 1 {
-				groups = append(groups, currentGroup)
+			if len(group) > 1 {
+				duplicateGroups = append(duplicateGroups, group)
 			}
 		}
 	}
 
-	return groups, nil
+	return duplicateGroups, nil
+}
+
+func (b *Bridge) CreateGallery(name string, path string) error {
+	return b.sDB.InsertGallery(name, path)
 }
 
 func (b *Bridge) Unflag(galleryName string) error {
-	gallery, err := b.sDB.GetGalleryByName(galleryName)
+	id, err, _ := b.GetGalleryID(galleryName)
 	if err != nil {
 		return err
 	}
-	return b.sDB.Unflag(gallery.ID)
+	return b.sDB.Unflag(id)
+}
+
+func (b *Bridge) UpdateFolder(name string) error {
+	return b.ScanGallery(name)
+}
+
+func (b *Bridge) GetGalleryFiles(name string, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]SImage, error) {
+	id, err, isGlobal := b.GetGalleryID(name)
+	if err != nil && !isGlobal {
+		return nil, err
+	}
+	return b.sDB.GetAllImages(id, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
 }
 
 func (b *Bridge) ResetDatabase(ctx context.Context) error {
 	if err := b.sDB.ResetDatabase(); err != nil {
 		return err
 	}
-	if err := b.wDB.ResetDatabase(ctx); err != nil {
+	return b.vDB.InitSchema()
+}
+
+func (b *Bridge) DeleteGallery(ctx context.Context, galleryID int) error {
+	if err := b.vDB.RemoveGalleryImages(ctx, galleryID); err != nil {
 		return err
 	}
-	return nil
+	return b.sDB.RemoveGallery(galleryID)
+}
+
+func (b *Bridge) SearchImages(ctx context.Context, search string, galleryID int, threshold float32) ([]SImage, error) {
+	return b.vDB.SearchImages(ctx, search, galleryID, threshold)
+}
+
+func (b *Bridge) SearchImage(ctx context.Context, base64Image string, galleryID int, threshold float32) ([]SImage, error) {
+	return b.vDB.SearchImage(ctx, base64Image, galleryID, threshold)
 }

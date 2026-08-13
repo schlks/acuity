@@ -1,6 +1,6 @@
 // Package db provides database clients and operations for both
 // the relational metadata storage (SQLite) and the vector search
-// engine (Weaviate).
+// engine (sqlite-vec).
 package db
 
 import (
@@ -12,8 +12,9 @@ import (
 	"strings"
 	"unicode"
 
+	sqlitevec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/jmoiron/sqlx"
-	"modernc.org/sqlite"
+	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
 type SQLiteClient struct {
@@ -24,9 +25,13 @@ type SImage struct {
 	ID           int      `db:"id" json:"id"`
 	GalleryID    int      `db:"gallery_id" json:"gallery_id"`
 	FilePath     string   `db:"filepath" json:"filepath"`
+	FileHash     string   `db:"file_hash" json:"file_hash"`
 	Blurhash     string   `db:"blurhash" json:"blurhash"`
+	Width        int      `db:"width" json:"width"`
+	Height       int      `db:"height" json:"height"`
 	Rating       int      `db:"rating" json:"rating"`
 	Flag         int      `db:"flag" json:"flag"`
+	Tags         string   `db:"tags" json:"tags"`
 	Extension    string   `db:"extension" json:"extension"`
 	Date         string   `db:"date" json:"date"`
 	Taken        string   `db:"taken" json:"taken"`
@@ -40,7 +45,7 @@ type SImage struct {
 	ShutterSpeed string   `db:"shutter_speed" json:"shutter_speed"`
 	Iso          string   `db:"iso" json:"iso"`
 	Flash        bool     `db:"flash" json:"flash"`
-	Distance     *float64 `db:"-" json:"distance,omitempty"`
+	Distance     *float64 `db:"distance" json:"distance,omitempty"`
 }
 
 type Gallery struct {
@@ -50,7 +55,12 @@ type Gallery struct {
 }
 
 func init() {
-	sqlite.MustRegisterCollationUtf8("NATSORT", naturalCompare)
+	sqlitevec.Auto()
+	sql.Register("sqlite3_custom", &sqlite3.SQLiteDriver{
+		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+			return conn.RegisterCollation("NATSORT", naturalCompare)
+		},
+	})
 }
 
 func naturalCompare(a, b string) int {
@@ -106,7 +116,7 @@ func NewSqliteDB(path string) (*SQLiteClient, error) {
 	if dir := filepath.Dir(path); dir != "" {
 		_ = os.MkdirAll(dir, 0755)
 	}
-	db, err := sqlx.Open("sqlite", path)
+	db, err := sqlx.Open("sqlite3_custom", path)
 	if err != nil {
 		return nil, err
 	}
@@ -137,9 +147,13 @@ func (s *SQLiteClient) InitTable() error {
 	    id INTEGER PRIMARY KEY AUTOINCREMENT,
 	    gallery_id INTEGER,
 	    filepath TEXT UNIQUE,
+	    file_hash TEXT,
 	    blurhash TEXT NOT NULL,
+	    width INTEGER,
+	    height INTEGER,
 	    rating INTEGER DEFAULT 0,
 	    flag INTEGER DEFAULT 0,
+	    tags TEXT DEFAULT '',
 		extension TEXT,
 		date DATETIME,
 		taken DATETIME,
@@ -157,7 +171,10 @@ func (s *SQLiteClient) InitTable() error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_gallery_id ON images(gallery_id);
 	CREATE INDEX IF NOT EXISTS idx_delta ON images(date);
-	CREATE INDEX IF NOT EXISTS idx_rating on images(rating);`
+	CREATE INDEX IF NOT EXISTS idx_rating ON images(rating);
+	CREATE INDEX IF NOT EXISTS idx_flag ON images(flag);
+	CREATE INDEX IF NOT EXISTS idx_gallery_flag ON images(gallery_id, flag);
+	CREATE INDEX IF NOT EXISTS idx_file_hash ON images(file_hash);`
 	_, err := s.DB.Exec(query)
 	if err != nil {
 		return err
@@ -165,7 +182,7 @@ func (s *SQLiteClient) InitTable() error {
 	return nil
 }
 
-func (s *SQLiteClient) InsertGallery(path string, name string) error {
+func (s *SQLiteClient) InsertGallery(name string, path string) error {
 	query := "INSERT INTO galleries (name, path) VALUES (?, ?);"
 
 	_, err := s.DB.Exec(query, name, path)
@@ -189,13 +206,15 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
 	}(tx)
 
 	query, err := tx.PrepareNamed(`
-		INSERT INTO images (gallery_id, filepath, blurhash, rating, flag, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, focal_length, aperture, shutter_speed, 
-iso, flash)
-		VALUES (:gallery_id, :filepath, :blurhash, :rating, :flag, :extension, :date, :taken, :size, :resolution, :aspect_ratio, :camera_make, :lens_make, :focal_length, :aperture, :shutter_speed, 
-:iso, :flash)
+		INSERT INTO images (gallery_id, filepath, file_hash, blurhash, width, height, rating, flag, tags, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, focal_length, aperture, shutter_speed, iso, flash)
+		VALUES (:gallery_id, :filepath, :file_hash, :blurhash, :width, :height, :rating, :flag, :tags, :extension, :date, :taken, :size, :resolution, :aspect_ratio, :camera_make, :lens_make, :focal_length, :aperture, :shutter_speed, :iso, :flash)
 		ON CONFLICT(filepath) DO UPDATE SET
                 gallery_id = :gallery_id,
+                file_hash = :file_hash,
                 blurhash = :blurhash,
+                width = :width,
+                height = :height,
+                tags = :tags,
                 size = :size,
 				date = :date;
 	`)
@@ -220,6 +239,7 @@ iso, flash)
 			return err
 		}
 	}
+
 	err = tx.Commit()
 	if err != nil {
 		return err
@@ -229,76 +249,121 @@ iso, flash)
 }
 
 func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder string, page int, imagesPerPage int, flagFilter string, folderFilter string) ([]SImage, error) {
-	var images []SImage
-
-	// Basis-Query
+	if imagesPerPage < 1 {
+		imagesPerPage = 100
+	}
 	query := "SELECT * FROM images WHERE gallery_id = ?"
 	args := []any{galleryID}
 
-	// Filtering
-	if flagFilter != "" && flagFilter != "any" && flagFilter != "all" {
-		query += " AND flag = ?"
-		args = append(args, flagFilter)
-	}
-
-	if folderFilter != "" && folderFilter != "any" && folderFilter != "all" {
-		query += " AND filepath LIKE ?"
-		args = append(args, "%"+folderFilter+"%")
-	}
-
-	// Default sorting
-	if sortBy == "" {
-		sortBy = "id"
-		sortOrder = "DESC"
-	}
-
-	order := "ASC"
-	if strings.ToUpper(sortOrder) == "DESC" {
-		order = "DESC"
-	}
-
-	// Map frontend sort fields to db columns
-	column := "id"
-	switch sortBy {
-	case "name":
-		column = "filepath COLLATE NATSORT"
-	case "name_lex":
-		column = "filepath"
-	case "date":
-		column = "date"
-	case "size":
-		column = "size"
-	case "rating":
-		column = "rating"
-	case "resolution":
-		column = "resolution"
-	case "aspect_ratio":
-		column = "aspect_ratio"
-	case "flag":
-		column = "flag"
-	}
-
-	if column != "id" {
-		query += " ORDER BY " + column + " " + order + ", id DESC"
-	} else {
-		query += " ORDER BY id " + order
-	}
-
-	// Pagination
-	if imagesPerPage > 0 {
-		query += " LIMIT ?"
-		args = append(args, imagesPerPage)
-		if page > 0 {
-			query += " OFFSET ?"
-			args = append(args, page*imagesPerPage)
+	if flagFilter != "" {
+		if flagVal, err := strconv.Atoi(flagFilter); err == nil {
+			query += " AND flag = ?"
+			args = append(args, flagVal)
 		}
 	}
 
+	if folderFilter != "" {
+		query += " AND filepath LIKE ?"
+		args = append(args, folderFilter+"%")
+	}
+
+	switch sortBy {
+	case "date":
+		query += " ORDER BY date "
+	case "taken":
+		query += " ORDER BY taken "
+	case "rating":
+		query += " ORDER BY rating "
+	case "flag":
+		query += " ORDER BY flag "
+	case "size":
+		query += " ORDER BY size "
+	case "resolution":
+		query += " ORDER BY resolution "
+	case "aspect_ratio":
+		query += " ORDER BY aspect_ratio "
+	case "camera_make":
+		query += " ORDER BY camera_make "
+	case "lens_make":
+		query += " ORDER BY lens_make "
+	case "focal_length":
+		query += " ORDER BY focal_length "
+	case "aperture":
+		query += " ORDER BY aperture "
+	case "shutter_speed":
+		query += " ORDER BY shutter_speed "
+	case "iso":
+		query += " ORDER BY iso "
+	case "name":
+		query += " ORDER BY filepath COLLATE NATSORT "
+	default:
+		query += " ORDER BY filepath COLLATE NATSORT "
+	}
+
+	if sortOrder == "asc" {
+		query += "ASC"
+	} else {
+		query += "DESC"
+	}
+
+	if page > 0 {
+		query += " LIMIT ? OFFSET ?;"
+		offset := (page - 1) * imagesPerPage
+		args = append(args, imagesPerPage, offset)
+	}
+
+	var images []SImage
 	err := s.DB.Select(&images, query, args...)
 	if err != nil {
 		return nil, err
 	}
+
 	return images, nil
+}
+
+func (s *SQLiteClient) RemoveImage(id int) error {
+	query := "DELETE FROM images WHERE id = ?;"
+	_, err := s.DB.Exec(query, id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *SQLiteClient) RemoveImages(images []SImage) error {
+	tx, err := s.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func(tx *sqlx.Tx) {
+		err := tx.Rollback()
+		if err != nil {
+
+		}
+	}(tx)
+
+	query, err := tx.Prepare("DELETE FROM images WHERE id = ?;")
+	if err != nil {
+		return err
+	}
+	defer func(query *sql.Stmt) {
+		err := query.Close()
+		if err != nil {
+
+		}
+	}(query)
+
+	for _, img := range images {
+		_, err := query.Exec(img.ID)
+		if err != nil {
+			return err
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *SQLiteClient) RemoveGallery(id int) error {
@@ -309,24 +374,22 @@ func (s *SQLiteClient) RemoveGallery(id int) error {
 	defer func(tx *sqlx.Tx) {
 		err := tx.Rollback()
 		if err != nil {
+
 		}
 	}(tx)
 
 	if _, err := tx.Exec("DELETE FROM images WHERE gallery_id = ?", id); err != nil {
 		return err
 	}
-
 	if _, err := tx.Exec("DELETE FROM galleries WHERE id = ?", id); err != nil {
 		return err
 	}
-
 	return tx.Commit()
 }
 
-func (s *SQLiteClient) RemoveImage(id int) error {
-	query := "DELETE FROM images WHERE id = ?;"
-
-	_, err := s.DB.Exec(query, id)
+func (s *SQLiteClient) UpdateImage(id int, rating int, flag int) error {
+	query := "UPDATE images SET rating = ?, flag = ? WHERE id = ?;"
+	_, err := s.DB.Exec(query, rating, flag, id)
 	if err != nil {
 		return err
 	}
@@ -335,7 +398,6 @@ func (s *SQLiteClient) RemoveImage(id int) error {
 
 func (s *SQLiteClient) UpdateGallery(id int, name string) error {
 	query := "UPDATE galleries SET name = ? WHERE id = ?;"
-
 	_, err := s.DB.Exec(query, name, id)
 	if err != nil {
 		return err
