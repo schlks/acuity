@@ -18,8 +18,21 @@
 	let isLoading = $state(true);
 	let abortController: AbortController | null = null;
 	let lastUrl = '';
+    let isKeyboardMode = $state(false);
+    let focusedIndex = $state(0);
 
 	let galleries = $derived(duplicatesData?.Galleries || page.data?.galleries || []);
+
+    let flatImages = $derived.by(() => {
+        if (!duplicatesData) return [];
+        if (duplicatesData.Images && duplicatesData.Images.length > 0) {
+            return duplicatesData.Images;
+        }
+        if (duplicatesData.Groups) {
+            return duplicatesData.Groups.flat();
+        }
+        return [];
+    })
 
 	async function loadDuplicates() {
 		if (abortController) {
@@ -135,6 +148,92 @@
 		}
 	}
 
+        function handleMouseMove(e: MouseEvent) {
+                if (Math.abs(e.movementX) > 0 || Math.abs(e.movementY) > 0) {
+                        isKeyboardMode = false;
+                }
+        }
+
+        function navigate(step: number) {
+                isKeyboardMode = true;
+                const nextIndex = focusedIndex + step;
+                if (nextIndex >= 0 && nextIndex < flatImages.length) {
+                        const el = document.querySelector(`.duplicates-container [data-index="${nextIndex}"]`);
+                        el?.scrollIntoView({ block: 'nearest', behavior: 'smooth'});
+                        focusedIndex = nextIndex;
+                }
+        }
+
+        function navigateVert(direction: 'up' | 'down' ) {
+                isKeyboardMode = true;
+                const currentEl = document.querySelector(`.duplicates-container [data-index="${focusedIndex}"]`) as HTMLElement;
+                if (!currentEl) return;
+
+                const currLeft = currentEl.offsetLeft;
+                const currRight = currLeft + currentEl.offsetWidth;
+                const currCenter = (currLeft + currRight) / 2;
+                const currTop = currentEl.offsetTop;
+
+                const allCards = Array.from(document.querySelectorAll('.duplicates-container [data-index]')) as HTMLElement[];
+                let targetRowCards: HTMLElement[] = [];
+
+                if (direction === 'down') {
+                        const belowTops = allCards.map(c => c.offsetTop).filter(top => top > currTop + 20);
+                        if (belowTops.length === 0) return;
+                        const nextRowTop = Math.min(...belowTops);
+                        targetRowCards = allCards.filter(c => Math.abs(c.offsetTop - nextRowTop) < 20);
+                } else {
+                        const aboveTops = allCards.map(c => c.offsetTop).filter(top => top < currTop - 20);
+                        if (aboveTops.length === 0) return;
+                        const prevRowTop = Math.max(...aboveTops);
+                        targetRowCards = allCards.filter(c => Math.abs(c.offsetTop - prevRowTop) < 20);
+                }
+
+                let bestCard: HTMLElement | null = null;
+                let highestScore = -Infinity;
+
+                for (const card of targetRowCards) {
+                        const candLeft = card.offsetLeft;
+                        const candRight = candLeft + card.offsetWidth;
+                        const candCenter = (candLeft + candRight) / 2;
+
+                        const overlap = Math.max(0, Math.min(currRight, candRight) - Math.max(currLeft, candLeft));
+                        const distance = Math.abs(candCenter - currCenter);
+                        const score = overlap - distance;
+
+                        if (score > highestScore) {
+                                highestScore = score;
+                                bestCard = card;
+                        }
+                }
+
+                if (bestCard) {
+                        const attr = bestCard.getAttribute('data-index');
+                        const newIndex = attr !== null ? Number(attr) : NaN;
+                        if (!isNaN(newIndex)) {
+                                bestCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                                focusedIndex = newIndex;
+                        }
+                }
+        }
+
+        function openFocusedInCarousel() {
+                if (flatImages.length === 0 || focusedIndex < 0 || focusedIndex >= flatImages.length) return;
+                const targetImage = flatImages[focusedIndex];
+                if (duplicatesData.Images && duplicatesData.Images.length > 0) {
+                        const idx = duplicatesData.Images.indexOf(targetImage);
+                        if (idx !== -1) carousel.open(duplicatesData.Images, idx);
+                } else if (duplicatesData.Groups) {
+                        for (const group of duplicatesData.Groups) {
+                                const idx = group.indexOf(targetImage);
+                                if (idx !== -1) {
+                                        carousel.open(group, idx);
+                                        break;
+                                }
+                        }
+                }
+        }
+
 	function handleKeyDown(e: KeyboardEvent) {
 		const tag = (e.target as HTMLElement)?.tagName;
 		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -142,6 +241,37 @@
 		if (carousel.isOpen || batchIsOpen) return;
 
 		switch (e.key) {
+                        case 'ArrowRight':
+                        case 'l':
+                        case 'd':
+                            navigate(1);
+                            break;
+                        case 'ArrowLeft':
+                        case 'h':
+                        case 'a':
+                            navigate(-1);
+                            break;
+                        case 'ArrowDown':
+                        case 'j':
+                        case 's':
+                            e.preventDefault();
+                            navigateVert('down');
+                            break;
+                        case 'ArrowUp':
+                        case 'k':
+                        case 'w':
+                            e.preventDefault();
+                            navigateVert('up');
+                            break;
+                        case 'Enter':
+                            openFocusedInCarousel();
+                            break;
+                        case ' ':
+                                e.preventDefault();
+                                if (flatImages[focusedIndex]) {
+                                        toggleSelect(flatImages[focusedIndex]);
+                                }
+                                break;
 			case 'b':
 				batchIsOpen = !batchIsOpen;
 				break;
@@ -166,7 +296,7 @@
 	}
 </script>
 
-<svelte:window onclick={handleGlobalClick} onkeydown={handleKeyDown} />
+<svelte:window onclick={handleGlobalClick} onkeydown={handleKeyDown} onmousemove={handleMouseMove} />
 
 <div class="duplicates-container">
 	<div class="header-section">
@@ -239,8 +369,6 @@
 		</form>
 	</div>
 	
-	<hr />
-
 	{#if isLoading}
 		<div class="loading-state">
 			<Spinner />
@@ -258,6 +386,11 @@
 						{image}
 						showMeta={true}
 						isSelected={selectedImages.some(i => i.id === image.id)}
+						dataIndex={imgIndex}
+						isFocused={isKeyboardMode && focusedIndex === imgIndex}
+						onmouseenter={() => {
+							if (!isKeyboardMode) focusedIndex = imgIndex;
+						}}
 						onclick={(e) => {
 							if (e.shiftKey) {
 								toggleSelect(image);
@@ -267,6 +400,7 @@
 						}}
 					/>
 				{/each}
+                <div class="flex-spacer"></div>
 			</div>
 		</div>
 	{:else if duplicatesData?.Groups && duplicatesData.Groups.length > 0}
@@ -278,9 +412,15 @@
 				</div>
 				<div class="gallery-grid">
 					{#each group as image, imgIndex}
+						{@const globalIndex = flatImages.indexOf(image)}
 						<ImageCard 
 							{image}
 							isSelected={selectedImages.some(i => i.id === image.id)}
+							dataIndex={globalIndex}
+							isFocused={isKeyboardMode && focusedIndex === globalIndex}
+							onmouseenter={() => {
+								if (!isKeyboardMode) focusedIndex = globalIndex;
+							}}
 							onclick={(e: { shiftKey: any; }) => {
 								if (e.shiftKey) {
 									toggleSelect(image);
@@ -291,6 +431,7 @@
 							showMeta={true}
 						/>
 					{/each}
+                    <div class="flex-spacer"></div>
 				</div>
 			</div>
 		{/each}
@@ -556,6 +697,12 @@
 		flex-wrap: wrap;
 		gap: 16px;
 	}
+
+    .flex-spacer {
+        flex-grow: 99999;
+        flex-basis: 0;
+        height: 0;
+    }
 
 	.loading-state {
 		display: flex;

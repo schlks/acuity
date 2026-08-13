@@ -6,6 +6,7 @@
     export interface ImageCardProps {
         image: GalleryImage;
         onclick?: (e: MouseEvent) => void;
+        oncontextmenu?: (e: MouseEvent) => void;
         onmouseenter?: (e: MouseEvent) => void;
         isFocused?: boolean;
         isSelected?: boolean;
@@ -16,6 +17,7 @@
     let {
         image,
         onclick,
+        oncontextmenu,
         onmouseenter,
         isFocused = false,
         isSelected = false,
@@ -52,6 +54,7 @@
 	data-index={dataIndex}
 	{onmouseenter}
 	onclick={onclick}
+	{oncontextmenu}
 	style="flex-grow: {image.aspect_ratio || 1.5}; flex-basis: calc(var(--grid-base, 250px) * {image.aspect_ratio || 1.5})"
 	tabindex="0">
 
@@ -150,7 +153,9 @@
 	}
 
 	.image-card:hover::before,
-	.image-card:hover::after {
+	.image-card:hover::after,
+	.image-card.focused::before,
+	.image-card.focused::after {
 		clip-path: circle(250% at 0% 100%);
 	}
 
