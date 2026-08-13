@@ -1,0 +1,59 @@
+# Maintainer: shlks
+pkgname=acuity-git
+pkgver=0.1.0.r113.g4d80f02
+pkgrel=1
+pkgdesc="Fast local photo organizer with AI visual & semantic search (sqlite-vec + CLIP)"
+arch=('x86_64')
+url="https://github.com/shlks/acuity"
+license=('GPL-3.0-or-later')
+
+depends=(
+	'webkit2gtk-4.1'
+	'gtk3'
+	'libvips'
+	'sqlite'
+)
+
+makedepends=(
+	'go'
+	'bun'
+	'wails'
+	'git'
+	'pkgconf'
+)
+
+provides=('acuity')
+conflicts=('acuity')
+source=()
+sha256sums=()
+
+pkgver() {
+	cd "$startdir/../.."
+	printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD 2>/dev/null || echo 1)" "$(git rev-parse --short=7 HEAD 2>/dev/null || echo 0000000)"
+}
+
+prepare() {
+	cd "$startdir/../../ui"
+	bun install --frozen-lockfile || bun install
+}
+
+build() {
+	cd "$startdir/../.."
+	export CGO_ENABLED=1
+	wails build -clean -tags webkit2_41
+}
+
+package() {
+	cd "$startdir/../.."
+
+	# Binary
+	install -Dm755 build/bin/acuity "$pkgdir/usr/bin/acuity"
+
+	# Desktop Launcher
+	install -Dm644 install/linux/acuity.desktop "$pkgdir/usr/share/applications/acuity.desktop"
+
+	# Application Icon
+	if [ -f ui/static/logo.svg ]; then
+		install -Dm644 ui/static/logo.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/acuity.svg"
+	fi
+}

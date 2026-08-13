@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Acuity
+Comment=Fast local photo organizer with AI visual search
+Exec=acuity
+Icon=acuity
+Terminal=false
+Type=Application
+Categories=Graphics;Photography;Viewer;
+Keywords=photos;gallery;organizer;ai;clip;search;

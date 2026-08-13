@@ -9,6 +9,11 @@
   "frontend:build": "bun run build",
   "frontend:dev:watcher": "bun run dev",
   "frontend:dev:serverUrl": "http://localhost:5173",
+  "preBuildHooks": {
+    "linux/*": "go test acuity/pkg/...",
+    "darwin/*": "go test acuity/pkg/...",
+    "windows/*": "go test acuity/pkg/..."
+  },
   "author": {
     "name": "shlks"
   },
