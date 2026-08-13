@@ -2,9 +2,13 @@ export interface GalleryImage {
     id: number;
     gallery_id: number;
     filepath: string;
+    file_hash?: string;
     blurhash: string;
+    width?: number;
+    height?: number;
     rating: number;
     flag: number;
+    tags?: string;
     extension: string;
     date: string;
     size: number;

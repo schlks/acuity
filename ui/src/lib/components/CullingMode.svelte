@@ -383,13 +383,13 @@
 	}
 
 	.status-badge.keep {
-		background: rgba(46, 204, 113, 0.85);
-		color: #fff;
+		background: var(--success);
+		color: var(--bg-dark);
 	}
 
 	.status-badge.reject {
-		background: rgba(231, 76, 60, 0.85);
-		color: #fff;
+		background: var(--danger);
+		color: var(--text);
 	}
 
 	.rating-badge {

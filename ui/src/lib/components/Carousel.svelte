@@ -92,10 +92,12 @@
 		switch (e.key) {
 			case 'l':
 			case 'ArrowRight':
+                        case 'd':
 				carousel.next();
 				break;
 			case 'h':
 			case 'ArrowLeft':
+                        case 'a':
 				carousel.prev();
 				break;
 			case 'Escape':

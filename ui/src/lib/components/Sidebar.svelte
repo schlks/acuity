@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { slide } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
+	import { modal } from '$lib/stores/modal.svelte';
+	import { toast } from '$lib/stores/toast.svelte';
 	import SettingsDialog from "./SettingsDialog.svelte";
 	import AddGalleryDialog from "./AddGalleryDialog.svelte";
 	
@@ -9,24 +13,32 @@
 	let showAddGallery = $state(false);
     let expandedGalleries = $state<Record<string, boolean>>({});
 
-
 	async function deleteGallery(name: string) {
-		if (!confirm(`Do you really want to delete the "${name}"`)) return;
+		const ok = await modal.confirm({
+			title: 'Delete Gallery',
+			message: `Do you really want to remove the gallery "${name}" from Acuity? (Your photos on disk will not be deleted)`,
+			confirmText: 'Remove',
+			danger: true
+		});
+		if (!ok) return;
 
 		try {
 			const res = await fetch(`/api/gallery/${encodeURIComponent(name)}`, {
 				method: 'DELETE'
 			});
 			if (res.ok) {
-				await invalidateAll();
-				if (page.params.name === name) {
-					await goto('/');
+				toast.success('Gallery deleted');
+				const currentGallery = page.params?.name ? decodeURIComponent(page.params.name) : '';
+				if (currentGallery === name || window.location.pathname.includes(`/gallery/`)) {
+					await goto('/', { replaceState: true });
 				}
+				await invalidateAll();
 			} else {
-				alert("Failed to delete Gallery")
+				toast.error("Failed to delete gallery");
 			}
 		} catch (error) {
 			console.error(error);
+			toast.error("Failed to delete gallery");
 		}
 	}
 
@@ -49,7 +61,9 @@
 		<h1>Acuity</h1>
 	</a>
 
-	<hr />
+    {#if galleries.length > 0}
+        <hr />
+    {/if}
 
 	<nav class="nav-list">
 		<div class="nav-scroll">
@@ -63,7 +77,7 @@
                                 class="toggle-btn"
                                 onclick="{() => expandedGalleries[gallery.name] = !isExpanded}"
                                 title="Toggle Subfolders">
-                                <span class="material-symbols-outlined">{isExpanded ? 'expand_more' : 'chevron_right'}</span>
+                                <span class="material-symbols-outlined chevron-icon" class:rotated={isExpanded}>chevron_right</span>
                             </button>
                         {/if}
                         <a
@@ -79,7 +93,7 @@
                         </button>
                     </div>
                     {#if isExpanded && subFolders.length > 0}
-                        <div class="subfolder-list">
+                        <div class="subfolder-list" transition:slide={{ duration: 180, easing: cubicOut }}>
                             {#each subFolders as sub}
                                 <a
                                     href="/gallery/{encodeURIComponent(gallery.name)}?folder={encodeURIComponent(sub.path)}"
@@ -178,65 +192,61 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 10px 24px 10px 12px;
+		padding: 8px 12px;
 		color: var(--text-muted);
 		text-decoration: none;
-		border-radius: 8px;
+		border-radius: 6px;
 		cursor: pointer;
 		border: none;
 		font-family: inherit;
-		font-size: 1.1rem;
-		font-weight: 600;
-		width: 90%;
+		font-size: 0.95rem;
+		font-weight: 500;
+		width: 95%;
 		margin: 0 auto;
 		text-align: left;
 		position: relative;
 		z-index: 1;
 		background: transparent;
-		transition: color 0.2s;
+		transition: transform 0.16s cubic-bezier(0.2, 0, 0, 1),
+		            background 0.15s ease,
+		            color 0.15s ease;
 	}
 
 	.nav-item::before {
 		content: '';
 		position: absolute;
-		bottom: 0;
 		left: 0;
-		width: 100%;
-		height: 2px;
+		top: 18%;
+		height: 64%;
+		width: 3px;
 		background: var(--primary);
-		border-radius: 0;
-		z-index: -1;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		border-radius: 0 3px 3px 0;
+		transform: scaleY(0);
+		transform-origin: center;
+		transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease;
 	}
 
 	.nav-item:hover {
-		color: var(--text);
+		background: var(--bg-light);
+		color: var(--primary);
+		transform: translateX(4px);
 	}
 
 	.nav-item:hover::before {
-		height: 100%;
-		border-radius: 8px;
+		transform: scaleY(0.75);
 		background: var(--primary);
 	}
 
 	.nav-item.active {
-		color: var(--text);
+		color: var(--tertiary);
+		background: color-mix(in srgb, var(--tertiary) 10%, transparent);
+		font-weight: 600;
 	}
 
 	.nav-item.active::before {
-		height: 2px;
-		border-radius: 0;
+		transform: scaleY(1);
 		background: var(--tertiary);
-	}
-	
-	.nav-item.active:hover {
-		color: var(--bg-dark);
-	}
-	
-	.nav-item.active:hover::before {
-		height: 100%;
-		border-radius: 8px;
-		background: var(--tertiary);
+		box-shadow: 0 0 8px color-mix(in srgb, var(--tertiary) 60%, transparent);
 	}
 
 	.add-btn {
@@ -253,12 +263,12 @@
         display: flex;
         align-items: center;
         position: relative;
-        width: 90%;
+        width: 95%;
         margin: 0 auto;
     }
 
     .gallery-item-wrapper .nav-item {
-        width: 100%; /* Link nimmt den vollen Platz ein */
+        width: 100%;
     }
 
     .delete-btn {
@@ -275,7 +285,7 @@
         justify-content: center;
         padding: 4px;
         border-radius: 4px;
-        z-index: 2; /* Über dem Link */
+        z-index: 2;
     }
 
     .gallery-item-wrapper:hover .delete-btn {
@@ -301,42 +311,48 @@
         align-items: center;
         justify-content: center;
         padding: 2px;
-        margin-right: -4px;
+        margin-right: 4px;
         border-radius: 4px;
         transition: color 0.2s, transform 0.2s;
         z-index: 2;
     }
 
     .toggle-btn:hover {
-        color: var(--text);
-        background: rgba(255, 255, 255, 0.05);
+        color: var(--primary);
+        background: var(--bg-light);
     }
 
-    .toggle-btn .material-symbols-outlined {
+    .chevron-icon {
         font-size: 1.2rem;
+        transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .chevron-icon.rotated {
+        transform: rotate(90deg);
     }
 
     .subfolder-list {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        margin-left: calc(5% + 18px);
+        gap: 2px;
+        margin-left: calc(5% + 14px);
         padding-left: 10px;
-        border-left: 2px solid var(--border);
+        border-left: 1px solid var(--border-subtle);
         margin-top: 4px;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
     }
 
     .sub-item {
-        font-size: 0.95rem;
+        font-size: 0.88rem;
         font-weight: 500;
-        padding: 6px 12px;
+        padding: 6px 10px;
         width: 100%;
         gap: 8px;
+        border-radius: 6px;
     }
 
     .sub-item .material-symbols-outlined {
-        font-size: 1.1rem;
+        font-size: 1rem;
     }
 
     .sub-name {

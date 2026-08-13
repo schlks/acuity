@@ -23,6 +23,9 @@
 	--warning: #e4c447;
 	--success: #02c45d;
 	--info: #9589f3;
+	--border: color-mix(in srgb, var(--secondary) 30%, var(--bg-light));
+	--border-subtle: color-mix(in srgb, var(--secondary) 18%, var(--bg-light));
+	--divider: color-mix(in srgb, var(--secondary) 25%, var(--bg-light));
 }
 
 select option {
@@ -52,7 +55,7 @@ h1, h2, h3, strong {
 
 hr {
 	border: none;
-	border-top: 1px solid var(--bg-light);
+	border-top: 1px solid var(--divider);
 	width: 100%;
 	margin: 16px 0;
 }
