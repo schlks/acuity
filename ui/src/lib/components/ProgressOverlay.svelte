@@ -123,7 +123,7 @@
     }
 
     .progress-box {
-        background: var(--bg-light);
+        background: var(--bg);
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 32px 40px;
@@ -153,7 +153,7 @@
         justify-content: space-between;
         align-items: center;
         gap: 20px;
-        background: var(--bg);
+        background: var(--bg-light);
         padding: 12px 16px;
         border-radius: 8px;
         border: 1px solid var(--border);

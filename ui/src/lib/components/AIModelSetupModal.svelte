@@ -161,26 +161,29 @@
 
     .base-icon {
         font-size: 3.6rem;
-        color: var(--text-muted);
+        color: var(--bg-dark);
     }
 
 	.active-icon {
-        position: absolute;
-        top: 0;
-        left: 0;
-		font-size: 3.6rem;
+                position: absolute;
+                top: 0;
+                left: 0;
+                font-size: 3.6rem;
 		color: var(--info);
-        clip-path: inset(100% 0 0 0);
-        animation: fill 2s infinite ease-in-out alternate;
+                clip-path: inset(0 0 100% 0);
+                animation: fill 2s infinite ease-in-out;
 	}
 
 	@keyframes fill {
-		0% {
-            clip-path: inset(0 0 100% 0);
+		0%, 10% {
+                        clip-path: inset(0 0 100% 0);
 		}
-		100% {
-            clip-path: inset(0 0 0 0);
+		45%, 55% {
+                        clip-path: inset(0 0 0 0);
 		}
+                90%, 100% {
+                        clip-path: inset(100% 0 0 0);
+                }
 	}
 
 	.card-text h2 {

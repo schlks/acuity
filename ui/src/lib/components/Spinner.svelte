@@ -12,7 +12,7 @@
 
 	circle {
 		fill: none;
-		stroke: var(--primary);
+		stroke: var(--info);
 		stroke-width: 4;
 		stroke-dasharray: 1, 200;
 		stroke-dashoffset: 0;

@@ -513,8 +513,9 @@
 		position: fixed;
 		inset: 0;
 		z-index: 10000;
-		background: var(--bg-dark);
-		opacity: 0.85;
+		background: color-mix(in srgb, var(--bg-dark) 85%, transparent);
+		backdrop-filter: blur(14px);
+		-webkit-backdrop-filter: blur(14px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -528,7 +529,7 @@
 	}
 
 	.modal-dialog.import-modal {
-		max-width: 1000px;
+		max-width: 600px;
 	}
 
 	.drag-drop-overlay {
