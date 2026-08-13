@@ -1,0 +1,54 @@
+# --- Go & Wails Binaries ---
+/bin/
+/build/bin/
+/acuity
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+*.test
+# --- Packaging ---
+packaging/src/
+packaging/pkg/
+packaging/acuity/
+packaging/*.pkg.tar.zst
+*.pkg.tar.zst
+
+# --- Wails Temp Files ---
+ui/package.json.md5
+
+# --- Frontend (Node / Bun / SvelteKit) ---
+node_modules/
+ui/node_modules/
+ui/.svelte-kit/
+ui/build/
+ui/.output/
+ui/vite.config.ts.timestamp-*
+ui/vite.config.js.timestamp-*
+
+# --- Lokale Daten, Datenbanken & Caches ---
+/data/
+/raw/
+/tmp/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# --- Logs & Umgebungsvariablen ---
+*.log
+.env
+.env.*
+!.env.example
+
+# --- IDEs & Betriebssystem ---
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db

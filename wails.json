@@ -1,0 +1,24 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "acuity",
+  "outputfilename": "acuity",
+  "build:ldflags": "-s -w",
+  "build:tags": "webkit2_41",
+  "frontend:dir": "ui",
+  "frontend:install": "bun install",
+  "frontend:build": "bun run build",
+  "frontend:dev:watcher": "bun run dev",
+  "frontend:dev:serverUrl": "http://localhost:5173",
+  "preBuildHooks": {
+    "linux/*": "go test acuity/pkg/...",
+    "darwin/*": "go test acuity/pkg/...",
+    "windows/*": "go test acuity/pkg/..."
+  },
+  "author": {
+    "name": "shlks"
+  },
+  "info": {
+    "productName": "Acuity",
+    "description": "Photo Culling & Management App"
+  }
+}
