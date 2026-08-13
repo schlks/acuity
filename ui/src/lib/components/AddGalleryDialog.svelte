@@ -125,13 +125,13 @@
 	}
 
 	.error-msg {
-		background: rgba(255, 60, 60, 0.1);
-		color: #ff5555;
+		background: var(--bg);
+		color: var(--danger);
 		padding: 8px 12px;
 		border-radius: 6px;
 		font-size: 0.9rem;
 		margin-bottom: 16px;
-		border: 1px solid rgba(255, 60, 60, 0.2);
+		border: 1px solid var(--danger);
 	}
 
 	.form-group {

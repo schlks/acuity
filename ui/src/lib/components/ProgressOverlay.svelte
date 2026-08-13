@@ -1,62 +1,75 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { invalidateAll } from '$app/navigation';
     import Spinner from './Spinner.svelte';
     import { fly, fade } from 'svelte/transition';
 
-    let progresses = $state([]);
-    let isPolling = false;
-    let lastStr = "";
+    interface ProgressItem {
+        gallery_name: string;
+        current: number;
+        expected: number;
+        percent: number;
+    }
+
+    let progresses = $state<ProgressItem[]>([]);
     let completed = $state(false);
+    let hadActive = false;
+    let isPolling = true;
+    let pollTimeout: any = null;
 
     async function pollProgress() {
-        while (isPolling) {
-            try {
-                const res = await fetch(`/api/progress?last=${encodeURIComponent(lastStr)}`);
-                if (res.ok) {
-                    const contentType = res.headers.get("content-type");
-                    if (contentType && contentType.includes("application/json")) {
-                        const data = await res.json();
-                        progresses = data.progresses || [];
-                        lastStr = data.last_str || "";
-                    } else {
-                        if (progresses.length > 0) {
-                            await invalidateAll();
-                            completed = true;
-                            // Warte 1,5 Sekunden bevor es ausgeblendet wird
-                            await new Promise(r => setTimeout(r, 1500));
-                            completed = false;
-                        }
-                        progresses = [];
-                        lastStr = "";
-                        await new Promise(r => setTimeout(r, 2000));
-                    }
+        if (!isPolling) return;
+        try {
+            const res = await fetch('/api/progress');
+            if (res.ok) {
+                const data = await res.json();
+                const items: ProgressItem[] = data.progresses || [];
+
+                if (items.length > 0) {
+                    hadActive = true;
+                    progresses = items;
                 } else {
-                    await new Promise(r => setTimeout(r, 5000));
+                    if (hadActive) {
+                        hadActive = false;
+                        progresses = [];
+                        completed = true;
+                        await invalidateAll();
+                        setTimeout(() => {
+                            completed = false;
+                        }, 1500);
+                    } else {
+                        progresses = [];
+                    }
                 }
-            } catch (e) {
-                await new Promise(r => setTimeout(r, 5000));
             }
+        } catch (e) {
+            // ignore network errors during navigation
         }
 
-        onMount(() => {
-            isPolling = true;
-            pollProgress();
-
-            return () => {
-                isPolling = false;
-            }
-        })
+        if (isPolling) {
+            const delay = progresses.length > 0 ? 400 : 1200;
+            pollTimeout = setTimeout(pollProgress, delay);
+        }
     }
 
     async function cancelImport(name: string) {
         await fetch(`/api/gallery/${encodeURIComponent(name)}/scan`, {
             method: 'DELETE'
         });
+        progresses = progresses.filter(p => (p.gallery_name || (p as any).GalleryName) !== name);
+        if (progresses.length === 0) {
+            hadActive = false;
+        }
     }
 
     onMount(() => {
+        isPolling = true;
         pollProgress();
+    });
+
+    onDestroy(() => {
+        isPolling = false;
+        if (pollTimeout) clearTimeout(pollTimeout);
     });
 </script>
 
@@ -73,12 +86,16 @@
                 <h3>Importing Gallery</h3>
                 <div class="progress-list">
                     {#each progresses as p}
+                        {@const name = p.gallery_name || (p as any).GalleryName}
+                        {@const current = p.current ?? (p as any).Current ?? 0}
+                        {@const expected = p.expected ?? (p as any).Expected ?? -1}
+                        {@const percent = p.percent ?? (p as any).Percent ?? 0}
                         <div class="progress-item">
-                            <span class="gallery-name">{p.GalleryName} </span>
+                            <span class="gallery-name">{name}</span>
                             <div class="progress-stats">
-                                <span class="percent">{p.Percent}%</span>
-                                <span class="count">({p.Current} / {p.Expected === -1 ? '?' : p.Expected})</span>
-                                <button class="cancel-btn" onclick={() => cancelImport(p.GalleryName)} title="Cancel Import">
+                                <span class="percent">{percent}%</span>
+                                <span class="count">({current} / {expected === -1 ? '?' : expected})</span>
+                                <button class="cancel-btn" onclick={() => cancelImport(name)} title="Cancel Import">
                                     <span class="material-symbols-outlined">close</span>
                                 </button>
                             </div>
@@ -149,60 +166,69 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        max-width: 180px;
     }
 
     .progress-stats {
         display: flex;
         align-items: center;
-        gap: 8px;
-        flex-shrink: 0;
+        gap: 12px;
     }
 
     .percent {
-        color: var(--primary);
         font-weight: 600;
+        color: var(--info);
+        min-width: 45px;
+        text-align: right;
     }
 
     .count {
-        color: var(--text-muted);
+        color: var(--text-secondary);
         font-size: 0.9rem;
+        min-width: 80px;
+        text-align: right;
     }
 
     .cancel-btn {
-        background: transparent;
+        background: none;
         border: none;
-        color: #ff5555;
+        color: var(--text-secondary);
         cursor: pointer;
         padding: 4px;
-        margin-left: 8px;
+        border-radius: 4px;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 4px;
-        transition: background 0.2s;
+        transition: all 0.2s ease;
     }
 
     .cancel-btn:hover {
-        background: rgba(255, 60, 60, 0.1);
-    }
-
-    .cancel-btn .material-symbols-outlined {
-        font-size: 1.2rem;
+        color: var(--danger);
+        background: rgba(255, 255, 255, 0.05);
     }
 
     .checkmark-circle {
-        width: 48px;
-        height: 48px;
+        width: 56px;
+        height: 56px;
         border-radius: 50%;
-        background: rgba(46, 213, 115, 0.15);
+        background: var(--success);
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 8px;
+        animation: scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
     .check-icon {
-        color: #2ed573;
-        font-size: 32px;
+        color: white;
+        font-size: 36px;
+    }
+
+    @keyframes scaleUp {
+        0% {
+            transform: scale(0);
+        }
+        100% {
+            transform: scale(1);
+        }
     }
 </style>
