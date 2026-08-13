@@ -3,12 +3,16 @@
 	import { page, navigating } from '$app/state';
 	import { carousel } from '$lib/stores/carousel.svelte';
 	import { tick } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import ImageCard from '$lib/components/ImageCard.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
 	import CullingMode from '$lib/components/CullingMode.svelte';
+	import ContextMenu from '$lib/components/ContextMenu.svelte';
+	import { toast } from '$lib/stores/toast.svelte';
+	import { modal } from '$lib/stores/modal.svelte';
     import type { GalleryImage } from '$lib/types/GalleryImage';
-    import type {ActionReturn} from "svelte/action";
+    import type { ActionReturn } from "svelte/action";
 
 	let { data } = $props();
 	let searchQuery = $state('');
@@ -31,6 +35,10 @@
 	function resetFilters() {
 		searchQuery = '';
 		searchThreshold = '0.9';
+		if (droppedImagePreview) {
+			URL.revokeObjectURL(droppedImagePreview);
+			droppedImagePreview = null;
+		}
 		goto(page.url.pathname);
 	}
 	let pageButtons = $derived.by(() => {
@@ -70,6 +78,11 @@
 	let isEditingName = $state(false);
 	let editedName = $state('');
 	let editInputEl = $state<HTMLInputElement | null>(null);
+	let contextMenu = $state<{ x: number; y: number; image: GalleryImage } | null>(null);
+	let isDragging = $state(false);
+	let droppedImagePreview = $state<string | null>(null);
+	let dragDepth = $state(0);
+	let isWindowDragging = $derived(dragDepth > 0);
 
 	$effect(() => {
 		galleryImages = data.images.images || [];
@@ -234,6 +247,136 @@
 		}, 500);
 	}
 
+	async function searchByImage(input: File | string) {
+		const formData = new FormData();
+		if (typeof input === 'string') {
+			formData.append('path', input);
+			droppedImagePreview = input.startsWith('http') ? input : `/api/image/raw?path=${encodeURIComponent(input)}`;
+		} else {
+			formData.append('file', input);
+			droppedImagePreview = URL.createObjectURL(input);
+		}
+		searchQuery = '';
+		toast.info('Searching visually similar images...');
+		formData.append('threshold', searchThreshold);
+
+		try {
+			const res = await fetch(`/api/gallery/${data.gallery.name}/search`, {
+				method: 'POST',
+				body: formData
+			});
+			if (res.ok) {
+				const result = await res.json();
+				galleryImages = result.images || [];
+				toast.success(`Found ${galleryImages.length} matching images`);
+			} else {
+				toast.error('Visual search failed');
+			}
+		} catch (e) {
+			console.error('Visual search error:', e);
+			toast.error('Visual search failed');
+		}
+	}
+
+	function isImageFile(file: File): boolean {
+		if (file.type && file.type.startsWith('image/')) return true;
+		const ext = file.name.split('.').pop()?.toLowerCase();
+		return ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl'].includes(ext || '');
+	}
+
+	function hasFilePayload(e: DragEvent): boolean {
+		if (!e.dataTransfer) return false;
+		return e.dataTransfer.types.includes('Files') ||
+		       e.dataTransfer.types.includes('text/uri-list') ||
+		       e.dataTransfer.types.includes('text/plain');
+	}
+
+	function parseImageUri(uri: string): string | null {
+		if (!uri) return null;
+		const lines = uri.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+		for (const line of lines) {
+			let clean = line.replace(/^file:\/\/(localhost)?/, '');
+			clean = decodeURIComponent(clean);
+			const ext = clean.split('.').pop()?.toLowerCase();
+			if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl'].includes(ext || '')) {
+				return clean;
+			}
+		}
+		return null;
+	}
+
+	async function handleDropImage(e: DragEvent) {
+		e.preventDefault();
+		isDragging = false;
+		dragDepth = 0;
+		const file = e.dataTransfer?.files?.[0];
+		if (file && isImageFile(file)) {
+			await searchByImage(file);
+			return;
+		}
+		for (const type of ['text/uri-list', 'text/plain', 'text/x-moz-url', 'URL']) {
+			const data = e.dataTransfer?.getData(type);
+			if (data) {
+				const path = parseImageUri(data);
+				if (path) {
+					await searchByImage(path);
+					return;
+				}
+			}
+		}
+		toast.error('Only images can be dropped for visual search');
+	}
+
+	function handleWindowDragEnter(e: DragEvent) {
+		if (hasFilePayload(e)) {
+			e.preventDefault();
+			dragDepth++;
+		}
+	}
+
+	function handleWindowDragLeave(e: DragEvent) {
+		if (hasFilePayload(e)) {
+			e.preventDefault();
+			dragDepth = Math.max(0, dragDepth - 1);
+		}
+	}
+
+	function handleWindowDragOver(e: DragEvent) {
+		e.preventDefault();
+		if (e.dataTransfer) {
+			e.dataTransfer.dropEffect = 'copy';
+		}
+	}
+
+	async function handleWindowDrop(e: DragEvent) {
+		e.preventDefault();
+		dragDepth = 0;
+		const file = e.dataTransfer?.files?.[0];
+		if (file && isImageFile(file)) {
+			await searchByImage(file);
+			return;
+		}
+		for (const type of ['text/uri-list', 'text/plain', 'text/x-moz-url', 'URL']) {
+			const data = e.dataTransfer?.getData(type);
+			if (data) {
+				const path = parseImageUri(data);
+				if (path) {
+					await searchByImage(path);
+					return;
+				}
+			}
+		}
+		toast.error('Only images can be used for visual search');
+	}
+
+	function clearImageSearch() {
+		if (droppedImagePreview) {
+			URL.revokeObjectURL(droppedImagePreview);
+			droppedImagePreview = null;
+		}
+		resetFilters();
+	}
+
 	async function loadMore() {
 		console.log('loading more');
 		if (isLoadingMore || !hasMore) return;
@@ -313,15 +456,89 @@
 	}
 
 	async function rescanGallery() {
-		if (!confirm('Scan this gallery for new Images?')) return;
+		const ok = await modal.confirm({
+			title: 'Rescan Gallery',
+			message: 'Scan this gallery for new Images?',
+			confirmText: 'Scan'
+		});
+		if (!ok) return;
+		toast.info('Scanning gallery...');
 		await fetch(`/api/gallery/${data.gallery.name}/scan`, { method: 'POST' });
 		await invalidateAll();
+		toast.success('Gallery scan complete');
+	}
+
+	async function handleContextMenuFlag(img: GalleryImage, flag: number) {
+		try {
+			const res = await fetch(`/api/image/${img.id}/flag`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: `flag=${flag}`
+			});
+			if (res.ok) {
+				img.flag = flag;
+			}
+		} catch (e) {
+			console.error('Failed to set flag:', e);
+			toast.error('Failed to set flag');
+		}
+	}
+
+	async function handleContextMenuRating(img: GalleryImage, rating: number) {
+		try {
+			const res = await fetch(`/api/image/${img.id}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: `rating=${rating}`
+			});
+			if (res.ok) {
+				img.rating = rating;
+			}
+		} catch (e) {
+			console.error('Failed to set rating:', e);
+			toast.error('Failed to set rating');
+		}
+	}
+
+	async function handleContextMenuDelete(img: GalleryImage) {
+		const ok = await modal.confirm({
+			title: 'Delete Image',
+			message: 'Do you really want to delete this image?',
+			confirmText: 'Delete',
+			danger: true
+		});
+		if (ok) {
+			try {
+				const formData = new FormData();
+				formData.append('image_id', String(img.id));
+				const res = await fetch('/api/image/delete', {
+					method: 'POST',
+					body: formData
+				});
+				if (res.ok) {
+					galleryImages = galleryImages.filter(i => i.id !== img.id);
+					toast.success('Image deleted');
+				} else {
+					toast.error('Failed to delete image');
+				}
+			} catch (e) {
+				console.error('Failed to delete image:', e);
+				toast.error('Failed to delete image');
+			}
+		}
 	}
 
 	async function removeFlags() {
-		if (!confirm('Remove all flags in this gallery?')) return;
+		const ok = await modal.confirm({
+			title: 'Remove Flags',
+			message: 'Remove all flags in this gallery?',
+			confirmText: 'Remove',
+			danger: true
+		});
+		if (!ok) return;
 		await fetch(`/api/gallery/${data.gallery.name}/unflag`, { method: 'POST' });
 		await invalidateAll();
+		toast.info('All flags removed');
 	}
 
 	async function runBatchAction(action: 'delete' | 'move' | 'copy', criteria = 'selected') {
@@ -329,7 +546,13 @@
 
 		if (action === 'delete') {
 			const count = criteria === 'selected' ? `${selectedImages.length} selected` : 'all matching';
-			if (!confirm(`Do you really want to delete ${count} images?`)) return;
+			const ok = await modal.confirm({
+				title: 'Delete Images',
+				message: `Do you really want to delete ${count} images?`,
+				confirmText: 'Delete',
+				danger: true
+			});
+			if (!ok) return;
 		}
 
 		const formData = new FormData();
@@ -346,6 +569,9 @@
 		if (res.ok) {
 			await invalidateAll();
 			selectedImages = [];
+			toast.success(`Batch action completed`);
+		} else {
+			toast.error(`Batch action failed`);
 		}
 	}
 
@@ -493,19 +719,23 @@
 		switch (e.key) {
 			case 'ArrowRight':
 			case 'l':
+                        case 'd':
 				navigate(1);
 				break;
 			case 'ArrowLeft':
 			case 'h':
+                        case 'a':
 				navigate(-1);
 				break;
 			case 'ArrowDown':
 			case 'j':
+                        case 's':
 				e.preventDefault();
 				navigateVert('down');
 				break;
 			case 'ArrowUp':
 			case 'k':
+                        case 'w':
 				e.preventDefault();
 				navigateVert('up');
 				break;
@@ -542,6 +772,8 @@
 					runBatchAction('delete', 'selected');
 				}
 				break;
+            case 'r':
+                rescanGallery()
 		}
 	}
 
@@ -557,7 +789,30 @@
 	}
 </script>
 
-<svelte:window onclick={handleGlobalClick} onkeydown={handleKeyDown} onmousemove={handleMouseMove} />
+<svelte:window
+	onclick={handleGlobalClick}
+	onkeydown={handleKeyDown}
+	onmousemove={handleMouseMove}
+	ondragenter={handleWindowDragEnter}
+	ondragleave={handleWindowDragLeave}
+	ondragover={handleWindowDragOver}
+	ondrop={handleWindowDrop}
+/>
+
+{#if isWindowDragging}
+	<div
+		class="drag-drop-overlay"
+		transition:fade={{ duration: 120 }}
+		ondragover={handleWindowDragOver}
+		ondrop={handleWindowDrop}
+	>
+		<div class="drop-zone-card">
+			<span class="material-symbols-outlined drop-icon">image_search</span>
+			<h2>Drop image to search</h2>
+			<p>Visually search for similar images in this gallery</p>
+		</div>
+	</div>
+{/if}
 
 <div class="gallery-header">
 	{#if isEditingName}
@@ -628,9 +883,38 @@
 
 	<div class="search-container">
 		<form class="search-form" onsubmit={handleSearch}>
-			<div class="input-wrapper" class:active={searchQuery.trim() !== ''}>
-				<span class="material-symbols-outlined search-icon">search</span>
-				<input type="search" placeholder="Search within gallery..." bind:value={searchQuery} />
+			<div
+				class="input-wrapper"
+				class:active={searchQuery.trim() !== '' || Boolean(droppedImagePreview)}
+				class:drag-over={isDragging}
+				ondragover={(e) => { e.preventDefault(); isDragging = true; }}
+				ondragleave={() => isDragging = false}
+				ondrop={handleDropImage}
+			>
+				{#if droppedImagePreview}
+					<img src={droppedImagePreview} alt="Search Preview" class="search-thumb" />
+					<span class="search-thumb-label">Image Search</span>
+					<button type="button" class="clear-thumb-btn" onclick={clearImageSearch} title="Clear Image Search">
+						<span class="material-symbols-outlined">close</span>
+					</button>
+				{:else}
+					<span class="material-symbols-outlined search-icon">search</span>
+					<input
+						type="search"
+						placeholder="Search text or drop image..."
+						bind:value={searchQuery}
+						onpaste={(e) => {
+							const item = e.clipboardData?.items?.[0];
+							if (item?.type.startsWith('image/')) {
+								const file = item.getAsFile();
+								if (file) {
+									e.preventDefault();
+									searchByImage(file);
+								}
+							}
+						}}
+					/>
+				{/if}
 			</div>
 
 			<div class="threshold-wrapper" title="Search Precision" class:active={searchThreshold != '0.9'}>
@@ -815,6 +1099,16 @@
 					focusedIndex = index;
 					carousel.open(galleryImages, index);
 				}}
+				oncontextmenu={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					focusedIndex = index;
+					if (contextMenu && contextMenu.image.id === image.id) {
+						contextMenu = null;
+					} else {
+						contextMenu = { x: e.clientX, y: e.clientY, image };
+					}
+				}}
 			/>
 		{/each}
 	</div>
@@ -901,6 +1195,23 @@
 			</button>
 		{/if}
 	</div>
+{/if}
+
+{#if contextMenu}
+	<ContextMenu
+		x={contextMenu.x}
+		y={contextMenu.y}
+		image={contextMenu.image}
+		galleryName={data.gallery.name}
+		onClose={() => contextMenu = null}
+		onFlag={handleContextMenuFlag}
+		onRating={handleContextMenuRating}
+		onDelete={handleContextMenuDelete}
+		onMove={(img) => {
+			selectedImages = [img];
+			batchIsOpen = true;
+		}}
+	/>
 {/if}
 
 <CullingMode
@@ -1157,6 +1468,99 @@
 		background: var(--tertiary);
 	}
 
+	.input-wrapper.drag-over {
+		outline: 2px dashed var(--primary);
+		outline-offset: 2px;
+		background: color-mix(in srgb, var(--primary) 12%, transparent);
+	}
+
+	.search-thumb {
+		width: 28px;
+		height: 28px;
+		object-fit: cover;
+		border-radius: 4px;
+		margin-left: 12px;
+		border: 1px solid color-mix(in srgb, var(--secondary) 40%, var(--bg-light));
+	}
+
+	.search-thumb-label {
+		font-size: 0.85rem;
+		color: var(--text);
+		margin-left: 8px;
+		font-weight: 500;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.clear-thumb-btn {
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 4px;
+		margin-left: auto;
+		margin-right: 8px;
+		border-radius: 4px;
+		transition: all 0.12s ease;
+	}
+
+	.clear-thumb-btn:hover {
+		color: var(--danger);
+		background: var(--bg-light);
+	}
+
+	.clear-thumb-btn .material-symbols-outlined {
+		font-size: 1.1rem;
+	}
+
+	.drag-drop-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 99999;
+		background: color-mix(in srgb, var(--bg-dark) 82%, transparent);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		pointer-events: all;
+	}
+
+	.drop-zone-card {
+		border: 2px dashed var(--primary);
+		border-radius: 16px;
+		background: var(--bg);
+		padding: 48px 64px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 12px;
+		text-align: center;
+		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+	}
+
+	.drop-icon {
+		font-size: 3.5rem;
+		color: var(--primary);
+	}
+
+	.drop-zone-card h2 {
+		font-size: 1.5rem;
+		font-weight: 600;
+		color: var(--text);
+		margin: 0;
+	}
+
+	.drop-zone-card p {
+		font-size: 0.95rem;
+		color: var(--text-muted);
+		margin: 0;
+	}
+
 	.search-icon {
 		position: absolute;
 		left: 16px;
@@ -1280,7 +1684,7 @@
 	.divider {
 		width: 1px;
 		height: 24px;
-		background-color: var(--bg-light);
+		background-color: var(--divider);
 		margin: 0 4px;
 	}
 
