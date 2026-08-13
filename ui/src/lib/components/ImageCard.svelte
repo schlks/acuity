@@ -29,6 +29,8 @@
 	let isLoaded = $state(false);
 	let lastPath = $state(image.filepath)
 
+	let idleId: any = null;
+
 	$effect(() => {
 		if (image.filepath !== lastPath) {
 			lastPath = image.filepath;
@@ -38,13 +40,37 @@
 
 	$effect(() => {
 		if (canvasElement && image.blurhash && !isLoaded) {
-			const pixels = decode(image.blurhash, 32, 32);
-			const ctx = canvasElement.getContext('2d');
-            if (!ctx) return;
-			const imageData = ctx.createImageData(32, 32);
-			imageData.data.set(pixels);
-			ctx.putImageData(imageData, 0, 0);
+			const startDecoding = () => {
+				if (isLoaded || !canvasElement) return;
+				
+				try {
+					const pixels = decode(image.blurhash, 32, 32);
+					const ctx = canvasElement.getContext('2d');
+					if (!ctx) return;
+					const imageData = ctx.createImageData(32, 32);
+					imageData.data.set(pixels);
+					ctx.putImageData(imageData, 0, 0);
+				} catch (err) {
+					console.error("Failed to decode blurhash:", err);
+				}
+			};
+
+			if (typeof window.requestIdleCallback === 'function') {
+				idleId = window.requestIdleCallback(startDecoding, { timeout: 200 });
+			} else {
+				idleId = setTimeout(startDecoding, 50);
+			}
 		}
+
+		return () => {
+			if (idleId) {
+				if (typeof window.cancelIdleCallback === 'function') {
+					window.cancelIdleCallback(idleId);
+				} else {
+					clearTimeout(idleId);
+				}
+			}
+		};
 	});
 </script>
 
@@ -69,6 +95,7 @@
 		src="/api/image?path={encodeURIComponent(image.filepath)}&thumb=true"
 		alt=""
 		loading="lazy"
+		decoding="async"
 		class:loaded={isLoaded}
 		onload={() => isLoaded = true}
 	/>
@@ -137,6 +164,8 @@
 		pointer-events: none;
 		clip-path: circle(0% at 0% 100%);
 		transition: clip-path 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+		transform: translateZ(0);
+		will-change: clip-path;
 	}
 
 	.image-card::after {
@@ -150,6 +179,8 @@
 		pointer-events: none;
 		clip-path: circle(0% at 0% 100%);
 		transition: clip-path 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+		transform: translateZ(0);
+		will-change: clip-path;
 	}
 
 	.image-card:hover::before,
