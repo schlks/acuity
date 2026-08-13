@@ -5,7 +5,6 @@ package web
 import (
 	"acuity/pkg/config"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -22,11 +21,11 @@ import (
 	"strings"
 	"time"
 
+	"acuity/pkg/ai"
 	"acuity/pkg/db"
 
 	"github.com/h2non/bimg"
 	"github.com/mallardduck/go-http-helpers/pkg/query"
-	_ "github.com/weaviate/weaviate/entities/models"
 )
 
 type Server struct {
@@ -35,10 +34,10 @@ type Server struct {
 }
 
 type Progress struct {
-	GalleryName string
-	Current     int
-	Expected    int
-	Percent     int
+	GalleryName string `json:"gallery_name"`
+	Current     int    `json:"current"`
+	Expected    int    `json:"expected"`
+	Percent     int    `json:"percent"`
 }
 
 type searchResult struct {
@@ -61,8 +60,8 @@ type searchResult struct {
 }
 
 // NewServer creates a new server
-func NewServer(sdatabase *db.SQLiteClient, wdatabase *db.WeaviateClient, config *config.Config) *Server {
-	service := db.NewBridge(sdatabase, wdatabase)
+func NewServer(sdatabase *db.SQLiteClient, vdatabase *db.VectorClient, config *config.Config) *Server {
+	service := db.NewBridge(sdatabase, vdatabase)
 	server := &Server{
 		Bridge: service,
 		Config: config,
@@ -114,6 +113,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/gallery/{name}", s.deleteGallery)
 	mux.HandleFunc("POST 	/api/gallery/batch", s.handleBatchAction)
 	mux.HandleFunc("GET 	/api/progress", s.getGlobalProgress)
+	mux.HandleFunc("GET 	/api/ai/status", s.handleAIStatus)
 	mux.HandleFunc("GET 	/api/browse", s.browseFiles)
 	mux.HandleFunc("POST 	/api/browse/mkdir", s.mkdir)
 	mux.HandleFunc("POST 	/api/reset", s.resetDatabase)
@@ -562,6 +562,11 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	// Trigger initial background scan and image import
+	if err := s.Bridge.ScanGallery(name); err != nil {
+		slog.Warn("Failed to start initial scan for gallery", slog.String("name", name), slog.Any("error", err))
+	}
 	id, err, ok := s.Bridge.GetGalleryID(name)
 	if err != nil && !ok {
 		message := "Failed to get Gallery ID"
@@ -629,8 +634,6 @@ func progressesEqual(p1, p2 []Progress) bool {
 }
 
 func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
@@ -641,84 +644,34 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lastProgressStr := r.URL.Query().Get("last")
-	var lastProgress []Progress
-	if lastProgressStr != "" {
-		decoded, err := base64.StdEncoding.DecodeString(lastProgressStr)
-		if err == nil {
-			_ = json.Unmarshal(decoded, &lastProgress)
-		}
-	}
-
-	check := func() (bool, []Progress, []string) {
-		var p []Progress
-		var hasAct bool
-		var refreshGalleries []string
-		for _, g := range galleries {
-			expected := s.Bridge.GetExpectedCount(g.ID)
-			if expected != 0 {
-				hasAct = true
-				current, _ := s.Bridge.GetGalleryCount(g.ID)
-				if expected == -1 {
-					p = append(p, Progress{
-						GalleryName: g.Name,
-						Current:     0,
-						Expected:    -1,
-						Percent:     0,
-					})
-				} else if current < expected {
-					p = append(p, Progress{
-						GalleryName: g.Name,
-						Current:     current,
-						Expected:    expected,
-						Percent:     int(float64(current) / float64(expected) * 100),
-					})
-					if current > 0 {
-						refreshGalleries = append(refreshGalleries, g.Name)
-					}
-				}
+	var p []Progress
+	var hasAct bool
+	for _, g := range galleries {
+		expected := s.Bridge.GetExpectedCount(g.ID)
+		if expected != 0 {
+			hasAct = true
+			current, _ := s.Bridge.GetGalleryCount(g.ID)
+			percent := 0
+			if expected == -1 {
+				percent = 0
+			} else if expected > 0 {
+				percent = min(100, int(float64(current)/float64(expected)*100))
 			}
-		}
-		return hasAct, p, refreshGalleries
-	}
-
-	hasActive, progresses, refreshGalleries := check()
-
-	if !hasActive {
-		return
-	}
-
-	for progressesEqual(progresses, lastProgress) {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(1 * time.Second):
-			hasActive, progresses, refreshGalleries = check()
-			if !hasActive {
-				w.Header().Set("HX-Trigger", "reload-main")
-				slog.Error("progress cannot be loaded", slog.Any("error", err))
-				return
-			}
+			p = append(p, Progress{
+				GalleryName: g.Name,
+				Current:     current,
+				Expected:    expected,
+				Percent:     percent,
+			})
 		}
 	}
-
-	var triggers []string
-	for _, Name := range refreshGalleries {
-		triggers = append(triggers, "refresh-images-"+Name)
-	}
-	if len(triggers) > 0 {
-		w.Header().Set("HX-Trigger", strings.Join(triggers, ", "))
-	}
-
-	jsonData, _ := json.Marshal(progresses)
-	newLastStr := base64.StdEncoding.EncodeToString(jsonData)
 
 	data := struct {
+		Active     bool       `json:"active"`
 		Progresses []Progress `json:"progresses"`
-		LastStr    string     `json:"last_str"`
 	}{
-		Progresses: progresses,
-		LastStr:    newLastStr,
+		Active:     hasAct,
+		Progresses: p,
 	}
 
 	s.writeJSON(w, data, http.StatusOK)
@@ -740,50 +693,37 @@ func (s *Server) scanGallery(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if id, err, ok := s.Bridge.GetGalleryID(name); err == nil && ok {
+	if id, err, _ := s.Bridge.GetGalleryID(name); err == nil {
 		s.Bridge.CancelImport(id)
 	}
-	w.Header().Set("HX-Trigger", "check-progress")
-	w.WriteHeader(http.StatusOK)
+	s.writeJSON(w, map[string]any{"success": true}, http.StatusOK)
 }
 
 func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	name := r.PathValue("name")
-	deleteGallery := query.Bool(r, "deleteGallery", false)
 
-	id, err, ok := s.Bridge.GetGalleryID(name)
-	if err != nil && !ok {
-		message := "Failed to get Gallery Id"
+	id, err, _ := s.Bridge.GetGalleryID(name)
+	if err != nil {
+		message := "Failed to get Gallery ID"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	// Cancel any active background scan
+	s.Bridge.CancelImport(id)
+
+	// Remove from Vector store and SQLite database (disk files are never touched)
 	if err := s.Bridge.DeleteGallery(ctx, id); err != nil {
 		message := "Failed to delete Gallery from Database"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	if deleteGallery {
-		files, err := s.Bridge.GetGalleryFiles(name, "", "", -1, 10_000, "", "")
-		if err != nil {
-			message := "Failed to get Files in Gallery"
-			slog.Error(message, slog.Any("error", err))
-			http.Error(w, message, http.StatusInternalServerError)
-			return
-		}
-		if err := s.Bridge.DeleteImages(ctx, files); err != nil {
-			message := "Failed to delete Gallery"
-			slog.Error(message, slog.Any("error", err))
-			http.Error(w, message, http.StatusInternalServerError)
-			return
-		}
-	}
 
-	w.Header().Set("HX-Trigger", "refresh-sidebar")
-	w.Header().Set("HX-Redirect", "/")
+	s.writeJSON(w, map[string]any{"success": true}, http.StatusOK)
 }
 
 func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
@@ -927,26 +867,32 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := r.ParseForm()
-	if err != nil {
-		message := "Failed to parse Form"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusBadRequest)
-		return
+	_ = r.ParseForm()
+
+	var images []db.SImage
+
+	// Path parameter: /api/image/{id}/delete
+	pathID := r.PathValue("id")
+	if pathID != "" {
+		if idInt, err := strconv.Atoi(pathID); err == nil {
+			images = append(images, db.SImage{ID: idInt})
+		}
 	}
 
-	if r.Method == http.MethodPost {
-		imageIDsStr := r.FormValue("image_id")
-		var images []db.SImage
-
+	// Form parameter: image_id=1,2,3
+	imageIDsStr := r.FormValue("image_id")
+	if imageIDsStr != "" {
 		for id := range strings.SplitSeq(imageIDsStr, ",") {
 			id = strings.TrimSpace(id)
 			if id != "" {
-				idInt, _ := strconv.Atoi(id)
-				images = append(images, db.SImage{ID: idInt})
+				if idInt, err := strconv.Atoi(id); err == nil {
+					images = append(images, db.SImage{ID: idInt})
+				}
 			}
 		}
+	}
 
+	if len(images) > 0 {
 		if err := s.Bridge.DeleteImages(ctx, images); err != nil {
 			message := "Failed to delete Image"
 			slog.Error(message, slog.Any("error", err))
@@ -955,8 +901,7 @@ func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": ""}`)
-	w.WriteHeader(http.StatusOK)
+	s.writeJSON(w, map[string]any{"success": true}, http.StatusOK)
 }
 
 func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
@@ -1407,3 +1352,9 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 
 	s.writeJSON(w, data, http.StatusOK)
 }
+
+func (s *Server) handleAIStatus(w http.ResponseWriter, r *http.Request) {
+	status := ai.GetStatus()
+	s.writeJSON(w, status, http.StatusOK)
+}
+
