@@ -18,7 +18,7 @@ let { onClose, selectedImages = [] } = $props();
 
 		formData.append('criteria', criteria);
 		formData.append('batch_action', action);
-		formData.append('source_gallery', page.params.name);
+		formData.append('source_gallery', page.params.name || '');
 
 		if (action === 'move' || action === 'copy') {
 			formData.append('name', targetGallery)
@@ -44,7 +44,7 @@ let { onClose, selectedImages = [] } = $props();
 </script>
 
 <div class="settings-panel" transition:fly={{ y: 15, duration: 250, easing: quintOut }}>
-	<h3>Settings</h3>
+	<h3>Batch Actions</h3>
 
 	<form onsubmit={executeBatch}>
 		<div class="form-group">
@@ -87,7 +87,7 @@ let { onClose, selectedImages = [] } = $props();
 		
 		<div class="actions">
 			<button type="button" class="btn-cancel" onclick={onClose}>Cancel</button>
-			<button type="submit" class="btn-primary">Save</button>
+			<button type="submit" class="btn-primary">Execute</button>
 		</div>
 	</form>
 </div>

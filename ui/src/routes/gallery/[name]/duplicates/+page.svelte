@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
-	import { invalidateAll } from '$app/navigation';
+	import { invalidateAll, goto } from '$app/navigation';
 	import { carousel } from '$lib/stores/carousel.svelte';
 	import ImageCard from '$lib/components/ImageCard.svelte';
 	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
@@ -18,21 +18,24 @@
 	let isLoading = $state(true);
 	let abortController: AbortController | null = null;
 	let lastUrl = '';
-    let isKeyboardMode = $state(false);
-    let focusedIndex = $state(0);
+        let isKeyboardMode = $state(false);
+        let focusedIndex = $state(0);
+        let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
 
 	let galleries = $derived(duplicatesData?.Galleries || page.data?.galleries || []);
+        let visibleGroupsCount = $state(20);
 
-    let flatImages = $derived.by(() => {
-        if (!duplicatesData) return [];
-        if (duplicatesData.Images && duplicatesData.Images.length > 0) {
-            return duplicatesData.Images;
-        }
-        if (duplicatesData.Groups) {
-            return duplicatesData.Groups.flat();
-        }
-        return [];
-    })
+        let flatImages = $derived.by(() => {
+                if (!duplicatesData) return [];
+                if (duplicatesData.Images && duplicatesData.Images.length > 0) {
+                        return duplicatesData.Images;
+                }
+                if (duplicatesData.Groups) {
+                        const visibleGroups = duplicatesData.Groups.slice(0, visibleGroupsCount);
+                        return visibleGroups.flat();
+                }
+                return [];
+        })
 
 	async function loadDuplicates() {
 		if (abortController) {
@@ -58,6 +61,10 @@
 				const data = await res.json();
 				if (abortController === controller) {
 					duplicatesData = data;
+					if (selectedGalleries.length === 0 && data.SelectedGalleries) {
+						selectedGalleries = Object.keys(data.SelectedGalleries);
+					}
+					visibleGroupsCount = 20;
 				}
 			} else {
 				if (abortController === controller) {
@@ -91,6 +98,39 @@
 		}
 	});
 
+        $effect(() => {
+                if (focusedIndex !== null && flatImages.length > 0) {
+                        updateFocusBox();
+                } else {
+                        focusBox.visible = false;
+                }
+        })
+
+        function updateFocusBox() {
+                if (focusedIndex === null || flatImages.length === 0) {
+                        focusBox.visible = false;
+                        return;
+                }
+
+                const el = document.querySelector(`.duplicates-container [data-index="${focusedIndex}"]`) as HTMLElement;
+                if (el) {
+                        const container = document.querySelector('.duplicates-container') as HTMLElement;
+                        if (container) {
+                                const rect = el.getBoundingClientRect();
+                                const containerRect = container.getBoundingClientRect();
+                                focusBox = {
+                                        x: rect.left - containerRect.left + container.scrollLeft,
+                                        y: rect.top - containerRect.top + container.scrollTop,
+                                        w: el.offsetWidth,
+                                        h: el.offsetHeight,
+                                        visible: true
+                                };
+                        }
+                } else {
+                        focusBox.visible = false;
+                }
+        }
+
 	function toggleSelect(image: any) {
 		if (selectedImages.some(i => i.id === image.id)) {
 			selectedImages = selectedImages.filter(i => i.id !== image.id);
@@ -101,12 +141,18 @@
 
 	function toggleGallery(id: number) {
 		const idStr = id.toString();
-		if (selectedGalleries.includes(idStr)) {
-			selectedGalleries = selectedGalleries.filter(g => g !== idStr);
+		let newSelected = [...selectedGalleries];
+		if (newSelected.includes(idStr)) {
+			newSelected = newSelected.filter(g => g !== idStr);
 		} else {
-			selectedGalleries = [...selectedGalleries, idStr];
+			newSelected.push(idStr);
 		}
-		loadDuplicates();
+
+		let currentUrl = new URL(location.href);
+		currentUrl.searchParams.delete('galleries');
+		newSelected.forEach(g => currentUrl.searchParams.append('galleries', g));
+
+		goto(currentUrl.pathname + currentUrl.search);
 	}
 
 	function handleDebounceSearch() {
@@ -159,8 +205,15 @@
                 const nextIndex = focusedIndex + step;
                 if (nextIndex >= 0 && nextIndex < flatImages.length) {
                         const el = document.querySelector(`.duplicates-container [data-index="${nextIndex}"]`);
-                        el?.scrollIntoView({ block: 'nearest', behavior: 'smooth'});
+                        el?.scrollIntoView({ block: 'nearest', behavior: 'auto'});
                         focusedIndex = nextIndex;
+                } else if (nextIndex >= flatImages.length && duplicatesData?.Groups && duplicatesData.Groups.length > visibleGroupsCount) {
+                        visibleGroupsCount += 20;
+                        setTimeout(() => {
+                                const el = document.querySelector(`.duplicates-container [data-index="${nextIndex}"]`);
+                                el?.scrollIntoView({ block: 'nearest', behavior: 'auto'});
+                                focusedIndex = nextIndex;
+                        }, 50);
                 }
         }
 
@@ -211,7 +264,7 @@
                         const attr = bestCard.getAttribute('data-index');
                         const newIndex = attr !== null ? Number(attr) : NaN;
                         if (!isNaN(newIndex)) {
-                                bestCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                                bestCard.scrollIntoView({ block: 'nearest', behavior: 'auto' });
                                 focusedIndex = newIndex;
                         }
                 }
@@ -280,16 +333,36 @@
 				e.preventDefault();
 				if (selectedImages.length > 0) {
 					runBatchAction('delete', 'selected');
-				}
+				} else {
+                                        deleteImage()
+                                }
 				break;
 		}
 	}
+
+        async function deleteImage() {
+                if (!confirm('remove image irreversibly?')) return;
+                try {
+                        const img = carousel.currentImage;
+                        if (!img) return;
+                        await fetch(`/api/image/${img.id}/delete`, { method: 'POST' });
+                        carousel.images.splice(carousel.currentIndex, 1);
+
+                        if (carousel.images.length === 0) {
+                                carousel.close();
+                        } else if (carousel.currentIndex >= carousel.images.length) {
+                                carousel.currentIndex = carousel.images.length - 1;
+                        }
+                } catch (e) {
+                        console.error("Löschen fehlgeschlagen", e);
+                }
+        }
 
 	function handleGlobalClick(e: MouseEvent) {
 		const target = e.target as HTMLElement;
 		if (!target || typeof target.closest !== 'function') return;
 
-		if (!target.closest('.batch-dialog, .dropdown-menu, .gallery-filter-dropdown, .btn-icon')) {
+		if (!target.closest('.batch-dialog, .dropdown-menu, .dropdown-wrapper, .gallery-filter-dropdown, .btn-icon')) {
 			batchIsOpen = false;
 			isDropdownOpen = false;
 		}
@@ -299,6 +372,12 @@
 <svelte:window onclick={handleGlobalClick} onkeydown={handleKeyDown} onmousemove={handleMouseMove} />
 
 <div class="duplicates-container">
+        {#if focusBox.visible && isKeyboardMode}
+                <div
+                        class="floating-focus"
+                        style="transform: translate({focusBox.x}px, {focusBox.y}px); width: {focusBox.w}px; height: {focusBox.h}px;"
+                ></div>
+        {/if}
 	<div class="header-section">
 		{#if page.url.searchParams.has('imageID')}
 			<h1>Similar Images</h1>
@@ -355,7 +434,7 @@
 								<label class="gallery-checkbox">
 									<input
 										type="checkbox"
-										checked={selectedGalleries.includes(gallery.id?.toString()) || (duplicatesData?.SelectedGalleries && duplicatesData.SelectedGalleries[gallery.id])}
+										checked={selectedGalleries.includes(gallery.id?.toString())}
 										onchange={() => toggleGallery(gallery.id)}
 									/>
 									<span>{gallery.name}</span>
@@ -380,7 +459,7 @@
 				<h3>Duplicates for selected Image</h3>
 				<span class="badge">{duplicatesData.Images.length} Images</span>
 			</div>
-			<div class="gallery-grid">
+			<div class="gallery-grid" class:keyboard-nav={isKeyboardMode}>
 				{#each duplicatesData.Images as image, imgIndex}
 					<ImageCard 
 						{image}
@@ -388,8 +467,10 @@
 						isSelected={selectedImages.some(i => i.id === image.id)}
 						dataIndex={imgIndex}
 						isFocused={isKeyboardMode && focusedIndex === imgIndex}
-						onmouseenter={() => {
-							if (!isKeyboardMode) focusedIndex = imgIndex;
+						onmousemove={() => {
+							if (!isKeyboardMode && focusedIndex !== imgIndex) {
+								focusedIndex = imgIndex;
+							}
 						}}
 						onclick={(e) => {
 							if (e.shiftKey) {
@@ -404,13 +485,13 @@
 			</div>
 		</div>
 	{:else if duplicatesData?.Groups && duplicatesData.Groups.length > 0}
-		{#each duplicatesData.Groups as group, index}
+		{#each duplicatesData.Groups.slice(0, visibleGroupsCount) as group, index}
 			<div class="duplicates-group">
 				<div class="group-header">
 					<h3>Set {index + 1}</h3>
 					<span class="badge">{group.length} Images</span>
 				</div>
-				<div class="gallery-grid">
+				<div class="gallery-grid" class:keyboard-nav={isKeyboardMode}>
 					{#each group as image, imgIndex}
 						{@const globalIndex = flatImages.indexOf(image)}
 						<ImageCard 
@@ -418,8 +499,10 @@
 							isSelected={selectedImages.some(i => i.id === image.id)}
 							dataIndex={globalIndex}
 							isFocused={isKeyboardMode && focusedIndex === globalIndex}
-							onmouseenter={() => {
-								if (!isKeyboardMode) focusedIndex = globalIndex;
+							onmousemove={() => {
+								if (!isKeyboardMode && focusedIndex !== globalIndex) {
+									focusedIndex = globalIndex;
+								}
 							}}
 							onclick={(e: { shiftKey: any; }) => {
 								if (e.shiftKey) {
@@ -435,6 +518,16 @@
 				</div>
 			</div>
 		{/each}
+
+		{#if duplicatesData.Groups.length > visibleGroupsCount}
+			<button 
+				type="button" 
+				class="btn-load-more" 
+				onclick={() => visibleGroupsCount += 20}
+			>
+				Load More Groups ({duplicatesData.Groups.length - visibleGroupsCount} remaining)
+			</button>
+		{/if}
 	{:else}
 		<div class="empty-state">
 			<span class="material-symbols-outlined icon-large">task_alt</span>
@@ -445,10 +538,45 @@
 
 <style>
 	.duplicates-container {
+                position: relative;
 		padding: 24px;
 		margin: 0 auto;
 		width: 100%;
 		flex: 1;
+	}
+
+        .floating-focus {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            border-radius: 8px;
+            box-shadow: inset 0 0 0 3px var(--primary), 0 0 25px color-mix(in srgb, var(--primary) 40%, transparent);
+            z-index: 10;
+            transition:
+                transform 0.18s cubic-bezier(0.2, 0, 0, 1),
+                width 0.18s cubic-bezier(0.2, 0, 0, 1),
+                height 0.18s cubic-bezier(0.2, 0, 0, 1);
+        }
+
+	.btn-load-more {
+		display: block;
+		margin: 32px auto;
+		background: var(--bg-light);
+		color: var(--text);
+		border: 1px solid var(--border);
+		padding: 12px 24px;
+		border-radius: 8px;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 0.95rem;
+		transition: all 0.2s ease;
+	}
+
+	.btn-load-more:hover {
+		background: var(--primary);
+		color: var(--bg-dark);
+		border-color: var(--primary);
 	}
 	
 	.header-section {

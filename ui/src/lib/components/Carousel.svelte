@@ -15,7 +15,7 @@
 		if (carousel.isOpen && filmstripContainer) {
 			requestAnimationFrame(() => updateFocusBox());
 			const activeThumb = filmstripContainer.querySelector(`[data-thumb-index="${carousel.currentIndex}"]`) as HTMLElement;
-			activeThumb?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+			activeThumb?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
 		}
 	});
 
@@ -123,7 +123,7 @@
 			case 'u':
 				setFlag(0);
 				break;
-			case 'Del':
+			case 'Delete':
 				deleteImage();
 				break;
 		}
@@ -171,7 +171,7 @@
 	}
 
 	async function deleteImage() {
-		if (!confirm('Bild endgültig löschen?')) return;
+		if (!confirm('remove image irreversibly?')) return;
 		try {
 			const img = carousel.currentImage;
 			if (!img) return;

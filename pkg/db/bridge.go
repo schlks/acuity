@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -132,6 +133,7 @@ func (b *Bridge) ScanGallery(name string) error {
 	if err != nil {
 		return err
 	}
+	_ = b.sDB.ClearAllDuplicateCache()
 	b.mu.Lock()
 	if b.ExpectedCount[gallery.ID] != 0 {
 		b.mu.Unlock()
@@ -444,6 +446,10 @@ func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 		}
 	}
 
+	if err := b.sDB.RemoveImagesFromDuplicateCache(imageIDs); err != nil {
+		slog.Error("Failed to update duplicates cache after deletion", slog.Any("error", err))
+	}
+
 	if err := b.vDB.RemoveImages(ctx, imageIDs); err != nil {
 		return err
 	}
@@ -585,6 +591,74 @@ func (b *Bridge) EditGalleryName(id int, newName string) error {
 }
 
 func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, galleryIDs []int) ([][]SImage, error) {
+	// 1. Generate cache key by sorting and joining gallery IDs
+	sortedIDs := make([]int, len(galleryIDs))
+	copy(sortedIDs, galleryIDs)
+	slices.Sort(sortedIDs)
+	var idStrs []string
+	for _, id := range sortedIDs {
+		idStrs = append(idStrs, strconv.Itoa(id))
+	}
+	cacheKey := strings.Join(idStrs, ",")
+
+	// 2. Try loading duplicate groups from database cache
+	if cachedGroups, err := b.sDB.GetCachedDuplicates(cacheKey, threshold); err == nil && len(cachedGroups) > 0 {
+		slog.Info("Loaded duplicate groups from database cache", slog.String("key", cacheKey), slog.Float64("threshold", threshold))
+		
+		// Batch fetch all SImage objects by their IDs
+		var allIDs []int
+		for _, g := range cachedGroups {
+			allIDs = append(allIDs, g...)
+		}
+		imagesMap, err := b.sDB.GetImagesByIDs(allIDs)
+		if err != nil {
+			return nil, err
+		}
+
+		// Fetch vectors to calculate duplicate distance
+		allVectors, err := b.vDB.GetVectors(ctx, galleryIDs)
+		if err != nil {
+			return nil, err
+		}
+		vectorMap := make(map[string][]float64)
+		for _, v := range allVectors {
+			if len(v.Vector) > 0 {
+				norm := floats.Norm(v.Vector, 2)
+				if norm > 0 {
+					floats.Scale(1.0/norm, v.Vector)
+					vectorMap[v.ID] = v.Vector
+				}
+			}
+		}
+
+		var duplicateGroups [][]SImage
+		for _, memberIDs := range cachedGroups {
+			var group []SImage
+			var firstVec []float64
+			for i, id := range memberIDs {
+				image, ok := imagesMap[id]
+				if !ok {
+					continue
+				}
+				idStr := strconv.Itoa(id)
+				if i == 0 {
+					firstVec = vectorMap[idStr]
+				} else if len(firstVec) > 0 {
+					if vec, exists := vectorMap[idStr]; exists {
+						dist := 1.0 - floats.Dot(firstVec, vec)
+						image.Distance = &dist
+					}
+				}
+				group = append(group, image)
+			}
+			if len(group) > 1 {
+				duplicateGroups = append(duplicateGroups, group)
+			}
+		}
+		return duplicateGroups, nil
+	}
+
+	// 3. Cache miss: perform SIMD multi-core duplicates search
 	allImages, err := b.vDB.GetVectors(ctx, galleryIDs)
 	if err != nil {
 		return nil, err
@@ -612,7 +686,6 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 	}
 
 	numWorkers := max(runtime.NumCPU(), 1)
-
 	chunkSize := (n + numWorkers - 1) / numWorkers
 	var wg sync.WaitGroup
 	matchesChan := make(chan []matchPair, numWorkers)
@@ -631,21 +704,17 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 		go func(s, e int) {
 			defer wg.Done()
 			var localMatches []matchPair
+			dotThreshold := 1.0 - threshold
 			for i := s; i < e; i++ {
 				vecA := validImages[i].Vector
-				lenA := len(vecA)
 				for j := i + 1; j < n; j++ {
 					vecB := validImages[j].Vector
-					if lenA != len(vecB) {
+					if len(vecA) != len(vecB) {
 						continue
 					}
-					var dot float64
-					for k := range lenA {
-						dot += vecA[k] * vecB[k]
-					}
-					dist := 1.0 - dot
-					if dist <= threshold {
-						localMatches = append(localMatches, matchPair{i: i, j: j, dist: dist})
+					dot := floats.Dot(vecA, vecB)
+					if dot >= dotThreshold {
+						localMatches = append(localMatches, matchPair{i: i, j: j, dist: 1.0 - dot})
 					}
 				}
 			}
@@ -699,11 +768,18 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 	for _, memberIndices := range groups {
 		if len(memberIndices) > 1 {
 			var group []SImage
-			for _, idx := range memberIndices {
+			var firstVec []float64
+			for i, idx := range memberIndices {
 				image, err := b.sDB.GetImageByPath(validImages[idx].Path)
 				if err != nil {
 					slog.Error("Failed to get image by path for duplicate group", slog.String("path", validImages[idx].Path), slog.Any("error", err))
 					continue
+				}
+				if i == 0 {
+					firstVec = validImages[idx].Vector
+				} else if len(firstVec) > 0 {
+					dist := 1.0 - floats.Dot(firstVec, validImages[idx].Vector)
+					image.Distance = &dist
 				}
 				group = append(group, image)
 			}
@@ -711,6 +787,19 @@ func (b *Bridge) FindGlobalDuplicates(ctx context.Context, threshold float64, ga
 				duplicateGroups = append(duplicateGroups, group)
 			}
 		}
+	}
+
+	// Save computed duplicate groups to cache
+	var cacheGroups [][]int
+	for _, group := range duplicateGroups {
+		var ids []int
+		for _, img := range group {
+			ids = append(ids, img.ID)
+		}
+		cacheGroups = append(cacheGroups, ids)
+	}
+	if err := b.sDB.SaveCachedDuplicates(cacheKey, threshold, cacheGroups); err != nil {
+		slog.Error("Failed to save duplicate groups to cache", slog.Any("error", err))
 	}
 
 	return duplicateGroups, nil

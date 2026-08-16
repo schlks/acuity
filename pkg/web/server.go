@@ -575,7 +575,7 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	flagFilter := r.FormValue("flagFilter")
-	images, err := s.Bridge.GetAllImages(id, s.Config.DefaultSortBy, s.Config.DefaultSortOrder, 0, s.Config.ImagesPerPage, flagFilter, "")
+	images, err := s.Bridge.GetAllImages(id, s.Config.DefaultSortBy, s.Config.DefaultSortOrder, 1, s.Config.ImagesPerPage, flagFilter, "")
 	if err != nil {
 		message := "Failed to fetch images for new gallery"
 		slog.Error(message, slog.Any("error", err))
@@ -975,7 +975,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	flagFilter := r.FormValue("flagFilter")
 	folderFilter := r.FormValue("folder")
 	start := time.Now()
-	images, err := s.Bridge.GetAllImages(galleryID, sortBy, sortOrder, page-1, s.Config.ImagesPerPage, flagFilter, folderFilter)
+	images, err := s.Bridge.GetAllImages(galleryID, sortBy, sortOrder, page, s.Config.ImagesPerPage, flagFilter, folderFilter)
 	slog.Info("GetAllImages took", slog.Duration("duration", time.Since(start)))
 	if err != nil {
 		slog.Error("Failed to fetch images", slog.Any("error", err))

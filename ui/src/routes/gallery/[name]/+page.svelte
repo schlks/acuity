@@ -94,7 +94,7 @@
 	});
 
 	$effect(() => {
-		if (carousel.isOpen && galleryImages.length > 0) {
+		if (carousel.isOpen && galleryImages.length > 0 && infiniteScroll) {
 			const imagesLeft = galleryImages.length - carousel.currentIndex - 1;
 			if (imagesLeft <= 20 && !isLoadingMore && hasMore) {
 				loadMore();
@@ -103,9 +103,11 @@
 	});
 
 	$effect(() => {
-		if (focusedIndex !== null) {
+		if (focusedIndex !== null && galleryImages.length > 0) {
 			updateFocusBox();
-		}
+		} else {
+                        focusBox.visible = false;
+                }
 	})
 
 	function startEditingName() {
@@ -149,7 +151,7 @@
 			},
 			{
 				root: node.closest('.main-content'),
-				rootMargin: '1500px'
+				rootMargin: '300px'
 			}
 		);
 		observer.observe(node);
@@ -171,8 +173,8 @@
 		}
 		currentUrl.searchParams.set('page', '1');
 
-		goto(currentUrl.toString());
-		document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+		goto(currentUrl.pathname + currentUrl.search);
+		document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' });
 	}
 
 	async function saveGalleryName() {
@@ -202,17 +204,37 @@
 		}
 	}
 
+	async function toggleInfiniteScroll() {
+		const newMode = !infiniteScroll;
+		if (data.settings) {
+			const updated = { ...data.settings, infinite_scroll: newMode };
+			try {
+				await fetch('/api/settings', {
+					method: 'POST',
+					body: JSON.stringify(updated)
+				});
+			} catch (e) {
+				console.error('Failed to save infinite scroll setting:', e);
+			}
+		}
+		infiniteScroll = newMode;
+		await invalidateAll();
+	}
+
 	async function changePage(newPage: number, toBottom: boolean = false) {
 		if (newPage < 1) return;
 
-		await goto(`?page=${newPage}`);
+		let currentUrl = new URL(location.href);
+		currentUrl.searchParams.set('page', newPage.toString());
+
+		await goto(currentUrl.pathname + currentUrl.search);
 		await tick();
 
 		const container = document.querySelector('.main-content')
 		if (container) {
 			container.scrollTo({
 				top: toBottom ? container.scrollHeight : 0,
-				behavior: 'smooth'
+				behavior: 'auto'
 			});
 		}
 	}
@@ -235,8 +257,8 @@
 
 		currentUrl.searchParams.set('page', '1');
 
-		goto(currentUrl.toString());
-		document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+		goto(currentUrl.pathname + currentUrl.search);
+		document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' });
         (document.activeElement as HTMLElement)?.blur();
 	}
 
@@ -396,18 +418,6 @@
 				galleryImages.push(...json.images);
 				hasMore = json.has_page;
 				currentInfinitePage = json.current_page;
-
-				await tick();
-
-				const trigger = document.querySelector('.infinite-trigger');
-				if (trigger && hasMore) {
-					const rect = trigger.getBoundingClientRect();
-					if (rect.top <= window.innerHeight + 800) {
-						isLoadingMore = false;
-						await loadMore();
-						return;
-					}
-				}
 			}
 		} finally {
 			isLoadingMore = false;
@@ -608,12 +618,12 @@
 			const container = document.querySelector('.main-content');
 			const { isFirstRow, isLastRow } = checkRow(nextIndex);
 			if (isFirstRow) {
-				container?.scrollTo({ top: 0, behavior: 'smooth' });
+				container?.scrollTo({ top: 0, behavior: 'auto' });
 			} else if (isLastRow) {
-				container?.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+				container?.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
 			} else {
 				const el = document.querySelector(`[data-index="${nextIndex}"]`);
-				el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+				el?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
 			}
 			focusedIndex = nextIndex;
 		} else {
@@ -691,11 +701,11 @@
 				const container = document.querySelector('.main-content');
 				const { isFirstRow, isLastRow } = checkRow(newIndex);
 				if (isFirstRow) {
-					container?.scrollTo({ top: 0, behavior: 'smooth' });
+					container?.scrollTo({ top: 0, behavior: 'auto' });
 				} else if (isLastRow) {
-					container?.scrollTo({ top: container?.scrollHeight, behavior: 'smooth' });
+					container?.scrollTo({ top: container?.scrollHeight, behavior: 'auto' });
 				} else {
-					bestCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+					bestCard.scrollIntoView({ block: 'nearest', behavior: 'auto' });
 				}
 				focusedIndex = newIndex;
 			}
@@ -834,7 +844,7 @@
 		<button
 			class="image-count"
 			class:active={infiniteScroll}
-			onclick={() => (infiniteScroll = !infiniteScroll)}
+			onclick={toggleInfiniteScroll}
 			title="Toggle Infinite Scrolling"
 		>
 			{data.gallery.count} images
@@ -1087,12 +1097,12 @@
 			<ImageCard
 				{image}
 				dataIndex={index}
-				onmouseenter={() => {
-					if (!isKeyboardMode) {
+				onmousemove={() => {
+					if (!isKeyboardMode && focusedIndex !== index) {
 						focusedIndex = index;
 					}
 				}}
-				isFocused={focusedIndex === index} 
+				isFocused={!isKeyboardMode && focusedIndex === index} 
 				isSelected={selectedImages.some(i => i.id === image.id)}
 				showMeta={false}
 				onclick={() => {

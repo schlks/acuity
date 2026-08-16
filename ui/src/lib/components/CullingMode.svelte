@@ -32,7 +32,7 @@
 		if (isOpen && filmstripContainer) {
 			requestAnimationFrame(() => updateFocusBox());
 			const activeThumb = filmstripContainer.querySelector(`[data-thumb-index="${currentIndex}"]`) as HTMLElement;
-			activeThumb?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+			activeThumb?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
 		}
 	});
 

@@ -48,46 +48,42 @@
 
 	<form onsubmit={saveSettings}>
 		<div class="form-group">
-			<label>
-				Sort By:
-				<select class:changed={config.default_sort_by !== originalConfig.default_sort_by} bind:value={config.default_sort_by}>
-					<option value="rating">Rating</option>
-					<option value="date">Date</option>
-					<option value="name">Name</option>
-					<option value="name_lex">Alphabet</option>
-					<option value="resolution">Resolution</option>
-					<option value="aspect_ratio">Aspect Ratio</option>
-				</select>
-			</label>
+			<label for="sort-by">Sort By:</label>
+			<select id="sort-by" class:changed={config.default_sort_by !== originalConfig.default_sort_by} bind:value={config.default_sort_by}>
+				<option value="rating">Rating</option>
+				<option value="date">Date</option>
+				<option value="name">Name</option>
+				<option value="name_lex">Alphabet</option>
+				<option value="resolution">Resolution</option>
+				<option value="aspect_ratio">Aspect Ratio</option>
+			</select>
 		</div>
 
 		<div class="form-group">
-			<label>
-				Sort Order:
-				<select class:changed={config.default_sort_order !== originalConfig.default_sort_order} bind:value={config.default_sort_order}>
-					<option value="asc">Ascending</option>
-					<option value="desc">Descending</option>
-				</select>
-			</label>
+			<label for="sort-order">Sort Order:</label>
+			<select id="sort-order" class:changed={config.default_sort_order !== originalConfig.default_sort_order} bind:value={config.default_sort_order}>
+				<option value="asc">Ascending</option>
+				<option value="desc">Descending</option>
+			</select>
 		</div>
 
 		<div class="form-group">
-			<label>
-				Images on Page:
-				<input
-					type="number"
-					min="1"
-					max="1000"
-					step="any"
-					bind:value={config.images_per_page}
-					class:changed={config.images_per_page !== originalConfig.images_per_page}
-				/>
-			</label>
+			<label for="images-per-page">Images on Page:</label>
+			<input
+				id="images-per-page"
+				type="number"
+				min="1"
+				max="1000"
+				step="any"
+				bind:value={config.images_per_page}
+				class:changed={config.images_per_page !== originalConfig.images_per_page}
+			/>
 		</div>
 
-		<div class="form-group row-layout">
-			<span class="label-text">Scrolling:</span>
+		<div class="form-group">
+			<label for="scrolling-toggle">Scrolling:</label>
 			<button 
+				id="scrolling-toggle"
 				type="button"
 				class="btn-toggle"
 				class:active={config.infinite_scroll}
@@ -97,9 +93,9 @@
 			</button>
 		</div>
 
-		<div class="form-group row-layout">
-			<span class="label-text">Wipe Databases:</span>
-			<button type="button" class="btn-danger" onclick={wipeDatabases}>Delete</button>
+		<div class="form-group">
+			<label for="wipe-btn">Wipe Databases:</label>
+			<button id="wipe-btn" type="button" class="btn-danger" onclick={wipeDatabases}>Delete</button>
 		</div>
 
 		<button type="submit" style="display: none;"></button>
@@ -135,23 +131,14 @@
 
 	.form-group {
 		display: flex;
-		flex-direction: column;
-		gap: 8px;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
 		margin-bottom: 16px;
 	}
 
 	.form-group label {
-		font-size: 0.9rem;
-		color: var(--text-muted);
-	}
-
-	.form-group.row-layout {
-		flex-direction: row;
-		align-items: center;
-		justify-content: space-between;
-	}
-
-	.label-text {
 		font-size: 0.9rem;
 		color: var(--text-muted);
 	}
@@ -167,6 +154,7 @@
 		outline: none;
 		cursor: pointer;
 		transition: border-color 0.2s;
+		width: 180px;
 	}
 
 	select:focus, input[type="number"]:focus {

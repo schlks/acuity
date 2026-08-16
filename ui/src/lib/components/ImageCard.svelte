@@ -8,6 +8,7 @@
         onclick?: (e: MouseEvent) => void;
         oncontextmenu?: (e: MouseEvent) => void;
         onmouseenter?: (e: MouseEvent) => void;
+        onmousemove?: (e: MouseEvent) => void;
         isFocused?: boolean;
         isSelected?: boolean;
         dataIndex?: number;
@@ -19,6 +20,7 @@
         onclick,
         oncontextmenu,
         onmouseenter,
+        onmousemove,
         isFocused = false,
         isSelected = false,
         dataIndex,
@@ -79,6 +81,7 @@
 	class:focused={isFocused}
 	data-index={dataIndex}
 	{onmouseenter}
+	{onmousemove}
 	onclick={onclick}
 	{oncontextmenu}
 	style="flex-grow: {image.aspect_ratio || 1.5}; flex-basis: calc(var(--grid-base, 250px) * {image.aspect_ratio || 1.5})"
@@ -183,11 +186,17 @@
 		will-change: clip-path;
 	}
 
-	.image-card:hover::before,
-	.image-card:hover::after,
-	.image-card.focused::before,
-	.image-card.focused::after {
+	:global(.gallery-grid:not(.keyboard-nav)) .image-card:hover::before,
+	:global(.gallery-grid:not(.keyboard-nav)) .image-card:hover::after,
+	:global(.gallery-grid:not(.keyboard-nav)) .image-card.focused::before,
+	:global(.gallery-grid:not(.keyboard-nav)) .image-card.focused::after {
 		clip-path: circle(250% at 0% 100%);
+	}
+
+	/* Simple, instant border for keyboard focus (no circle animation & overlay) */
+	:global(.keyboard-nav) .image-card.focused::after {
+		clip-path: none;
+		border: 4px solid var(--primary);
 	}
 
 	.image-card img {

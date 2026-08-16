@@ -5,6 +5,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -174,7 +175,13 @@ func (s *SQLiteClient) InitTable() error {
 	CREATE INDEX IF NOT EXISTS idx_rating ON images(rating);
 	CREATE INDEX IF NOT EXISTS idx_flag ON images(flag);
 	CREATE INDEX IF NOT EXISTS idx_gallery_flag ON images(gallery_id, flag);
-	CREATE INDEX IF NOT EXISTS idx_file_hash ON images(file_hash);`
+	CREATE INDEX IF NOT EXISTS idx_file_hash ON images(file_hash);
+	CREATE TABLE IF NOT EXISTS duplicate_cache (
+		gallery_ids TEXT NOT NULL,
+		threshold REAL NOT NULL,
+		group_data TEXT NOT NULL,
+		PRIMARY KEY (gallery_ids, threshold)
+	);`
 	_, err := s.DB.Exec(query)
 	if err != nil {
 		return err
@@ -580,4 +587,108 @@ func (s *SQLiteClient) ResetDatabase() error {
 		return err
 	}
 	return s.InitTable()
+}
+
+func (s *SQLiteClient) GetCachedDuplicates(galleryIDs string, threshold float64) ([][]int, error) {
+	var groupData string
+	err := s.DB.Get(&groupData, "SELECT group_data FROM duplicate_cache WHERE gallery_ids = ? AND threshold = ?", galleryIDs, threshold)
+	if err != nil {
+		return nil, err
+	}
+	var groups [][]int
+	if err := json.Unmarshal([]byte(groupData), &groups); err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
+func (s *SQLiteClient) SaveCachedDuplicates(galleryIDs string, threshold float64, groups [][]int) error {
+	data, err := json.Marshal(groups)
+	if err != nil {
+		return err
+	}
+	_, err = s.DB.Exec("INSERT OR REPLACE INTO duplicate_cache (gallery_ids, threshold, group_data) VALUES (?, ?, ?)", galleryIDs, threshold, string(data))
+	return err
+}
+
+func (s *SQLiteClient) ClearAllDuplicateCache() error {
+	_, err := s.DB.Exec("DELETE FROM duplicate_cache;")
+	return err
+}
+
+func (s *SQLiteClient) GetImagesByIDs(ids []int) (map[int]SImage, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query, args, err := sqlx.In("SELECT * FROM images WHERE id IN (?)", ids)
+	if err != nil {
+		return nil, err
+	}
+	var images []SImage
+	err = s.DB.Select(&images, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[int]SImage)
+	for _, img := range images {
+		m[img.ID] = img
+	}
+	return m, nil
+}
+
+func (s *SQLiteClient) RemoveImagesFromDuplicateCache(deletedIDs []int) error {
+	if len(deletedIDs) == 0 {
+		return nil
+	}
+	deletedMap := make(map[int]bool)
+	for _, id := range deletedIDs {
+		deletedMap[id] = true
+	}
+
+	type cacheRow struct {
+		GalleryIDs string  `db:"gallery_ids"`
+		Threshold  float64 `db:"threshold"`
+		GroupData  string  `db:"group_data"`
+	}
+	var rows []cacheRow
+	if err := s.DB.Select(&rows, "SELECT gallery_ids, threshold, group_data FROM duplicate_cache"); err != nil {
+		return err
+	}
+
+	tx, err := s.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, row := range rows {
+		var groups [][]int
+		if err := json.Unmarshal([]byte(row.GroupData), &groups); err != nil {
+			continue
+		}
+
+		var updatedGroups [][]int
+		for _, g := range groups {
+			var updatedGroup []int
+			for _, id := range g {
+				if !deletedMap[id] {
+					updatedGroup = append(updatedGroup, id)
+				}
+			}
+			if len(updatedGroup) > 1 {
+				updatedGroups = append(updatedGroups, updatedGroup)
+			}
+		}
+
+		if len(updatedGroups) > 0 {
+			newData, _ := json.Marshal(updatedGroups)
+			_, err = tx.Exec("UPDATE duplicate_cache SET group_data = ? WHERE gallery_ids = ? AND threshold = ?", string(newData), row.GalleryIDs, row.Threshold)
+		} else {
+			_, err = tx.Exec("DELETE FROM duplicate_cache WHERE gallery_ids = ? AND threshold = ?", row.GalleryIDs, row.Threshold)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

@@ -3,6 +3,17 @@
 	import { quintOut } from 'svelte/easing';
 	import { carousel } from '$lib/stores/carousel.svelte';
 	import { page } from '$app/state';
+        import {
+                formatSize,
+                formatDate,
+                formatResolution,
+                formatExt,
+                formatAperture,
+                formatShutter,
+                formatIso,
+                formatFocalLength,
+                formatLens
+        } from '$lib/format';
 	
 	let { image } = $props();
 	let galleryName = $derived(
@@ -11,18 +22,6 @@
 		page.params.name ||
 		'global'
 	)
-
-	function formatSize(bytes: number) {
-		if (!bytes) return '0 MB';
-		return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-	}
-
-	function formatDate(dateString: string) {
-		if (!dateString) return '--';
-		const d = new Date(dateString);
-		if (isNaN(d.getTime())) return dateString;
-		return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-	}
 
 	async function deleteImage() {
 		if (!confirm('Bild endgültig löschen?')) return;
@@ -48,36 +47,35 @@
 	<div class="info-group">
 		<span class="material-symbols-outlined">photo_camera</span>
 		<div class="info-text">
-			<span class="label">Camera</span>
-			<span class="value">{image.camera_make || 'NA'}</span>
-		</div>
-	</div>
-
-	<div class="info-group">
-		<span class="material-symbols-outlined">camera</span>
-		<div class="info-text">
-			<span class="label">Lens</span>
-			<span class="value">{image.lens_make || 'NA'}</span>
+			<span class="label">Camera and Lens</span>
+			<span class="value">{formatLens(image.camera_make, image.lens_make)}</span>
 		</div>
 	</div>
 
 	<div class="info-grid">
 		<div class="grid-item">
 			<span class="label">Aperture</span>
-			<span class="value">{image.aperture ? `\u1D453/${image.aperture}` : '--'}</span>
+			<span class="value">{formatAperture(image.aperture)}</span>
 		</div>
 		<div class="grid-item">
 			<span class="label">Shutter Speed</span>
-			<span class="value">{image.shutter_speed ? `${image.shutter_speed}s` : '--'}</span>
+			<span class="value">{formatShutter(image.shutter_speed)}</span>
 		</div>
 		<div class="grid-item">
 			<span class="label">ISO</span>
-			<span class="value">{image.iso || '--'}</span>
+			<span class="value">{formatIso(image.iso)}</span>
 		</div>
 		<div class="grid-item">
 			<span class="label">Focal Length</span>
-			<span class="value">{image.focal_length ? `${image.focal_length}` : '--'}</span>
+			<span class="value">{formatFocalLength(image.focal_length)}</span>
 		</div>
+                <div class="grid-item">
+                        {#if image.flash}
+                                <span class="material-symbols-outlined">flash_on</span>
+                        {:else}
+                                <span class="material-symbols-outlined icon">flash_off</span>
+                        {/if}
+                </div>
 	</div>
 
     
@@ -87,18 +85,20 @@
 		<span class="material-symbols-outlined">insert_drive_file</span>
 		<div class="info-text">
 			<span class="label">File</span>
-			<span class="value">{image.resolution || '--'} • {formatSize(image.size)}</span>
-			<span class="sub-value">{image.filepath.split('/').pop()}</span>
+			<span class="value">{formatResolution(image.resolution)} • {formatSize(image.size)} • {formatExt(image.extension)}</span>
+			<span class="sub-value">{image.filepath.split('/').pop().split('.')[0]}</span>
 		</div>
 	</div>
-	
-	<div class="info-group">
-		<span class="material-symbols-outlined">today</span>
-		<div class="info-text">
-			<span class="label">Date Taken</span>
-			<span class="value">{formatDate(image.taken)}</span>
-		</div>
-	</div>
+
+        {#if image.taken !== image.date}
+                <div class="info-group">
+                        <span class="material-symbols-outlined">today</span>
+                        <div class="info-text">
+                                <span class="label">Date Taken</span>
+                                <span class="value">{formatDate(image.taken)}</span>
+                        </div>
+                </div>
+        {/if}
 
 	<div class="info-group">
 		<span class="material-symbols-outlined">event</span>
@@ -259,6 +259,11 @@
 		font-size: 0.95rem;
 		font-weight: 500;
 	}
+
+        .icon {
+            font-size: 1.2rem;
+            font-weight: 500;
+        }
 
 	.sub-value {
 		font-size: 0.75rem;

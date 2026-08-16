@@ -56,13 +56,13 @@ export function formatExt(ext: string): string {
 
 export function formatAperture(a: string): string {
 	const trimmed = (a || '').trim();
-	if (!trimmed || trimmed === '0' || trimmed === '0.0' || trimmed === '0.00') return '';
+	if (!trimmed || trimmed === '0' || trimmed === '0.0' || trimmed === '0.00') return '--';
 	return trimmed.replace(/^f\//i, '');
 }
 
 export function formatShutter(s: string): string {
 	let clean = (s || '').trim().replace(/s$/i, '');
-	if (!clean || clean === '0' || clean === '0.0' || clean === '0.00') return '';
+	if (!clean || clean === '0' || clean === '0.0' || clean === '0.00') return '--';
 
 	if (!clean.includes('/')) {
 		const f = parseFloat(clean);
@@ -81,7 +81,7 @@ export function formatShutter(s: string): string {
 
 export function formatFocalLength(f: string): string {
 	const trimmed = (f || '').trim();
-	if (!trimmed || /^0+(\.0+)?(mm)?$/i.test(trimmed)) return '';
+	if (!trimmed || /^0+(\.0+)?(mm)?$/i.test(trimmed)) return '--';
 	if (!trimmed.toLowerCase().endsWith('mm')) {
 		return `${trimmed}mm`;
 	}
@@ -90,18 +90,18 @@ export function formatFocalLength(f: string): string {
 
 export function formatIso(iso: string): string {
 	const trimmed = (iso || '').trim();
-	if (!trimmed || trimmed === '0' || trimmed === '0.0' || trimmed === '0.00') return '';
+	if (!trimmed || trimmed === '0' || trimmed === '0.0' || trimmed === '0.00') return '--';
 	return trimmed;
 }
 
 const lensMetaRegex = /\b\d+(\.\d+)?mm\b|\bf\/\d+(\.\d+)?\b/gi;
 
 export function formatLens(make: string, model: string): string {
-	let cleanMake = (make || '').trim();
-	const cleanModel = (model || '').trim();
+	let cleanMake = (make || 'NA').trim();
+	const cleanModel = (model || 'NA').trim();
 
 	if (cleanMake && cleanModel.toLowerCase().startsWith(cleanMake.toLowerCase())) {
-		cleanMake = '';
+		cleanMake = 'NA';
 	}
 
 	let res = `${cleanMake} ${cleanModel}`.trim();
