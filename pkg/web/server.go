@@ -253,8 +253,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) resetDatabase(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	err := s.Bridge.ResetDatabase(ctx)
+	err := s.Bridge.ResetDatabase()
 	if err != nil {
 		slog.Error("Failed to reset database", slog.Any("error", err))
 		http.Error(w, "Failed to reset database", http.StatusInternalServerError)
@@ -621,19 +620,7 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, map[string]any{"success": true, "name": newName}, http.StatusOK)
 }
 
-func progressesEqual(p1, p2 []Progress) bool {
-	if len(p1) != len(p2) {
-		return false
-	}
-	for i := range p1 {
-		if p1[i].GalleryName != p2[i].GalleryName || p1[i].Current != p2[i].Current || p1[i].Expected != p2[i].Expected {
-			return false
-		}
-	}
-	return true
-}
-
-func (s *Server) getGlobalProgress(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getGlobalProgress(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
@@ -1116,14 +1103,14 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if action == "move" {
-			if err := s.Bridge.ChangeGallery(ctx, targetID, images); err != nil {
+			if err := s.Bridge.ChangeGallery(targetID, images); err != nil {
 				message := "Failed to move images"
 				slog.Error(message, slog.Any("error", err))
 				http.Error(w, message, http.StatusInternalServerError)
 				return
 			}
 		} else {
-			if err := s.Bridge.CopyToGallery(ctx, targetID, images); err != nil {
+			if err := s.Bridge.CopyToGallery(targetID, images); err != nil {
 				message := "Failed to copy images"
 				slog.Error(message, slog.Any("error", err))
 				http.Error(w, message, http.StatusInternalServerError)
@@ -1353,8 +1340,7 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, data, http.StatusOK)
 }
 
-func (s *Server) handleAIStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAIStatus(w http.ResponseWriter, _ *http.Request) {
 	status := ai.GetStatus()
 	s.writeJSON(w, status, http.StatusOK)
 }
-

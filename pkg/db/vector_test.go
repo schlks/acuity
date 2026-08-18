@@ -48,16 +48,16 @@ func TestVectorClientOperations(t *testing.T) {
 
 	// 3. Insert vectors: img1 and img2 have almost identical vectors, img3 is different
 	vecA := generateNormalizedVector(1.0)
-	vecA_similar := make([]float32, 512)
-	copy(vecA_similar, vecA)
-	vecA_similar[0] += 0.001 // tiny perturbation
+	vecaSimilar := make([]float32, 512)
+	copy(vecaSimilar, vecA)
+	vecaSimilar[0] += 0.001 // tiny perturbation
 	// renormalize
 	var s float64
-	for _, v := range vecA_similar {
+	for _, v := range vecaSimilar {
 		s += float64(v * v)
 	}
-	for i := range vecA_similar {
-		vecA_similar[i] /= float32(math.Sqrt(s))
+	for i := range vecaSimilar {
+		vecaSimilar[i] /= float32(math.Sqrt(s))
 	}
 
 	vecB := generateNormalizedVector(5.0)
@@ -65,7 +65,7 @@ func TestVectorClientOperations(t *testing.T) {
 	if err := vDB.InsertVector(img1.ID, vecA); err != nil {
 		t.Fatalf("InsertVector img1 failed: %v", err)
 	}
-	if err := vDB.InsertVector(img2.ID, vecA_similar); err != nil {
+	if err := vDB.InsertVector(img2.ID, vecaSimilar); err != nil {
 		t.Fatalf("InsertVector img2 failed: %v", err)
 	}
 	if err := vDB.InsertVector(img3.ID, vecB); err != nil {

@@ -15,7 +15,7 @@ import (
 
 	sqlitevec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/jmoiron/sqlx"
-	sqlite3 "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 )
 
 type SQLiteClient struct {
@@ -53,6 +53,11 @@ type Gallery struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 	Path string `json:"path"`
+}
+
+type CacheItem struct {
+	ID       int      `json:"id"`
+	Distance *float64 `json:"distance,omitempty"`
 }
 
 func init() {
@@ -589,20 +594,20 @@ func (s *SQLiteClient) ResetDatabase() error {
 	return s.InitTable()
 }
 
-func (s *SQLiteClient) GetCachedDuplicates(galleryIDs string, threshold float64) ([][]int, error) {
+func (s *SQLiteClient) GetCachedDuplicates(galleryIDs string, threshold float64) ([][]CacheItem, error) {
 	var groupData string
 	err := s.DB.Get(&groupData, "SELECT group_data FROM duplicate_cache WHERE gallery_ids = ? AND threshold = ?", galleryIDs, threshold)
 	if err != nil {
 		return nil, err
 	}
-	var groups [][]int
+	var groups [][]CacheItem
 	if err := json.Unmarshal([]byte(groupData), &groups); err != nil {
 		return nil, err
 	}
 	return groups, nil
 }
 
-func (s *SQLiteClient) SaveCachedDuplicates(galleryIDs string, threshold float64, groups [][]int) error {
+func (s *SQLiteClient) SaveCachedDuplicates(galleryIDs string, threshold float64, groups [][]CacheItem) error {
 	data, err := json.Marshal(groups)
 	if err != nil {
 		return err
@@ -659,20 +664,25 @@ func (s *SQLiteClient) RemoveImagesFromDuplicateCache(deletedIDs []int) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func(tx *sqlx.Tx) {
+		err := tx.Rollback()
+		if err != nil {
+
+		}
+	}(tx)
 
 	for _, row := range rows {
-		var groups [][]int
+		var groups [][]CacheItem
 		if err := json.Unmarshal([]byte(row.GroupData), &groups); err != nil {
 			continue
 		}
 
-		var updatedGroups [][]int
+		var updatedGroups [][]CacheItem
 		for _, g := range groups {
-			var updatedGroup []int
-			for _, id := range g {
-				if !deletedMap[id] {
-					updatedGroup = append(updatedGroup, id)
+			var updatedGroup []CacheItem
+			for _, item := range g {
+				if !deletedMap[item.ID] {
+					updatedGroup = append(updatedGroup, item)
 				}
 			}
 			if len(updatedGroup) > 1 {

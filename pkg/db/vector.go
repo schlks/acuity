@@ -15,7 +15,7 @@ import (
 type ImageVector struct {
 	ID     string    `json:"id"`
 	Path   string    `json:"path"`
-	Vector []float64 `json:"vector"`
+	Vector []float32 `json:"vector"`
 }
 
 type VectorClient struct {
@@ -214,18 +214,18 @@ func (v *VectorClient) GetVectors(ctx context.Context, galleryIDs []int) ([]Imag
 	result := make([]ImageVector, 0, len(rows))
 	for _, row := range rows {
 		if len(row.Embedding) >= 2048 {
-			f64s := make([]float64, 512)
-			for i := 0; i < 512; i++ {
+			f32s := make([]float32, 512)
+			for i := range 512 {
 				bits := uint32(row.Embedding[i*4]) |
 					uint32(row.Embedding[i*4+1])<<8 |
 					uint32(row.Embedding[i*4+2])<<16 |
 					uint32(row.Embedding[i*4+3])<<24
-				f64s[i] = float64(math.Float32frombits(bits))
+				f32s[i] = math.Float32frombits(bits)
 			}
 			result = append(result, ImageVector{
 				ID:     strconv.Itoa(row.ID),
 				Path:   row.Path,
-				Vector: f64s,
+				Vector: f32s,
 			})
 		}
 	}
