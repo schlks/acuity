@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
+        import { toast } from "$lib/stores/toast.svelte";
 
 	let {
 		isOpen = $bindable(false),
@@ -102,6 +103,41 @@
 		}
 	}
 
+        async function copyImage() {
+                try {
+                        const img = currentImage
+                        if (!img) return;
+                        const imageBlobPromise = (async (image) => {
+                                const res = await fetch(`/api/image?path=${encodeURIComponent(image.filepath)}`);
+                                const blob = await res.blob();
+
+                                if (blob.type === 'image/png') return blob;
+
+                                const img = new Image();
+                                img.src = URL.createObjectURL(blob);
+                                await new Promise((resolve) => (img.onload = resolve));
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                const ctx = canvas.getContext('2d');
+                                ctx?.drawImage(img, 0, 0);
+
+                                const pngBlob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
+                                URL.revokeObjectURL(img.src);
+                                return pngBlob;
+                        })(img);
+
+                        await navigator.clipboard.write([
+                                new ClipboardItem({ 'image/png': imageBlobPromise })
+                        ]);
+                        toast.success('Image copied to clipboard');
+                } catch (err) {
+                        console.error('Failed to copy image', err);
+                        toast.error('Failed to copy image');
+                }
+        }
+
 	function handleKeyDown(e: KeyboardEvent) {
 		if (!isOpen) return;
 
@@ -150,6 +186,12 @@
 				e.preventDefault();
 				setRatingAndAdvance(Number(e.key));
 				break;
+                        case 'c':
+                                e.preventDefault();
+                                if (e.ctrlKey) {
+                                        copyImage();
+                                }
+                                break;
 		}
 	}
 </script>

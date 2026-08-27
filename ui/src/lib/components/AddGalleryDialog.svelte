@@ -101,21 +101,13 @@
 
 <style>
 	.settings-panel {
-		position: absolute;
-		left: 0;
 		width: 100%;
 		background: var(--bg-light);
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		padding: 16px;
-		z-index: 10;
 	}
 	
-	.settings-panel.up {
-		bottom: 100%;
-		margin-bottom: 16px;
-	}
-
 	.settings-panel h3 {
 		margin-top: 0;
 		margin-bottom: 16px;

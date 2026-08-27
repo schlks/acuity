@@ -15,7 +15,7 @@
     import type { ActionReturn } from "svelte/action";
 
 	let { data } = $props();
-	let searchQuery = $state('');
+	let searchQuery = $state(page.url.searchParams.get('q') || '');
 	let searchThreshold = $state(page.url.searchParams.get('threshold') || '0.9');
 	let infiniteScroll = $state(data.settings?.infinite_scroll || false);
 	let currentPage = $derived(Number(data.images.current_page || 1));
@@ -84,6 +84,7 @@
 	let dragDepth = $state(0);
 	let isWindowDragging = $derived(dragDepth > 0);
 
+        let lastUrlQ = page.url.searchParams.get('q') || '';
 	$effect(() => {
 		galleryImages = data.images.images || [];
 		hasMore = data.images.has_page;
@@ -91,6 +92,11 @@
 		if (data.settings) {
 			infiniteScroll = data.settings.infinite_scroll;
 		}
+                const currentUrlQ = page.url.searchParams.get('q') || '';
+                if (currentUrlQ !== lastUrlQ) {
+                        lastUrlQ = currentUrlQ;
+                        searchQuery = currentUrlQ;
+                }
 	});
 
 	$effect(() => {
@@ -303,7 +309,7 @@
 	function isImageFile(file: File): boolean {
 		if (file.type && file.type.startsWith('image/')) return true;
 		const ext = file.name.split('.').pop()?.toLowerCase();
-		return ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl'].includes(ext || '');
+		return ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl', 'cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef'].includes(ext || '');
 	}
 
 	function hasFilePayload(e: DragEvent): boolean {
@@ -320,7 +326,7 @@
 			let clean = line.replace(/^file:\/\/(localhost)?/, '');
 			clean = decodeURIComponent(clean);
 			const ext = clean.split('.').pop()?.toLowerCase();
-			if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl'].includes(ext || '')) {
+			if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl', 'cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef'].includes(ext || '')) {
 				return clean;
 			}
 		}
@@ -718,6 +724,41 @@
 		}
 	}
 
+        async function copyImage() {
+                try {
+                        const img = galleryImages[focusedIndex]
+                        if (!img) return;
+                        const imageBlobPromise = (async (image) => {
+                                const res = await fetch(`/api/image?path=${encodeURIComponent(image.filepath)}`);
+                                const blob = await res.blob();
+
+                                if (blob.type === 'image/png') return blob;
+
+                                const img = new Image();
+                                img.src = URL.createObjectURL(blob);
+                                await new Promise((resolve) => (img.onload = resolve));
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                const ctx = canvas.getContext('2d');
+                                ctx?.drawImage(img, 0, 0);
+
+                                const pngBlob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
+                                URL.revokeObjectURL(img.src);
+                                return pngBlob;
+                        })(img);
+
+                        await navigator.clipboard.write([
+                                new ClipboardItem({ 'image/png': imageBlobPromise })
+                        ]);
+                        toast.success('Image copied to clipboard');
+                } catch (err) {
+                        console.error('Failed to copy image', err);
+                        toast.error('Failed to copy image');
+                }
+        }
+
 	function handleKeyDown(e: KeyboardEvent) {
 		const tag = (e.target as HTMLElement)?.tagName;
 		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -764,13 +805,17 @@
 			case 'u':
 				setFlag(0);
 				break;
-			case 's':
 			case ' ':
 				e.preventDefault();
 				toggleSelectedCurrent();
 				break;
 			case 'c':
-				isCullingOpen = true;
+                                e.preventDefault();
+                                if (e.ctrlKey) {
+                                        copyImage();
+                                } else {
+                                        isCullingOpen = true;
+                                }
 				break;
 			case 'b':
 				batchIsOpen = !batchIsOpen;
@@ -782,9 +827,9 @@
 					runBatchAction('delete', 'selected');
 				}
 				break;
-            case 'r':
-                rescanGallery()
-		}
+                        case 'r':
+                                rescanGallery()
+                }
 	}
 
 	function handleGlobalClick(e: MouseEvent) {

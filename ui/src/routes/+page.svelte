@@ -23,7 +23,7 @@
 	function isImageFile(file: File): boolean {
 		if (file.type && file.type.startsWith('image/')) return true;
 		const ext = file.name.split('.').pop()?.toLowerCase();
-		return ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl'].includes(ext || '');
+		return ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl', 'cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef'].includes(ext || '');
 	}
 
 	function hasFilePayload(e: DragEvent): boolean {
@@ -48,18 +48,21 @@
 	}
 
 	function handleWindowDragOver(e: DragEvent) {
-		if (hasFilePayload(e)) {
-			e.preventDefault();
+		e.preventDefault();
+		if (e.dataTransfer) {
+			e.dataTransfer.dropEffect = 'copy';
 		}
 	}
 
 	function parseImageUri(uri: string): string | null {
+		if (!uri) return null;
 		const lines = uri.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-		if (lines.length === 0) return null;
-		let path = decodeURIComponent(lines[0].replace(/^file:\/\//, ''));
-		const ext = path.split('.').pop()?.toLowerCase();
-		if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl'].includes(ext || '')) {
-			return path;
+		for (const line of lines) {
+			let path = decodeURIComponent(line.replace(/^file:\/\/(localhost)?/, ''));
+			const ext = path.split('.').pop()?.toLowerCase();
+			if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'tiff', 'svg', 'heic', 'jxl', 'cr2', 'cr3', 'nef', 'arw', 'dng', 'rw2', 'orf', 'pef'].includes(ext || '')) {
+				return path;
+			}
 		}
 		return null;
 	}
@@ -78,21 +81,25 @@
 			return;
 		}
 
-		const uriList = e.dataTransfer?.getData('text/uri-list') || e.dataTransfer?.getData('text/plain');
-		if (uriList) {
-			const path = parseImageUri(uriList);
-			if (path) {
-				if (data.galleries && data.galleries.length > 0) {
-					goto(`/gallery/${encodeURIComponent(data.galleries[0].name)}`);
-				} else {
-					toast.info('Please import a gallery first');
-					showAddGallery = true;
+		for (const type of ['text/uri-list', 'text/plain', 'text/x-moz-url', 'URL']) {
+			const dataTransferText = e.dataTransfer?.getData(type);
+			if (dataTransferText) {
+				const path = parseImageUri(dataTransferText);
+				if (path) {
+					if (data.galleries && data.galleries.length > 0) {
+						goto(`/gallery/${encodeURIComponent(data.galleries[0].name)}`);
+					} else {
+						toast.info('Please import a gallery first');
+						showAddGallery = true;
+					}
+					return;
 				}
-				return;
 			}
 		}
 
-		showAddGallery = true;
+		if (hasFilePayload(e)) {
+			showAddGallery = true;
+		}
 	}
 </script>
 
@@ -369,6 +376,8 @@
 		cursor: pointer;
 		user-select: none;
 		overflow: hidden;
+                content-visibility: auto;
+                contain-intrinsic-size: 150px;
 	}
 
 	.gallery-card:hover {
@@ -512,19 +521,23 @@
 	.modal-backdrop {
 		position: fixed;
 		inset: 0;
+                top: 0;
+                left: 0;
 		z-index: 10000;
-		background: color-mix(in srgb, var(--bg-dark) 85%, transparent);
-		backdrop-filter: blur(14px);
-		-webkit-backdrop-filter: blur(14px);
+		background: color-mix(in srgb, var(--bg-dark) 40%, transparent);
+		backdrop-filter: blur(24px);
+		-webkit-backdrop-filter: blur(24px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		padding: 24px;
+                width: 100%;
+                height: 100%;
 	}
 
 	.modal-dialog {
-		position: relative;
-		width: 100%;
+                position: relative;
+		width: 90%;
 		max-width: 480px;
 	}
 
@@ -536,7 +549,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 99999;
-		background: color-mix(in srgb, var(--bg-dark) 82%, transparent);
+		background: color-mix(in srgb, var(--bg-dark) 40%, transparent);
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
 		display: flex;

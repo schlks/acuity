@@ -6,6 +6,7 @@
 	import ImageCard from '$lib/components/ImageCard.svelte';
 	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
+        import {toast} from "$lib/stores/toast.svelte";
 
 	let searchThreshold = $state(page.url.searchParams.get('threshold') || '0.1');
 	let searchTimeout: ReturnType<typeof setTimeout>;
@@ -22,16 +23,16 @@
         let focusedIndex = $state(0);
         let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
 
-	let galleries = $derived(duplicatesData?.Galleries || page.data?.galleries || []);
+	let galleries = $derived(duplicatesData?.galleries || page.data?.galleries || []);
         let visibleGroupsCount = $state(20);
 
         let flatImages = $derived.by(() => {
                 if (!duplicatesData) return [];
-                if (duplicatesData.Images && duplicatesData.Images.length > 0) {
-                        return duplicatesData.Images;
+                if (duplicatesData.images && duplicatesData.images.length > 0) {
+                        return duplicatesData.images;
                 }
-                if (duplicatesData.Groups) {
-                        const visibleGroups = duplicatesData.Groups.slice(0, visibleGroupsCount);
+                if (duplicatesData.groups) {
+                        const visibleGroups = duplicatesData.groups.slice(0, visibleGroupsCount);
                         return visibleGroups.flat();
                 }
                 return [];
@@ -61,21 +62,21 @@
 				const data = await res.json();
 				if (abortController === controller) {
 					duplicatesData = data;
-					if (selectedGalleries.length === 0 && data.SelectedGalleries) {
-						selectedGalleries = Object.keys(data.SelectedGalleries);
+					if (selectedGalleries.length === 0 && data.selectedGalleries) {
+						selectedGalleries = Object.keys(data.selectedGalleries);
 					}
 					visibleGroupsCount = 20;
 				}
 			} else {
 				if (abortController === controller) {
-					duplicatesData = { Groups: [], Galleries: [] };
+					duplicatesData = { groups: [], galleries: [] };
 				}
 			}
 		} catch (e: any) {
 			if (e.name === 'AbortError') return;
 			console.error('Failed to load duplicates:', e);
 			if (abortController === controller) {
-				duplicatesData = { Groups: [], Galleries: [] };
+				duplicatesData = { groups: [], galleries: [] };
 			}
 		} finally {
 			if (abortController === controller) {
@@ -207,7 +208,7 @@
                         const el = document.querySelector(`.duplicates-container [data-index="${nextIndex}"]`);
                         el?.scrollIntoView({ block: 'nearest', behavior: 'auto'});
                         focusedIndex = nextIndex;
-                } else if (nextIndex >= flatImages.length && duplicatesData?.Groups && duplicatesData.Groups.length > visibleGroupsCount) {
+                } else if (nextIndex >= flatImages.length && duplicatesData?.groups && duplicatesData.groups.length > visibleGroupsCount) {
                         visibleGroupsCount += 20;
                         setTimeout(() => {
                                 const el = document.querySelector(`.duplicates-container [data-index="${nextIndex}"]`);
@@ -273,11 +274,11 @@
         function openFocusedInCarousel() {
                 if (flatImages.length === 0 || focusedIndex < 0 || focusedIndex >= flatImages.length) return;
                 const targetImage = flatImages[focusedIndex];
-                if (duplicatesData.Images && duplicatesData.Images.length > 0) {
-                        const idx = duplicatesData.Images.indexOf(targetImage);
-                        if (idx !== -1) carousel.open(duplicatesData.Images, idx);
-                } else if (duplicatesData.Groups) {
-                        for (const group of duplicatesData.Groups) {
+                if (duplicatesData.images && duplicatesData.images.length > 0) {
+                        const idx = duplicatesData.images.indexOf(targetImage);
+                        if (idx !== -1) carousel.open(duplicatesData.images, idx);
+                } else if (duplicatesData.groups) {
+                        for (const group of duplicatesData.groups) {
                                 const idx = group.indexOf(targetImage);
                                 if (idx !== -1) {
                                         carousel.open(group, idx);
@@ -337,13 +338,53 @@
                                         deleteImage()
                                 }
 				break;
+                        case 'c':
+                                e.preventDefault();
+                                if (e.ctrlKey) {
+                                        copyImage();
+                                }
 		}
 	}
+
+        async function copyImage() {
+                try {
+                        const img = flatImages[focusedIndex]
+                        if (!img) return;
+                        const imageBlobPromise = (async (image) => {
+                                const res = await fetch(`/api/image?path=${encodeURIComponent(image.filepath)}`);
+                                const blob = await res.blob();
+
+                                if (blob.type === 'image/png') return blob;
+
+                                const img = new Image();
+                                img.src = URL.createObjectURL(blob);
+                                await new Promise((resolve) => (img.onload = resolve));
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                const ctx = canvas.getContext('2d');
+                                ctx?.drawImage(img, 0, 0);
+
+                                const pngBlob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
+                                URL.revokeObjectURL(img.src);
+                                return pngBlob;
+                        })(img);
+
+                        await navigator.clipboard.write([
+                                new ClipboardItem({'image/png': imageBlobPromise})
+                        ]);
+                        toast.success('Image copied to clipboard');
+                } catch (err) {
+                        console.error('Failed to copy image', err);
+                        toast.error('Failed to copy image');
+                }
+        }
 
         async function deleteImage() {
                 if (!confirm('remove image irreversibly?')) return;
                 try {
-                        const img = carousel.currentImage;
+                        const img = carousel.currentImage || flatImages[focusedIndex];
                         if (!img) return;
                         await fetch(`/api/image/${img.id}/delete`, { method: 'POST' });
                         carousel.images.splice(carousel.currentIndex, 1);
@@ -453,14 +494,14 @@
 			<Spinner />
 			<p>Searching for duplicates...</p>
 		</div>
-	{:else if duplicatesData?.Images && duplicatesData.Images.length > 0}
+	{:else if duplicatesData?.images && duplicatesData.images.length > 0}
 		<div class="duplicates-group">
 			<div class="group-header">
 				<h3>Duplicates for selected Image</h3>
-				<span class="badge">{duplicatesData.Images.length} Images</span>
+				<span class="badge">{duplicatesData.images.length} Images</span>
 			</div>
 			<div class="gallery-grid" class:keyboard-nav={isKeyboardMode}>
-				{#each duplicatesData.Images as image, imgIndex}
+				{#each duplicatesData.images as image, imgIndex}
 					<ImageCard 
 						{image}
 						showMeta={true}
@@ -476,7 +517,7 @@
 							if (e.shiftKey) {
 								toggleSelect(image);
 							} else {
-								carousel.open(duplicatesData.Images, imgIndex);
+								carousel.open(duplicatesData.images, imgIndex);
 							}
 						}}
 					/>
@@ -484,8 +525,8 @@
                 <div class="flex-spacer"></div>
 			</div>
 		</div>
-	{:else if duplicatesData?.Groups && duplicatesData.Groups.length > 0}
-		{#each duplicatesData.Groups.slice(0, visibleGroupsCount) as group, index}
+	{:else if duplicatesData?.groups && duplicatesData.groups.length > 0}
+		{#each duplicatesData.groups.slice(0, visibleGroupsCount) as group, index}
 			<div class="duplicates-group">
 				<div class="group-header">
 					<h3>Set {index + 1}</h3>
@@ -519,13 +560,13 @@
 			</div>
 		{/each}
 
-		{#if duplicatesData.Groups.length > visibleGroupsCount}
+		{#if duplicatesData.groups.length > visibleGroupsCount}
 			<button 
 				type="button" 
 				class="btn-load-more" 
 				onclick={() => visibleGroupsCount += 20}
 			>
-				Load More Groups ({duplicatesData.Groups.length - visibleGroupsCount} remaining)
+				Load More Groups ({duplicatesData.groups.length - visibleGroupsCount} remaining)
 			</button>
 		{/if}
 	{:else}

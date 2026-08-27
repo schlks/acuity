@@ -156,6 +156,8 @@
 		cursor: pointer;
 		height: var(--grid-base, 250px);
 		--badge-offset: 12px;
+                content-visibility: auto;
+                contain-intrinsic-size: var(--grid-base, 250px);
 	}
 
 	.image-card::before {

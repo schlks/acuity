@@ -18,6 +18,11 @@
 	<link rel="icon" href=/logo.svg />
 </svelte:head>
 
+<svelte:window
+	ondragover={(e) => e.preventDefault()}
+	ondrop={(e) => e.preventDefault()}
+/>
+
 <div class="app-layout">
 	{#if showSidebar}
 		<div transition:slide={{ axis: 'x', duration: 220, easing: quintOut }} class="sidebar-wrapper">

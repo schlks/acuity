@@ -2,6 +2,7 @@
 	import { carousel } from '$lib/stores/carousel.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import Info from '$lib/components/Info.svelte';
+        import { toast } from "$lib/stores/toast.svelte";
 
 	let loadedImages = $state<Record<string, boolean>>({});
 	let filmstripContainer = $state<HTMLElement | null>(null);
@@ -126,6 +127,12 @@
 			case 'Delete':
 				deleteImage();
 				break;
+                        case 'c':
+                                e.preventDefault();
+                                if (e.ctrlKey) {
+                                        copyImage();
+                                }
+                                break;
 		}
 	}
 
@@ -197,6 +204,41 @@
 			carousel.isInfoOpen = false;
 		}
 	}
+
+        async function copyImage() {
+                try {
+                        const img = carousel.currentImage
+                        if (!img) return;
+                        const imageBlobPromise = (async (image) => {
+                                const res = await fetch(`/api/image?path=${encodeURIComponent(image.filepath)}`);
+                                const blob = await res.blob();
+
+                                if (blob.type === 'image/png') return blob;
+
+                                const img = new Image();
+                                img.src = URL.createObjectURL(blob);
+                                await new Promise((resolve) => (img.onload = resolve));
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                const ctx = canvas.getContext('2d');
+                                ctx?.drawImage(img, 0, 0);
+
+                                const pngBlob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
+                                URL.revokeObjectURL(img.src);
+                                return pngBlob;
+                        })(img);
+
+                        await navigator.clipboard.write([
+                                new ClipboardItem({ 'image/png': imageBlobPromise })
+                        ]);
+                        toast.success('Image copied to clipboard');
+                } catch (err) {
+                        console.error('Failed to copy image', err);
+                        toast.error('Failed to copy image');
+                }
+        }
 </script>
 
 <svelte:window 

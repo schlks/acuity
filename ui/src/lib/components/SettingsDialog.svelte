@@ -109,16 +109,11 @@
 
 <style>
 	.settings-panel {
-		position: absolute;
-		bottom: 100%;
-		left: 0;
 		width: 100%;
 		background: var(--bg-light);
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		padding: 16px;
-		margin-bottom: 8px;
-		z-index: 100;
 	}
 	
 	.settings-panel h3 {
