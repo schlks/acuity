@@ -39,7 +39,7 @@
 					subPackages = [ "." ];
 
 					env.CGO_ENABLED = 1;
-					tags = [ "webkit2_41" ];
+					tags = [ "production" "webkit2_41" ];
 					ldflags = [ "-s" "-w" ];
 
 					buildInputs = with pkgs; [
