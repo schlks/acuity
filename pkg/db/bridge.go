@@ -853,3 +853,48 @@ func (b *Bridge) SearchImages(ctx context.Context, search string, galleryID int,
 func (b *Bridge) SearchImage(ctx context.Context, base64Image string, galleryID int, threshold float32) ([]SImage, error) {
 	return b.vDB.SearchImage(ctx, base64Image, galleryID, threshold)
 }
+
+func (b *Bridge) IndexMissingVectors(ctx context.Context) error {
+	if b.vDB == nil || b.vDB.embedder == nil {
+		return fmt.Errorf("AI embedder not initialized")
+	}
+
+	images, err := b.sDB.GetImagesWithoutVectors()
+	if err != nil || len(images) == 0 {
+		return err
+	}
+
+	slog.Info("Starting vector backfill", slog.Int("count", len(images)))
+
+	var count int
+	for _, item := range images {
+		img := item
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		data, err := os.ReadFile(img.FilePath)
+		if err != nil {
+			slog.Warn("Failed to read image for vector backfill", slog.String("path", img.FilePath), slog.Any("error", err))
+			continue
+		}
+
+		emb, err := b.vDB.embedder.EmbedImage(data)
+		if err != nil {
+			slog.Warn("Failed to embed image", slog.Int("id", img.ID), slog.Any("error", err))
+			continue
+		}
+
+		count++
+		if count % 50 == 0 || count == len(images) {
+			slog.Info("Vector backfill progress", slog.Int("processed", count), slog.Int("total", len(images)))
+		}
+
+		return b.vDB.InsertVector(img.ID, emb)
+	}
+
+	slog.Info("Vector backfill finished", slog.Int("indexed", count), slog.Int("total", len(images)))
+	return nil
+}

@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -186,8 +187,8 @@ func (s *Server) resolveGallery(r *http.Request) (string, int, error) {
 	if formTarget := r.FormValue("target_gallery"); formTarget != "" {
 		name = formTarget
 	}
-	id, err, ok := s.Bridge.GetGalleryID(name)
-	if err != nil || !ok {
+	id, err, _ := s.Bridge.GetGalleryID(name)
+	if err != nil {
 		return name, 0, fmt.Errorf("failed to get gallery ID for %s", name)
 	}
 	return name, id, nil
@@ -768,7 +769,6 @@ func (s *Server) handleDuplicates(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, data, http.StatusOK)
 }
 
-// TODO: change to json
 func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -787,7 +787,7 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 
 	name := r.PathValue("name")
 	if len(galleryIDs) == 0 && name != "" && name != "global" {
-		if id, err, ok := s.Bridge.GetGalleryID(name); err == nil && ok {
+		if id, err, _ := s.Bridge.GetGalleryID(name); err == nil {
 			galleryIDs = append(galleryIDs, id)
 			selectedGalleries[id] = true
 		}
@@ -804,10 +804,10 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 	galleries, _ := s.Bridge.GetAllGalleries()
 
 	data := map[string]any{
-		"Groups":            groups,
-		"Threshold":         thresholdFloat,
-		"Galleries":         galleries,
-		"SelectedGalleries": selectedGalleries,
+		"groups":            groups,
+		"threshold":         thresholdFloat,
+		"galleries":         galleries,
+		"selectedGalleries": selectedGalleries,
 	}
 
 	s.writeJSON(w, data, http.StatusOK)
@@ -1137,12 +1137,21 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, message, http.StatusBadRequest)
 				return
 			}
+			if r.FormValue("path") != "" {
+				s.imageSearch(w, r)
+				return
+			}
 			s.textSearch(w, r)
 			return
 		}
 		message := "Failed to parse form"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
+
+	if r.FormValue("path") != "" {
+		s.imageSearch(w, r)
 		return
 	}
 
@@ -1227,23 +1236,38 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, _, err := r.FormFile("file")
-	if err != nil {
-		message := "Error reading the file"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusBadRequest)
-		return
-	}
-	defer func() {
-		_ = file.Close()
-	}()
+	var fileBytes []byte
+	path := r.FormValue("path")
+	if path != "" {
+		var err error
+		fileBytes, err = os.ReadFile(path)
+		if err != nil {
+			slog.Error("Error reading image from path", slog.String("path", path), slog.Any("error", err))
+			http.Error(w, "Error reading image files", http.StatusBadRequest)
+			return
+		}
+	} else {
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			message := "Error reading the file"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusBadRequest)
+			return
+		}
+		defer func(file multipart.File) {
+			err := file.Close()
+			if err != nil {
 
-	fileBytes, err := io.ReadAll(file)
-	if err != nil {
-		message := "Error reading into memory"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
+			}
+		}(file)
+
+		fileBytes, err = io.ReadAll(file)
+		if err != nil {
+			message := "Error reading into memory"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
 	}
 
 	fileType := http.DetectContentType(fileBytes)
@@ -1262,7 +1286,7 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 
 	threshold, thresholdFloat := s.parseThreshold(r, "0.9")
 
-	images, err := s.Bridge.SearchImages(ctx, file64, galleryID, threshold)
+	images, err := s.Bridge.SearchImage(ctx, file64, galleryID, threshold)
 	if err != nil {
 		message := "Error during database query"
 		slog.Error(message, slog.Any("error", err))

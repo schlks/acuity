@@ -58,7 +58,12 @@ func main() {
 
 		Linux: &linux.Options{
 			WindowIsTranslucent: false,
-			WebviewGpuPolicy:    linux.WebviewGpuPolicyOnDemand,
+			WebviewGpuPolicy:    linux.WebviewGpuPolicyAlways,
+		},
+
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop: true,
+			DisableWebViewDrop: true,
 		},
 	})
 

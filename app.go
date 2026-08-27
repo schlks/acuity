@@ -47,6 +47,8 @@ func (a *App) startup(ctx context.Context) {
 		os.Exit(1)
 	}
 
+	bridge := db.NewBridge(sClient, vClient)
+
 	// Initialize AI models in background (so UI opens instantly and shows setup modal if downloading)
 	go func() {
 		modelPaths, err := ai.EnsureModels()
@@ -63,6 +65,12 @@ func (a *App) startup(ctx context.Context) {
 
 		vClient.SetEmbedder(embedder)
 		slog.Info("Local CLIP AI Engine successfully initialized")
+
+		go func() {
+			if err := bridge.IndexMissingVectors(context.Background()); err != nil {
+				slog.Error("Vector backfill error", slog.Any("error", err))
+			}
+		}()
 	}()
 
 	webDir := os.Getenv("WEB_DIR")

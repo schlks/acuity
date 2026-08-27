@@ -60,6 +60,11 @@ type CacheItem struct {
 	Distance *float64 `json:"distance,omitempty"`
 }
 
+type UnindexedImage struct {
+	ID       int    `db:"id"`
+	FilePath string `db:"filepath"`
+}
+
 func init() {
 	sqlitevec.Auto()
 	sql.Register("sqlite3_custom", &sqlite3.SQLiteDriver{
@@ -701,4 +706,15 @@ func (s *SQLiteClient) RemoveImagesFromDuplicateCache(deletedIDs []int) error {
 		}
 	}
 	return tx.Commit()
+}
+
+func (s *SQLiteClient) GetImagesWithoutVectors() ([]UnindexedImage, error) {
+	query := `
+		SELECT i.id, i.filepath
+		FROM images i
+		WHERE i.id NOT IN (SELECT image_id FROM vec_images);
+	`
+	var list []UnindexedImage
+	err := s.DB.Select(&list, query)
+	return list, err
 }
