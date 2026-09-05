@@ -1,37 +1,60 @@
 <script lang="ts">
 	import { decode } from 'blurhash';
 	import { formatSize, formatResolution } from '$lib/format';
-    import type { GalleryImage } from "$lib/types";
+	import type { GalleryImage } from '$lib/types';
 
-    export interface ImageCardProps {
-        image: GalleryImage;
-        onclick?: (e: MouseEvent) => void;
-        oncontextmenu?: (e: MouseEvent) => void;
-        onmouseenter?: (e: MouseEvent) => void;
-        onmousemove?: (e: MouseEvent) => void;
-        isFocused?: boolean;
-        isSelected?: boolean;
-        dataIndex?: number;
-        showMeta?: boolean;
-    }
+	export interface ImageCardProps {
+		image: GalleryImage;
+		onclick?: (e: MouseEvent) => void;
+		oncontextmenu?: (e: MouseEvent) => void;
+		onmouseenter?: (e: MouseEvent) => void;
+		onmousemove?: (e: MouseEvent) => void;
+		isFocused?: boolean;
+		isSelected?: boolean;
+		dataIndex?: number;
+		showMeta?: boolean;
+	}
 
-    let {
-        image,
-        onclick,
-        oncontextmenu,
-        onmouseenter,
-        onmousemove,
-        isFocused = false,
-        isSelected = false,
-        dataIndex,
-        showMeta = false
-    }: ImageCardProps = $props();
+	let {
+		image,
+		onclick,
+		oncontextmenu,
+		onmouseenter,
+		onmousemove,
+		isFocused = false,
+		isSelected = false,
+		dataIndex,
+		showMeta = false
+	}: ImageCardProps = $props();
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let isLoaded = $state(false);
-	let lastPath = $state(image.filepath)
+	let lastPath = $state(image.filepath);
+	let inView = $state(false);
 
 	let idleId: any = null;
+
+	function lazyLoad(node: HTMLElement): { destroy(): void } {
+		const observer = new IntersectionObserver(
+			(entries) => {
+				const nowInView = entries[0].isIntersecting;
+				inView = nowInView;
+				if (!nowInView) {
+					isLoaded = false;
+				}
+			},
+			{
+				root: node.closest('.main-content'),
+				rootMargin: '1000px 0px'
+			}
+		);
+		observer.observe(node);
+		return {
+			destroy() {
+				observer.disconnect();
+			}
+		};
+	}
 
 	$effect(() => {
 		if (image.filepath !== lastPath) {
@@ -44,7 +67,7 @@
 		if (canvasElement && image.blurhash && !isLoaded) {
 			const startDecoding = () => {
 				if (isLoaded || !canvasElement) return;
-				
+
 				try {
 					const pixels = decode(image.blurhash, 32, 32);
 					const ctx = canvasElement.getContext('2d');
@@ -53,7 +76,7 @@
 					imageData.data.set(pixels);
 					ctx.putImageData(imageData, 0, 0);
 				} catch (err) {
-					console.error("Failed to decode blurhash:", err);
+					console.error('Failed to decode blurhash:', err);
 				}
 			};
 
@@ -82,25 +105,20 @@
 	data-index={dataIndex}
 	{onmouseenter}
 	{onmousemove}
-	onclick={onclick}
+	{onclick}
 	{oncontextmenu}
-	style="flex-grow: {image.aspect_ratio || 1.5}; flex-basis: calc(var(--grid-base, 250px) * {image.aspect_ratio || 1.5})"
-	tabindex="0">
-
-	<canvas
-		bind:this={canvasElement}
-		width="32"
-		height="32"
-		class="blurhash-canvas"
-	></canvas>
+	style="flex-grow: {image.aspect_ratio ||
+		1.5}; flex-basis: calc(var(--grid-base, 250px) * {image.aspect_ratio || 1.5})"
+	tabindex="0"
+	use:lazyLoad
+>
+	<canvas bind:this={canvasElement} width="32" height="32" class="blurhash-canvas"></canvas>
 
 	<img
-		src="/api/image?path={encodeURIComponent(image.filepath)}&thumb=true"
+		src={inView ? `/api/image?path=${encodeURIComponent(image.filepath)}&thumb=true` : undefined}
 		alt=""
-		loading="lazy"
-		decoding="async"
 		class:loaded={isLoaded}
-		onload={() => isLoaded = true}
+		onload={() => (isLoaded = true)}
 	/>
 
 	{#if image.rating > 0}
@@ -128,7 +146,8 @@
 
 	{#if showMeta && (image.size || image.resolution)}
 		<div class="meta-badge">
-			{#if image.resolution}<span>{formatResolution(image.resolution, image.aspect_ratio)}</span>{/if}
+			{#if image.resolution}<span>{formatResolution(image.resolution, image.aspect_ratio)}</span
+				>{/if}
 			{#if image.resolution && image.size}<span class="meta-dot">•</span>{/if}
 			{#if image.size}<span>{formatSize(image.size)}</span>{/if}
 		</div>
@@ -156,8 +175,8 @@
 		cursor: pointer;
 		height: var(--grid-base, 250px);
 		--badge-offset: 12px;
-                content-visibility: auto;
-                contain-intrinsic-size: var(--grid-base, 250px);
+		content-visibility: auto;
+		contain-intrinsic-size: var(--grid-base, 250px);
 	}
 
 	.image-card::before {
@@ -210,7 +229,9 @@
 		display: block;
 		z-index: 1;
 		opacity: 0;
-		transition: opacity 0.4s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+		transition:
+			opacity 0.4s ease,
+			transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.image-card img.loaded {
@@ -236,7 +257,7 @@
 		border-radius: 20px;
 		font-weight: 600;
 		font-size: 1.2rem;
-		box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 		z-index: 10;
 	}
 
@@ -246,37 +267,37 @@
 	}
 
 	.selection-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 2;
-        pointer-events: none;
-    }
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 2;
+		pointer-events: none;
+	}
 
-    .selection-overlay .check-icon {
-        font-size: 2.3rem;
-        color: color-mix(in srgb, var(--tertiary) 70%, var(--bg));
-        font-variation-settings: 'FILL' 1;
-        filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
-        animation: popIn 0.15s ease-out;
-    }
+	.selection-overlay .check-icon {
+		font-size: 2.3rem;
+		color: color-mix(in srgb, var(--tertiary) 70%, var(--bg));
+		font-variation-settings: 'FILL' 1;
+		filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+		animation: popIn 0.15s ease-out;
+	}
 
-    @keyframes popIn {
-        from {
-            transform: scale(0.7);
-            opacity: 0;
-        }
-        to {
-            transform: scale(1);
-            opacity: 1;
-        }
-    }
+	@keyframes popIn {
+		from {
+			transform: scale(0.7);
+			opacity: 0;
+		}
+		to {
+			transform: scale(1);
+			opacity: 1;
+		}
+	}
 
 	.badge.rating {
 		top: var(--badge-offset);

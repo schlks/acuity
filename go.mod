@@ -13,7 +13,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.49
 	github.com/pillowskiy/imagesize v1.1.0
 	github.com/spf13/viper v1.21.0
-	github.com/wailsapp/wails/v2 v2.12.0
+	github.com/wailsapp/wails/v2 v2.15.0
 	github.com/yalue/onnxruntime_go v1.22.0
 	golang.org/x/sync v0.21.0
 )

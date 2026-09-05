@@ -887,12 +887,15 @@ func (b *Bridge) IndexMissingVectors(ctx context.Context) error {
 			continue
 		}
 
-		count++
-		if count % 50 == 0 || count == len(images) {
-			slog.Info("Vector backfill progress", slog.Int("processed", count), slog.Int("total", len(images)))
+		if err := b.vDB.InsertVector(img.ID, emb); err != nil {
+			slog.Warn("Failed to insert vector for image", slog.Int("id", img.ID), slog.Any("error", err))
+			continue
 		}
 
-		return b.vDB.InsertVector(img.ID, emb)
+		count++
+		if count%50 == 0 || count == len(images) {
+			slog.Info("Vector backfill progress", slog.Int("processed", count), slog.Int("total", len(images)))
+		}
 	}
 
 	slog.Info("Vector backfill finished", slog.Int("indexed", count), slog.Int("total", len(images)))

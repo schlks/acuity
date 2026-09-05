@@ -1,11 +1,12 @@
 package main
 
 import (
-	"acuity/pkg/config"
 	"embed"
 	"fmt"
 	"log/slog"
 	"os"
+
+	"acuity/pkg/config"
 
 	"github.com/h2non/bimg"
 	"github.com/wailsapp/wails/v2"
@@ -19,6 +20,12 @@ var assets embed.FS
 
 func main() {
 	_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	// On a native Wayland session, GTK/WebKitGTK render the webview through
+	// Wayland's own compositing path, which produces a duplicated/warped
+	// copy of the page on some compositor+driver combinations.
+	// Forcing the X11 backend routes rendering through XWayland instead,
+	// which avoids that bug.
+	_ = os.Setenv("GDK_BACKEND", "x11")
 	bimg.Initialize()
 	defer bimg.Shutdown()
 
@@ -58,15 +65,14 @@ func main() {
 
 		Linux: &linux.Options{
 			WindowIsTranslucent: false,
-			WebviewGpuPolicy:    linux.WebviewGpuPolicyAlways,
+			WebviewGpuPolicy:    linux.WebviewGpuPolicyNever,
 		},
 
 		DragAndDrop: &options.DragAndDrop{
-			EnableFileDrop: true,
+			EnableFileDrop:     true,
 			DisableWebViewDrop: true,
 		},
 	})
-
 	if err != nil {
 		slog.Error("Failed to start Desktop-App", slog.Any("error", err))
 	}
