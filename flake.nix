@@ -33,7 +33,7 @@
           version = "0.1.0";
           src = ./.;
 
-          vendorHash = "sha256-NW07rOY2yvZxFKmXeU0HAWKXhXC5ZanImmp6qZWKwek=";
+          vendorHash = "sha256-kuAx2DiD0o6S8VX+aK5lkbvuqcE3TtsHpTaHZ/ufCro=";
 
           doCheck = false;
           subPackages = [ "." ];
