@@ -64,6 +64,7 @@
 	});
 	let galleryImages = $state<GalleryImage[]>([]);
 	let selectedImages = $state<GalleryImage[]>([]);
+	let selectedIds = $derived(new Set(selectedImages.map(i => i.id)));
 	let batchIsOpen = $state(false);
 	let hasMore = $state(false);
 	let currentInfinitePage = $state(1);
@@ -118,7 +119,7 @@
 	});
 
 	$effect(() => {
-		if (focusedIndex !== null && galleryImages.length > 0) {
+		if (isKeyboardMode && focusedIndex !== null && galleryImages.length > 0) {
 			updateFocusBox();
 		} else {
                         focusBox.visible = false;
@@ -691,7 +692,8 @@
 		const currCenter = (currLeft + currRight) / 2;
 		const currTop = currentEl.offsetTop
 
-		const allCards = Array.from(document.querySelectorAll('.gallery-grid [data-index]')) as HTMLElement[];
+		const cards = Array.from(document.querySelectorAll('.gallery-grid [data-index]')) as HTMLElement[];
+		const allCards = cards.slice(Math.max(0, focusedIndex - 150), focusedIndex + 151);
 
 		let targetRowCards: HTMLElement[] = [];
 
@@ -704,7 +706,7 @@
 				}
 				return;
 			}
-			const nextRowTop = Math.min(...belowTops);
+			const nextRowTop = belowTops.reduce((a, b) => (b < a ? b : a));
 			targetRowCards = allCards.filter(c => Math.abs(c.offsetTop - nextRowTop) < 20);
 		} else {
 			const aboveTops = allCards.map(c => c.offsetTop).filter(top => top < currTop - 20);
@@ -715,7 +717,7 @@
 				}
 				return;
 			}
-			const prevRowTop = Math.max(...aboveTops);
+			const prevRowTop = aboveTops.reduce((a, b) => (b > a ? b : a));
 			targetRowCards = allCards.filter(c => Math.abs(c.offsetTop - prevRowTop) < 20);
 		}
 
@@ -1170,6 +1172,9 @@
 	</div>
 {:else}
 	<div class="gallery-grid medium" class:keyboard-nav={isKeyboardMode} class:loading={!!navigating.to}>
+		{#if navigating.to}
+			<div class="grid-veil" transition:fade={{ duration: 150 }}></div>
+		{/if}
 		<hr />
 		{#if focusBox.visible && isKeyboardMode}
 			<div
@@ -1188,7 +1193,7 @@
 					}
 				}}
 				isFocused={!isKeyboardMode && focusedIndex === index} 
-				isSelected={selectedImages.some(i => i.id === image.id)}
+				isSelected={selectedIds.has(image.id)}
 				showMeta={false}
 				onclick={() => {
 					focusedIndex = index;
@@ -1789,10 +1794,20 @@
 	}
 
 	.gallery-grid {
+		position: relative;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 16px;
 		padding: 0 24px 24px;
+	}
+
+	.grid-veil {
+		position: absolute;
+		inset: 0;
+		background: var(--bg-dark);
+		opacity: 0.5;
+		pointer-events: none;
+		z-index: 20;
 	}
 
 	.gallery-grid.medium {
@@ -1932,16 +1947,7 @@
 		width: 100%;
 	}
 
-	.gallery-grid {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 16px;
-		padding: 0 24px 24px;
-		transition: opacity 0.3s ease;
-	}
-
 	.gallery-grid.loading {
-		opacity: 0.5;
 		pointer-events: none;
 	}
 
@@ -1953,13 +1959,6 @@
 		align-items: center;
 	}
 
-	.gallery-grid {
-		position: relative;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 16px;
-		padding: 0 24px 24px;
-	}
 
 	.floating-focus {
 		position: absolute;

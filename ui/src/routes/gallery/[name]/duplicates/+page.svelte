@@ -13,6 +13,7 @@
 	let isDropdownOpen = $state(false);
 	let batchIsOpen = $state(false);
 	let selectedImages = $state<any[]>([]);
+	let selectedIds = $derived(new Set(selectedImages.map(i => i.id)));
 	let selectedGalleries = $state<string[]>(page.url.searchParams.getAll('galleries'));
 
 	let duplicatesData = $state<any>(null);
@@ -36,6 +37,12 @@
                         return visibleGroups.flat();
                 }
                 return [];
+        })
+
+        let flatIndexes = $derived.by(() => {
+                const indexes = new Map<any, number>();
+                flatImages.forEach((img: any, i: number) => indexes.set(img, i));
+                return indexes;
         })
 
 	async function loadDuplicates() {
@@ -501,11 +508,11 @@
 				<span class="badge">{duplicatesData.images.length} Images</span>
 			</div>
 			<div class="gallery-grid" class:keyboard-nav={isKeyboardMode}>
-				{#each duplicatesData.images as image, imgIndex}
+				{#each duplicatesData.images as image, imgIndex (image.filepath)}
 					<ImageCard 
 						{image}
 						showMeta={true}
-						isSelected={selectedImages.some(i => i.id === image.id)}
+						isSelected={selectedIds.has(image.id)}
 						dataIndex={imgIndex}
 						isFocused={isKeyboardMode && focusedIndex === imgIndex}
 						onmousemove={() => {
@@ -533,11 +540,11 @@
 					<span class="badge">{group.length} Images</span>
 				</div>
 				<div class="gallery-grid" class:keyboard-nav={isKeyboardMode}>
-					{#each group as image, imgIndex}
-						{@const globalIndex = flatImages.indexOf(image)}
+					{#each group as image, imgIndex (image.filepath)}
+						{@const globalIndex = flatIndexes.get(image) ?? -1}
 						<ImageCard 
 							{image}
-							isSelected={selectedImages.some(i => i.id === image.id)}
+							isSelected={selectedIds.has(image.id)}
 							dataIndex={globalIndex}
 							isFocused={isKeyboardMode && focusedIndex === globalIndex}
 							onmousemove={() => {
