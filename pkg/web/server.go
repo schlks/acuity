@@ -18,8 +18,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"acuity/pkg/ai"
@@ -424,7 +426,58 @@ func extractRawPreview(path string) ([]byte, error) {
 	return nil, fmt.Errorf("no preview found")
 }
 
-var thumbSemaphore = make(chan struct{}, 4)
+var (
+	thumbSemaphore = make(chan struct{}, 4)
+	thumbsWritten  atomic.Int64
+	pruneRunning   atomic.Bool
+)
+
+func pruneThumbCache(dir string, maxBytes int64) {
+	if !pruneRunning.CompareAndSwap(false, true) {
+		return
+	}
+	defer pruneRunning.Store(false)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+
+	type cachedThumb struct {
+		path string
+		size int64
+		mod  time.Time
+	}
+
+	files := make([]cachedThumb, 0, len(entries))
+	var total int64
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, cachedThumb{filepath.Join(dir, entry.Name()), info.Size(), info.ModTime()})
+		total += info.Size()
+	}
+
+	if total <= maxBytes {
+		return
+	}
+
+	sort.Slice(files, func(i, j int) bool { return files[i].mod.Before(files[j].mod) })
+
+	target := maxBytes * 8 / 10
+	for _, file := range files {
+		if total <= target {
+			break
+		}
+		if err := os.Remove(file.path); err == nil {
+			total -= file.size
+		}
+	}
+
+	slog.Info("Thumbnail cache pruned", slog.Int64("bytes_left", total))
+}
 
 func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string, error) {
 	cacheBase, err := os.UserCacheDir()
@@ -448,6 +501,10 @@ func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string
 
 	if thumbStat, err := os.Stat(thumbPath); err == nil {
 		if thumbStat.ModTime().After(sourceStat.ModTime()) {
+			if time.Since(thumbStat.ModTime()) > time.Hour {
+				now := time.Now()
+				_ = os.Chtimes(thumbPath, now, now)
+			}
 			return thumbPath, nil
 		}
 	}
@@ -470,6 +527,11 @@ func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string
 		buffer = buf
 	}
 
+	if meta, err := bimg.NewImage(buffer).Size(); err == nil &&
+		meta.Width <= targetWidth && len(buffer) <= 2*1024*1024 {
+		return imagePath, nil
+	}
+
 	options := bimg.Options{
 		Width:   targetWidth,
 		Quality: 80,
@@ -485,6 +547,10 @@ func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string
 		return "", err
 	}
 
+	if s.Config.ThumbCacheMaxMB > 0 && thumbsWritten.Add(1)%50 == 0 {
+		go pruneThumbCache(cacheDir, int64(s.Config.ThumbCacheMaxMB)*1024*1024)
+	}
+
 	return thumbPath, nil
 }
 
@@ -496,11 +562,15 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isThumb := r.URL.Query().Get("thumb") == "true"
-	if isThumb {
-		thumbPath, err := s.getOrCreateThumbnail(image, 500)
+	isPreview := r.URL.Query().Get("preview") == "true"
+	if isThumb || isPreview {
+		width := 500
+		if isPreview {
+			width = 3840
+		}
+		thumbPath, err := s.getOrCreateThumbnail(image, width)
 		if err == nil && thumbPath != "" {
 			w.Header().Set("Cache-Control", "public, max-age=604800")
-			w.Header().Set("Content-Type", "image/jpeg")
 			http.ServeFile(w, r, thumbPath)
 			return
 		}

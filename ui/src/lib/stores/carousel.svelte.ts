@@ -62,11 +62,11 @@ class CarouselStore {
 		
 		if (this.hasNext) {
 			const nextImg = new Image();
-			nextImg.src = `/api/image?path=${encodeURIComponent(this.images[this.currentIndex + 1].filepath)}`;
+			nextImg.src = `/api/image?path=${encodeURIComponent(this.images[this.currentIndex + 1].filepath)}&preview=true`;
 		}
 		if (this.hasPrev) {
 			const prevImg = new Image();
-			prevImg.src = `/api/image?path=${encodeURIComponent(this.images[this.currentIndex - 1].filepath)}`;
+			prevImg.src = `/api/image?path=${encodeURIComponent(this.images[this.currentIndex - 1].filepath)}&preview=true`;
 		}
 	}
 }

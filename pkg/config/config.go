@@ -22,6 +22,7 @@ type Config struct {
 	DefaultSortOrder string `mapstructure:"default_sort_order" json:"default_sort_order"`
 	GridSize         string `mapstructure:"grid_size" json:"grid_size"`
 	InfiniteScroll   bool   `mapstructure:"infinite_scroll" json:"infinite_scroll"`
+	ThumbCacheMaxMB  int    `mapstructure:"thumb_cache_max_mb" json:"thumb_cache_max_mb"`
 	Debug            bool   `mapstructure:"debug" json:"debug"`
 }
 
@@ -50,6 +51,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("default_sort_order", "desc")
 	viper.SetDefault("grid_size", "medium")
 	viper.SetDefault("infinite_scroll", false)
+	viper.SetDefault("thumb_cache_max_mb", 2048)
 	viper.SetDefault("debug", false)
 
 
@@ -84,6 +86,7 @@ func Save(cfg *Config) error {
 	viper.Set("default_sort_order", cfg.DefaultSortOrder)
 	viper.Set("infinite_scroll", cfg.InfiniteScroll)
 	viper.Set("grid_size", cfg.GridSize)
+	viper.Set("thumb_cache_max_mb", cfg.ThumbCacheMaxMB)
 
 	return viper.WriteConfig()
 }

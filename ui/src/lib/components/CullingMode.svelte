@@ -239,7 +239,7 @@
 		<main class="culling-main">
 			<div class="image-wrapper">
 				<img
-					src="/api/image?path={encodeURIComponent(currentImage.filepath)}"
+					src="/api/image?path={encodeURIComponent(currentImage.filepath)}&preview=true"
 					alt=""
 					class="main-image"
 				/>

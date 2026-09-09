@@ -11,6 +11,15 @@
 	let pan = $state({ x: 0, y: 0 });
 	let isDragging = $state(false);
 	let dragStart = $state({ x: 0, y: 0 });
+	let fullResFor = $state<string | null>(null);
+
+	function loadFullRes() {
+		const image = carousel.currentImage;
+		if (!image || fullResFor === image.filepath) return;
+		const img = new Image();
+		img.onload = () => (fullResFor = image.filepath);
+		img.src = `/api/image?path=${encodeURIComponent(image.filepath)}`;
+	}
 	
 	$effect(() => {
 		if (carousel.isOpen && filmstripContainer) {
@@ -58,6 +67,7 @@
 			pan = { x: 0, y: 0};
 		}
 		zoom = newZoom;
+		if (newZoom > 1) loadFullRes();
 	}
 
 	function handleDoubleClick() {
@@ -65,6 +75,7 @@
 			resetZoom();
 		} else {
 			zoom = 2.5;
+			loadFullRes();
 		}
 	}
 
@@ -288,7 +299,9 @@
 						style={item.offset === 0 ? `transform: translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom}); cursor: ${zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'};` : ''}
 						draggable="false"
 						decoding="async"
-						src={`/api/image?path=${encodeURIComponent(item.image.filepath)}`}
+						src={fullResFor === item.image.filepath
+							? `/api/image?path=${encodeURIComponent(item.image.filepath)}`
+							: `/api/image?path=${encodeURIComponent(item.image.filepath)}&preview=true`}
 						alt={item.image.name}
 						onload={() => loadedImages[item.image.id] = true}
 					/>
