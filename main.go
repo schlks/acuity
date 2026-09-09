@@ -19,13 +19,6 @@ import (
 var assets embed.FS
 
 func main() {
-	_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
-	// On a native Wayland session, GTK/WebKitGTK render the webview through
-	// Wayland's own compositing path, which produces a duplicated/warped
-	// copy of the page on some compositor+driver combinations.
-	// Forcing the X11 backend routes rendering through XWayland instead,
-	// which avoids that bug.
-	_ = os.Setenv("GDK_BACKEND", "x11")
 	bimg.Initialize()
 	defer bimg.Shutdown()
 
@@ -65,7 +58,9 @@ func main() {
 
 		Linux: &linux.Options{
 			WindowIsTranslucent: false,
-			WebviewGpuPolicy:    linux.WebviewGpuPolicyNever,
+			// Wails v2.15 maps this enum shifted by one, so OnDemand is
+			// what actually yields WebKit's ACCELERATION_POLICY_ALWAYS.
+			WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand,
 		},
 
 		DragAndDrop: &options.DragAndDrop{
