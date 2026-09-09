@@ -6,6 +6,11 @@
 		isOpen = $bindable(false),
 		images = $bindable([]),
 		currentIndex = $bindable(0),
+		hasNextPage = false,
+		hasPrevPage = false,
+		isPaging = false,
+		onNextPage,
+		onPrevPage,
 		onClose
 	} = $props();
 
@@ -30,6 +35,7 @@
 	}
 
 	$effect(() => {
+		images.length;
 		if (isOpen && filmstripContainer) {
 			requestAnimationFrame(() => updateFocusBox());
 			const activeThumb = filmstripContainer.querySelector(`[data-thumb-index="${currentIndex}"]`) as HTMLElement;
@@ -40,12 +46,16 @@
 	function next() {
 		if (currentIndex < images.length - 1) {
 			currentIndex++;
+		} else if (hasNextPage && !isPaging) {
+			onNextPage?.();
 		}
 	}
 
 	function prev() {
 		if (currentIndex > 0) {
 			currentIndex--;
+		} else if (hasPrevPage && !isPaging) {
+			onPrevPage?.();
 		}
 	}
 
@@ -207,7 +217,10 @@
 					<span class="material-symbols-outlined icon-filled">bolt</span>
 					<span>Culling Mode</span>
 				</div>
-				<span class="counter">{currentIndex + 1} / {images.length}</span>
+				<span class="counter">
+					{currentIndex + 1} / {images.length}
+					{#if isPaging}<span class="material-symbols-outlined spin">progress_activity</span>{/if}
+				</span>
 			</div>
 
 			<div class="header-shortcuts">
@@ -338,6 +351,15 @@
 		color: var(--text-muted);
 		font-size: 0.9rem;
 		font-variant-numeric: tabular-nums;
+	}
+
+	.spin {
+		font-size: 1rem;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 
 	.header-shortcuts {

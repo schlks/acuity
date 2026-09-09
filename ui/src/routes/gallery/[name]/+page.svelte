@@ -73,6 +73,8 @@
 	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
 	let isKeyboardMode = $state(false);
 	let isCullingOpen = $state(false);
+	let isCullingPaging = $state(false);
+	let pendingCullingJump: 'first' | 'last' | null = null;
 	let jumpInputIndex = $state<number | null>(null);
 	let jumpPageVal = $state<number | string>('');
 	let isEditingName = $state(false);
@@ -89,6 +91,13 @@
 		galleryImages = data.images.images || [];
 		hasMore = data.images.has_page;
 		currentInfinitePage = data.images.current_page;
+
+		if (pendingCullingJump && galleryImages.length > 0) {
+			focusedIndex = pendingCullingJump === 'first' ? 0 : galleryImages.length - 1;
+			pendingCullingJump = null;
+			isCullingPaging = false;
+		}
+
 		if (data.settings) {
 			infiniteScroll = data.settings.infinite_scroll;
 		}
@@ -243,6 +252,37 @@
 				behavior: 'auto'
 			});
 		}
+	}
+
+	let cullingHasNextPage = $derived(
+		infiniteScroll ? hasMore : currentPage < (data.images.last_page || 1)
+	);
+	let cullingHasPrevPage = $derived(!infiniteScroll && currentPage > 1);
+
+	async function cullingNextPage() {
+		if (isCullingPaging) return;
+
+		if (infiniteScroll) {
+			if (!hasMore || isLoadingMore) return;
+			isCullingPaging = true;
+			const before = galleryImages.length;
+			await loadMore();
+			if (galleryImages.length > before) focusedIndex = before;
+			isCullingPaging = false;
+			return;
+		}
+
+		if (currentPage >= (data.images.last_page || 1)) return;
+		isCullingPaging = true;
+		pendingCullingJump = 'first';
+		await changePage(currentPage + 1);
+	}
+
+	async function cullingPrevPage() {
+		if (isCullingPaging || infiniteScroll || currentPage <= 1) return;
+		isCullingPaging = true;
+		pendingCullingJump = 'last';
+		await changePage(currentPage - 1, true);
 	}
 
 	function handleSearch(event?: SubmitEvent | Event) {
@@ -1273,6 +1313,11 @@
 	bind:isOpen={isCullingOpen}
 	bind:images={galleryImages}
 	bind:currentIndex={focusedIndex}
+	hasNextPage={cullingHasNextPage}
+	hasPrevPage={cullingHasPrevPage}
+	isPaging={isCullingPaging}
+	onNextPage={cullingNextPage}
+	onPrevPage={cullingPrevPage}
 	onClose={() => isCullingOpen = false}
 />
 
