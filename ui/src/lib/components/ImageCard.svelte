@@ -1,3 +1,42 @@
+<script module lang="ts">
+	const onEnter = new WeakMap<Element, () => void>();
+	const onExit = new WeakMap<Element, () => void>();
+	const enterObservers = new Map<Element | null, IntersectionObserver>();
+	const exitObservers = new Map<Element | null, IntersectionObserver>();
+
+	function enterObserver(root: Element | null) {
+		let observer = enterObservers.get(root);
+		if (!observer) {
+			observer = new IntersectionObserver(
+				(entries) => {
+					for (const entry of entries) {
+						if (entry.isIntersecting) onEnter.get(entry.target)?.();
+					}
+				},
+				{ root, rootMargin: '1000px 0px' }
+			);
+			enterObservers.set(root, observer);
+		}
+		return observer;
+	}
+
+	function exitObserver(root: Element | null) {
+		let observer = exitObservers.get(root);
+		if (!observer) {
+			observer = new IntersectionObserver(
+				(entries) => {
+					for (const entry of entries) {
+						if (!entry.isIntersecting) onExit.get(entry.target)?.();
+					}
+				},
+				{ root, rootMargin: '5000px 0px' }
+			);
+			exitObservers.set(root, observer);
+		}
+		return observer;
+	}
+</script>
+
 <script lang="ts">
 	import { decode } from 'blurhash';
 	import { formatSize, formatResolution } from '$lib/format';
@@ -30,28 +69,29 @@
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let isLoaded = $state(false);
 	let lastPath = $state(image.filepath);
-	let inView = $state(false);
+	let hasBeenInView = $state(false);
 
 	let idleId: any = null;
 
 	function lazyLoad(node: HTMLElement): { destroy(): void } {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				const nowInView = entries[0].isIntersecting;
-				inView = nowInView;
-				if (!nowInView) {
-					isLoaded = false;
-				}
-			},
-			{
-				root: node.closest('.main-content'),
-				rootMargin: '1000px 0px'
-			}
-		);
-		observer.observe(node);
+		const root = node.closest('.main-content');
+		onEnter.set(node, () => {
+			hasBeenInView = true;
+		});
+		onExit.set(node, () => {
+			hasBeenInView = false;
+			isLoaded = false;
+		});
+		const enter = enterObserver(root);
+		const exit = exitObserver(root);
+		enter.observe(node);
+		exit.observe(node);
 		return {
 			destroy() {
-				observer.disconnect();
+				enter.unobserve(node);
+				exit.unobserve(node);
+				onEnter.delete(node);
+				onExit.delete(node);
 			}
 		};
 	}
@@ -115,8 +155,9 @@
 	<canvas bind:this={canvasElement} width="32" height="32" class="blurhash-canvas"></canvas>
 
 	<img
-		src={inView ? `/api/image?path=${encodeURIComponent(image.filepath)}&thumb=true` : undefined}
+		src={hasBeenInView ? `/api/image?path=${encodeURIComponent(image.filepath)}&thumb=true` : undefined}
 		alt=""
+		decoding="async"
 		class:loaded={isLoaded}
 		onload={() => (isLoaded = true)}
 	/>
@@ -170,7 +211,7 @@
 	.image-card {
 		position: relative;
 		border-radius: 8px;
-		clip-path: inset(0 round 8px);
+		overflow: hidden;
 		background-color: var(--bg-light);
 		cursor: pointer;
 		height: var(--grid-base, 250px);
@@ -188,8 +229,6 @@
 		pointer-events: none;
 		clip-path: circle(0% at 0% 100%);
 		transition: clip-path 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-		transform: translateZ(0);
-		will-change: clip-path;
 	}
 
 	.image-card::after {
@@ -203,8 +242,6 @@
 		pointer-events: none;
 		clip-path: circle(0% at 0% 100%);
 		transition: clip-path 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-		transform: translateZ(0);
-		will-change: clip-path;
 	}
 
 	:global(.gallery-grid:not(.keyboard-nav)) .image-card:hover::before,
