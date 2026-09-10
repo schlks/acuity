@@ -480,7 +480,7 @@
 		align-items: center;
 		gap: 4px;
 		background: rgba(0, 0, 0, 0.85);
-		color: var(--warning);
+		color: var(--info);
 		padding: 6px 12px;
 		border-radius: 8px;
 		font-weight: 700;
@@ -488,7 +488,7 @@
 	}
 
 	.star-icon {
-		color: var(--warning);
+		color: var(--info);
 		font-size: 1.2rem;
 	}
 
@@ -559,7 +559,9 @@
 		position: absolute;
 		top: 2px;
 		right: 2px;
-		border-radius: 50%;
+		padding: 2px 2px 3px 3px;
+		background: rgba(0, 0, 0, 0.7);
+		border-radius: 3px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -582,7 +584,7 @@
 		bottom: 2px;
 		left: 2px;
 		background: rgba(0, 0, 0, 0.7);
-		color: var(--warning);
+		color: var(--info);
 		font-size: 10px;
 		font-weight: bold;
 		padding: 1px 3px;

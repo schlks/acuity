@@ -293,38 +293,44 @@
 					ondblclick={item.offset === 0 ? handleDoubleClick : undefined}
 					onmousedown={item.offset === 0 ? handleMouseDown : undefined}
 				>
-					<img
-						class="carousel-image"
-						class:loaded={loadedImages[item.image.id]}
-						style={item.offset === 0 ? `transform: translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom}); cursor: ${zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'};` : ''}
-						draggable="false"
-						decoding="async"
-						src={fullResFor === item.image.filepath
-							? `/api/image?path=${encodeURIComponent(item.image.filepath)}`
-							: `/api/image?path=${encodeURIComponent(item.image.filepath)}&preview=true`}
-						alt={item.image.name}
-						onload={() => loadedImages[item.image.id] = true}
-					/>
-					
+					<div class="image-frame">
+						<img
+							class="carousel-image"
+							class:loaded={loadedImages[item.image.id]}
+							style={item.offset === 0 ? `transform: translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom}); cursor: ${zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'};` : ''}
+							draggable="false"
+							decoding="async"
+							src={fullResFor === item.image.filepath
+								? `/api/image?path=${encodeURIComponent(item.image.filepath)}`
+								: `/api/image?path=${encodeURIComponent(item.image.filepath)}&preview=true`}
+							alt={item.image.name}
+							onload={() => loadedImages[item.image.id] = true}
+						/>
+
+						{#if loadedImages[item.image.id]}
+							{#if item.image.flag === 1}
+								<div class="badge flag keep">
+									<span class="material-symbols-outlined">check_circle</span>
+									<span>Keep</span>
+								</div>
+							{:else if item.image.flag === -1}
+								<div class="badge flag reject">
+									<span class="material-symbols-outlined">cancel</span>
+									<span>Reject</span>
+								</div>
+							{/if}
+
+							{#if item.image.rating > 0}
+								<div class="badge rating">
+									<span class="material-symbols-outlined icon-filled star-icon">star</span>
+									<span>{item.image.rating}</span>
+								</div>
+							{/if}
+						{/if}
+					</div>
+
 					{#if !loadedImages[item.image.id]}
 						<Spinner />
-					{/if}
-					
-					{#if item.image.flag === 1}
-						<div class="badge flag keep">
-							<span class="material-symbols-outlined">check_circle</span>
-						</div>
-					{:else if item.image.flag === -1}
-						<div class="badge flag reject">
-							<span class="material-symbols-outlined">cancel</span>
-						</div>
-					{/if}
-
-					{#if item.image.rating > 0}
-						<div class="badge rating">
-							<span class="material-symbols-outlined icon-filled">star</span>
-							{item.image.rating}
-						</div>
 					{/if}
 				</div>
 			{/each}
@@ -464,29 +470,45 @@
 		z-index: 1;
 	}
 
+	.image-frame {
+		position: relative;
+		display: flex;
+	}
+
 	.badge {
 		position: absolute;
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		padding: 8px 16px;
-		border-radius: 20px;
+		padding: 6px 14px;
+		border-radius: 8px;
 		font-weight: 600;
-		font-size: 1.2rem;
-		box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-		z-index: 10;
+		font-size: 0.95rem;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+		animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 	}
 
 	.badge.flag {
-		bottom: 32px;
-		left: 32px;
+		top: 16px;
+		left: 16px;
 	}
 
 	.badge.rating {
-		bottom: 32px;
-		right: 32px;
-		background: var(--bg-dark);
+		bottom: 16px;
+		right: 16px;
+		gap: 4px;
+		padding: 6px 12px;
+		background: rgba(0, 0, 0, 0.85);
 		color: var(--info);
+		font-weight: 700;
+		font-size: 1rem;
+		box-shadow: none;
+		animation: none;
+	}
+
+	.star-icon {
+		color: var(--info);
+		font-size: 1.2rem;
 	}
 
 	.badge.keep {
@@ -497,6 +519,17 @@
 	.badge.reject {
 		background: var(--danger);
 		color: var(--text);
+	}
+
+	@keyframes popIn {
+		0% {
+			transform: scale(0.8);
+			opacity: 0;
+		}
+		100% {
+			transform: scale(1);
+			opacity: 1;
+		}
 	}
 
 	.btn-icon {
@@ -628,7 +661,9 @@
 		position: absolute;
 		top: 2px;
 		right: 2px;
-		border-radius: 50%;
+		padding: 2px 2px 3px 3px;
+		background: rgba(0, 0, 0, 0.7);
+		border-radius: 3px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -651,7 +686,7 @@
 		bottom: 2px;
 		left: 2px;
 		background: rgba(0, 0, 0, 0.7);
-		color: var(--warning);
+		color: var(--info);
 		font-size: 10px;
 		font-weight: bold;
 		padding: 1px 3px;
