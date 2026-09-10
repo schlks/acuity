@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
 	import { toast } from '$lib/stores/toast.svelte';
+	import Spinner from '$lib/components/Spinner.svelte';
 
 	let {
 		isOpen = $bindable(false),
@@ -15,6 +16,10 @@
 	} = $props();
 
 	let currentImage = $derived(images[currentIndex]);
+	let imageSrc = $derived(
+		currentImage ? `/api/image?path=${encodeURIComponent(currentImage.filepath)}&preview=true` : ''
+	);
+	let loadedSrc = $state<string | null>(null);
 	let filmstripContainer = $state<HTMLElement | null>(null);
 	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
 
@@ -247,11 +252,19 @@
 
 		<!-- Main Image View -->
 		<main class="culling-main">
+			{#if loadedSrc !== imageSrc}
+				<div class="loading-overlay">
+					<Spinner />
+				</div>
+			{/if}
+
 			<div class="image-wrapper">
 				<img
-					src="/api/image?path={encodeURIComponent(currentImage.filepath)}&preview=true"
+					src={imageSrc}
 					alt=""
 					class="main-image"
+					onload={() => (loadedSrc = imageSrc)}
+					onerror={() => (loadedSrc = imageSrc)}
 				/>
 
 				<!-- Flag Badge Overlay -->
@@ -428,6 +441,16 @@
 		padding: 16px;
 		overflow: hidden;
 		position: relative;
+	}
+
+	.loading-overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		pointer-events: none;
+		z-index: 1;
 	}
 
 	.image-wrapper {
