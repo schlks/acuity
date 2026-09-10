@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-        import { toast } from "$lib/stores/toast.svelte";
+	import { toast } from '$lib/stores/toast.svelte';
 
 	let {
 		isOpen = $bindable(false),
@@ -20,7 +20,9 @@
 
 	function updateFocusBox() {
 		if (!filmstripContainer) return;
-		const activeThumb = filmstripContainer.querySelector(`[data-thumb-index="${currentIndex}"]`) as HTMLElement;
+		const activeThumb = filmstripContainer.querySelector(
+			`[data-thumb-index="${currentIndex}"]`
+		) as HTMLElement;
 		if (activeThumb) {
 			focusBox = {
 				x: activeThumb.offsetLeft,
@@ -38,7 +40,9 @@
 		images.length;
 		if (isOpen && filmstripContainer) {
 			requestAnimationFrame(() => updateFocusBox());
-			const activeThumb = filmstripContainer.querySelector(`[data-thumb-index="${currentIndex}"]`) as HTMLElement;
+			const activeThumb = filmstripContainer.querySelector(
+				`[data-thumb-index="${currentIndex}"]`
+			) as HTMLElement;
 			activeThumb?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
 		}
 	});
@@ -72,7 +76,10 @@
 		formData.append('flag', newFlag.toString());
 
 		try {
-			const res = await fetch(`/api/image/${currentImage.id}/flag`, { method: 'POST', body: formData });
+			const res = await fetch(`/api/image/${currentImage.id}/flag`, {
+				method: 'POST',
+				body: formData
+			});
 			if (res.ok) {
 				images[currentIndex] = { ...currentImage, flag: newFlag };
 			}
@@ -113,40 +120,40 @@
 		}
 	}
 
-        async function copyImage() {
-                try {
-                        const img = currentImage
-                        if (!img) return;
-                        const imageBlobPromise = (async (image) => {
-                                const res = await fetch(`/api/image?path=${encodeURIComponent(image.filepath)}`);
-                                const blob = await res.blob();
+	async function copyImage() {
+		try {
+			const img = currentImage;
+			if (!img) return;
+			const imageBlobPromise = (async (image) => {
+				const res = await fetch(`/api/image?path=${encodeURIComponent(image.filepath)}`);
+				const blob = await res.blob();
 
-                                if (blob.type === 'image/png') return blob;
+				if (blob.type === 'image/png') return blob;
 
-                                const img = new Image();
-                                img.src = URL.createObjectURL(blob);
-                                await new Promise((resolve) => (img.onload = resolve));
+				const img = new Image();
+				img.src = URL.createObjectURL(blob);
+				await new Promise((resolve) => (img.onload = resolve));
 
-                                const canvas = document.createElement('canvas');
-                                canvas.width = img.naturalWidth;
-                                canvas.height = img.naturalHeight;
-                                const ctx = canvas.getContext('2d');
-                                ctx?.drawImage(img, 0, 0);
+				const canvas = document.createElement('canvas');
+				canvas.width = img.naturalWidth;
+				canvas.height = img.naturalHeight;
+				const ctx = canvas.getContext('2d');
+				ctx?.drawImage(img, 0, 0);
 
-                                const pngBlob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
-                                URL.revokeObjectURL(img.src);
-                                return pngBlob;
-                        })(img);
+				const pngBlob = await new Promise<Blob>((resolve) =>
+					canvas.toBlob((b) => resolve(b!), 'image/png')
+				);
+				URL.revokeObjectURL(img.src);
+				return pngBlob;
+			})(img);
 
-                        await navigator.clipboard.write([
-                                new ClipboardItem({ 'image/png': imageBlobPromise })
-                        ]);
-                        toast.success('Image copied to clipboard');
-                } catch (err) {
-                        console.error('Failed to copy image', err);
-                        toast.error('Failed to copy image');
-                }
-        }
+			await navigator.clipboard.write([new ClipboardItem({ 'image/png': imageBlobPromise })]);
+			toast.success('Image copied to clipboard');
+		} catch (err) {
+			console.error('Failed to copy image', err);
+			toast.error('Failed to copy image');
+		}
+	}
 
 	function handleKeyDown(e: KeyboardEvent) {
 		if (!isOpen) return;
@@ -165,8 +172,10 @@
 					next();
 				}
 				break;
-			case 'ArrowLeft':
+			case 'w':
+			case 'b':
 			case 'h':
+			case 'ArrowLeft':
 				e.preventDefault();
 				if (e.shiftKey) {
 					prevUnflagged();
@@ -188,20 +197,21 @@
 				e.preventDefault();
 				setFlagAndAdvance(-1);
 				break;
-			case 'u':
-				e.preventDefault();
-				setFlagAndAdvance(0);
-				break;
-			case '0': case '1': case '2': case '3': case '4': case '5':
+			case '0':
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
 				e.preventDefault();
 				setRatingAndAdvance(Number(e.key));
 				break;
-                        case 'c':
-                                e.preventDefault();
-                                if (e.ctrlKey) {
-                                        copyImage();
-                                }
-                                break;
+			case 'c':
+				e.preventDefault();
+				if (e.ctrlKey) {
+					copyImage();
+				}
+				break;
 		}
 	}
 </script>
@@ -281,10 +291,14 @@
 					class="filmstrip-thumb"
 					class:active={currentIndex === i}
 					data-thumb-index={i}
-					onclick={() => currentIndex = i}
+					onclick={() => (currentIndex = i)}
 				>
-					<img src="/api/image?path={encodeURIComponent(img.filepath)}&thumb=true" alt="" loading="lazy" />
-					
+					<img
+						src="/api/image?path={encodeURIComponent(img.filepath)}&thumb=true"
+						alt=""
+						loading="lazy"
+					/>
+
 					{#if img.flag === 1}
 						<span class="thumb-flag keep">
 							<span class="material-symbols-outlined icon-filled">check_circle</span>
@@ -359,7 +373,9 @@
 	}
 
 	@keyframes spin {
-		to { transform: rotate(360deg); }
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.header-shortcuts {
@@ -496,7 +512,9 @@
 		left: 0;
 		pointer-events: none;
 		border-radius: 6px;
-		box-shadow: inset 0 0 0 3px var(--primary), 0 0 15px color-mix(in srgb, var(--primary) 45%, transparent);
+		box-shadow:
+			inset 0 0 0 3px var(--primary),
+			0 0 15px color-mix(in srgb, var(--primary) 45%, transparent);
 		z-index: 10;
 		transition:
 			transform 0.2s cubic-bezier(0.2, 0, 0, 1),
@@ -516,7 +534,9 @@
 		cursor: pointer;
 		padding: 0;
 		opacity: 0.6;
-		transition: opacity 0.2s ease, transform 0.2s ease;
+		transition:
+			opacity 0.2s ease,
+			transform 0.2s ease;
 	}
 
 	.filmstrip-thumb:hover {
@@ -577,7 +597,13 @@
 	}
 
 	@keyframes popIn {
-		0% { transform: scale(0.8); opacity: 0; }
-		100% { transform: scale(1); opacity: 1; }
+		0% {
+			transform: scale(0.8);
+			opacity: 0;
+		}
+		100% {
+			transform: scale(1);
+			opacity: 1;
+		}
 	}
 </style>
