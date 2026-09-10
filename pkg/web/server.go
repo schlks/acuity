@@ -924,7 +924,7 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	_ = r.ParseForm()
+	_ = r.ParseMultipartForm(10 << 20)
 
 	var images []db.SImage
 
@@ -1103,8 +1103,7 @@ func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := r.ParseForm()
-	if err != nil {
+	if err := r.ParseMultipartForm(10 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
 		message := "Failed to parse Form"
 		slog.Error(message, slog.Any("error", err))
 		http.Error(w, message, http.StatusBadRequest)
@@ -1132,8 +1131,8 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	} else {
 		flagFilter, ok := strings.CutPrefix(criteria, "flag_")
 		if !ok {
-			message := "Failed to parse Form"
-			slog.Error(message, slog.Any("error", err))
+			message := "Invalid criteria"
+			slog.Error(message, slog.String("criteria", criteria))
 			http.Error(w, message, http.StatusBadRequest)
 			return
 		}

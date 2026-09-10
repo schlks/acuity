@@ -115,12 +115,7 @@
 			case 'Escape':
 				zoom > 1 ? resetZoom() : carousel.close();
 				break;
-			case '0':
-			case '1':
-			case '2':
-			case '3':
-			case '4':
-			case '5':
+			case '0': case '1': case '2': case '3': case '4': case '5':
 				setRating(parseInt(e.key));
 				break;
 			case 'i':
@@ -380,7 +375,7 @@
 		</footer>
 
 		{#if carousel.isInfoOpen && carousel.currentImage}
-			<Info image={carousel.currentImage} />
+			<Info image={carousel.currentImage} onDelete={deleteImage} onClose={() => carousel.close()} />
 		{/if}
 	</div>
 {/if}

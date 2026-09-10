@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
-	import { carousel } from '$lib/stores/carousel.svelte';
 	import { page } from '$app/state';
         import {
                 formatSize,
@@ -15,29 +14,13 @@
                 formatLens
         } from '$lib/format';
 	
-	let { image } = $props();
+	let { image, onDelete, onClose } = $props();
 	let galleryName = $derived(
 		page.data?.galleries?.find((g: any) => g.id === image.gallery_id)?.name ||
 		page.data?.gallery?.name ||
 		page.params.name ||
 		'global'
 	)
-
-	async function deleteImage() {
-		if (!confirm('Bild endgültig löschen?')) return;
-		try {
-			await fetch(`/api/image/${image.id}/delete`, { method: 'POST' });
-			carousel.images.splice(carousel.currentIndex, 1);
-			
-			if (carousel.images.length === 0) {
-				carousel.close();
-			} else if (carousel.currentIndex >= carousel.images.length) {
-				carousel.currentIndex = carousel.images.length - 1;
-			}
-		} catch (e) {
-			console.error("Löschen fehlgeschlagen", e);
-		}
-	}
 </script>
 
 <div class="info-popup" transition:fly={{ y: -15, duration: 250, easing: quintOut }}>
@@ -111,10 +94,10 @@
 	<hr />
 
 	<div class="info-actions">
-		<a href="/gallery/{galleryName}/duplicates?imageID={image.id}" class="action-btn" onclick={() => carousel.close()}>
+		<a href="/gallery/{galleryName}/duplicates?imageID={image.id}" class="action-btn" onclick={onClose}>
 			<span class="material-symbols-outlined">search</span>
 		</a>
-		<button class="action-btn danger" onclick={deleteImage}>
+		<button class="action-btn danger" onclick={onDelete}>
 			<span class="material-symbols-outlined">delete</span>
 		</button>
 	</div>

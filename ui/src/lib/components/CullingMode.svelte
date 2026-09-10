@@ -2,6 +2,7 @@
 	import { fade } from 'svelte/transition';
 	import { toast } from '$lib/stores/toast.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
+	import Info from '$lib/components/Info.svelte';
 
 	let {
 		isOpen = $bindable(false),
@@ -22,6 +23,7 @@
 	let loadedSrc = $state<string | null>(null);
 	let filmstripContainer = $state<HTMLElement | null>(null);
 	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
+	let isInfoOpen = $state(false);
 
 	function updateFocusBox() {
 		if (!filmstripContainer) return;
@@ -70,7 +72,34 @@
 
 	function close() {
 		isOpen = false;
+		isInfoOpen = false;
 		onClose?.();
+	}
+
+	async function deleteImage() {
+		if (!confirm('remove image irreversibly?')) return;
+		try {
+			const img = currentImage;
+			if (!img) return;
+			await fetch(`/api/image/${img.id}/delete`, { method: 'POST' });
+			images.splice(currentIndex, 1);
+
+			if (images.length === 0) {
+				close();
+			} else if (currentIndex >= images.length) {
+				currentIndex = images.length - 1;
+			}
+		} catch (e) {
+			console.error('Delete error:', e);
+		}
+	}
+
+	function handleWindowClick(e: MouseEvent) {
+		if (!isInfoOpen) return;
+		const target = e.target as HTMLElement;
+		if (!target?.closest?.('.info-popup, .info-btn')) {
+			isInfoOpen = false;
+		}
 	}
 
 	async function setFlagAndAdvance(flag: number) {
@@ -202,14 +231,13 @@
 				e.preventDefault();
 				setFlagAndAdvance(-1);
 				break;
-			case '0':
-			case '1':
-			case '2':
-			case '3':
-			case '4':
-			case '5':
+			case '0': case '1': case '2': case '3': case '4': case '5':
 				e.preventDefault();
 				setRatingAndAdvance(Number(e.key));
+				break;
+			case 'i':
+				e.preventDefault();
+				isInfoOpen = !isInfoOpen;
 				break;
 			case 'c':
 				e.preventDefault();
@@ -221,7 +249,7 @@
 	}
 </script>
 
-<svelte:window onkeydown={handleKeyDown} />
+<svelte:window onkeydown={handleKeyDown} onclick={handleWindowClick} />
 
 {#if isOpen && currentImage}
 	<div class="culling-overlay" transition:fade={{ duration: 150 }}>
@@ -243,11 +271,22 @@
 				<span class="shortcut-hint"><kbd>⌫</kbd>/<kbd>n</kbd> Reject</span>
 				<span class="shortcut-hint"><kbd>0-5</kbd> Star</span>
 				<span class="shortcut-hint"><kbd>←</kbd><kbd>→</kbd> Navigate</span>
+				<span class="shortcut-hint"><kbd>i</kbd> Info</span>
 			</div>
 
-			<button class="close-btn" onclick={close} title="Close Culling Mode (Esc / c)">
-				<span class="material-symbols-outlined">close</span>
-			</button>
+			<div class="header-actions">
+				<button
+					class="close-btn info-btn"
+					class:active={isInfoOpen}
+					onclick={() => (isInfoOpen = !isInfoOpen)}
+					title="Info (i)"
+				>
+					<span class="material-symbols-outlined">info</span>
+				</button>
+				<button class="close-btn" onclick={close} title="Close Culling Mode (Esc / c)">
+					<span class="material-symbols-outlined">close</span>
+				</button>
+			</div>
 		</header>
 
 		<!-- Main Image View -->
@@ -330,6 +369,10 @@
 				</button>
 			{/each}
 		</footer>
+
+		{#if isInfoOpen}
+			<Info image={currentImage} onDelete={deleteImage} onClose={close} />
+		{/if}
 	</div>
 {/if}
 
@@ -431,6 +474,16 @@
 	.close-btn:hover {
 		color: var(--text);
 		background: rgba(255, 255, 255, 0.1);
+	}
+
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.info-btn.active {
+		color: var(--info);
 	}
 
 	.culling-main {
