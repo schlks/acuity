@@ -1118,19 +1118,31 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	var images []db.SImage
 
 	if criteria == "selected" {
-		imageIDsStr := r.FormValue("image_ids")
-		if imageIDsStr != "" {
-			for id := range strings.SplitSeq(imageIDsStr, ",") {
-				id = strings.TrimSpace(id)
-				if id != "" {
-					idInt, _ := strconv.Atoi(id)
-					images = append(images, db.SImage{ID: idInt})
-				}
+		var ids []int
+		for id := range strings.SplitSeq(r.FormValue("image_ids"), ",") {
+			if idInt, err := strconv.Atoi(strings.TrimSpace(id)); err == nil {
+				ids = append(ids, idInt)
 			}
 		}
+
+		selected, err := s.Bridge.GetImagesByIDs(ids)
+		if err != nil {
+			message := "Failed to load selected images"
+			slog.Error(message, slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
+		images = selected
 	} else {
-		flagFilter, ok := strings.CutPrefix(criteria, "flag_")
-		if !ok {
+		var flagFilter string
+		switch criteria {
+		case "flag_keep":
+			flagFilter = "1"
+		case "flag_reject":
+			flagFilter = "-1"
+		case "flag_any":
+			flagFilter = "any"
+		default:
 			message := "Invalid criteria"
 			slog.Error(message, slog.String("criteria", criteria))
 			http.Error(w, message, http.StatusBadRequest)
@@ -1163,10 +1175,10 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 	} else if action == "move" || action == "copy" {
 		targetGalleryName = r.FormValue("name")
 
-		targetID, err, ok := s.Bridge.GetGalleryID(targetGalleryName)
-		if err != nil || !ok {
+		targetID, err, isGlobal := s.Bridge.GetGalleryID(targetGalleryName)
+		if err != nil || isGlobal {
 			message := "Failed to get target Gallery ID"
-			slog.Error(message, slog.Any("error", err))
+			slog.Error(message, slog.String("gallery", targetGalleryName), slog.Any("error", err))
 			http.Error(w, message, http.StatusInternalServerError)
 			return
 		}
@@ -1186,11 +1198,17 @@ func (s *Server) handleBatchAction(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-	}
-	if err := s.Bridge.UpdateFolder(targetGalleryName); err != nil {
-		message := "Failed to update target gallery"
-		slog.Error(message, slog.String("gallery", targetGalleryName), slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
+
+		if err := s.Bridge.UpdateFolder(targetGalleryName); err != nil {
+			message := "Failed to update target gallery"
+			slog.Error(message, slog.String("gallery", targetGalleryName), slog.Any("error", err))
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
+	} else {
+		message := "Invalid batch action"
+		slog.Error(message, slog.String("action", action))
+		http.Error(w, message, http.StatusBadRequest)
 		return
 	}
 

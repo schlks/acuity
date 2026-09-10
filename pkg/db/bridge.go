@@ -384,6 +384,20 @@ func (b *Bridge) GetAllImages(galleryID int, sortBy string, sortOrder string, pa
 	return b.sDB.GetAllImages(galleryID, sortBy, sortOrder, page, imagesPerPage, flagFilter, folderFilter)
 }
 
+func (b *Bridge) GetImagesByIDs(ids []int) ([]SImage, error) {
+	imagesMap, err := b.sDB.GetImagesByIDs(ids)
+	if err != nil {
+		return nil, err
+	}
+	images := make([]SImage, 0, len(imagesMap))
+	for _, id := range ids {
+		if img, ok := imagesMap[id]; ok {
+			images = append(images, img)
+		}
+	}
+	return images, nil
+}
+
 func (b *Bridge) ConvertImage(file []byte) (string, error) {
 	bimgImg := bimg.NewImage(file)
 	jpegBuffer, err := bimgImg.Convert(bimg.JPEG)
@@ -467,7 +481,8 @@ func (b *Bridge) ChangeGallery(newID int, sImages []SImage) error {
 		return err
 	}
 
-	for _, img := range sImages {
+	for i := range sImages {
+		img := &sImages[i]
 		if img.FilePath != "" {
 			fileName := filepath.Base(img.FilePath)
 			newPath := filepath.Join(targetGallery.Path, fileName)
@@ -504,7 +519,8 @@ func (b *Bridge) CopyToGallery(newID int, sImages []SImage) error {
 		return err
 	}
 
-	for _, img := range sImages {
+	for i := range sImages {
+		img := &sImages[i]
 		if img.FilePath != "" {
 			fileName := filepath.Base(img.FilePath)
 			newPath := filepath.Join(targetGallery.Path, fileName)

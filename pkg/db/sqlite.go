@@ -272,7 +272,9 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 	query := "SELECT * FROM images WHERE gallery_id = ?"
 	args := []any{galleryID}
 
-	if flagFilter != "" {
+	if flagFilter == "any" {
+		query += " AND flag != 0"
+	} else if flagFilter != "" {
 		if flagVal, err := strconv.Atoi(flagFilter); err == nil {
 			query += " AND flag = ?"
 			args = append(args, flagVal)
@@ -552,7 +554,7 @@ func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
 		}
 	}(tx)
 
-	query, err := tx.Prepare("UPDATE images SET gallery_id = ? WHERE id = ?")
+	query, err := tx.Prepare("UPDATE images SET gallery_id = ?, filepath = ? WHERE id = ?")
 	if err != nil {
 		err := tx.Rollback()
 		if err != nil {
@@ -567,7 +569,7 @@ func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
 	}(query)
 
 	for _, img := range sImages {
-		_, err := query.Exec(newGalleryID, img.ID)
+		_, err := query.Exec(newGalleryID, img.FilePath, img.ID)
 		if err != nil {
 			message := "failed to insert into SQLite"
 			slog.Error(message, slog.String("file", img.FilePath), slog.Any("error", err))
