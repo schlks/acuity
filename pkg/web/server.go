@@ -883,44 +883,6 @@ func (s *Server) handleGlobalDuplicates(w http.ResponseWriter, r *http.Request) 
 	s.writeJSON(w, data, http.StatusOK)
 }
 
-// Deprecated
-func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var image db.SImage
-	idstr := r.PathValue("id")
-	id, err := strconv.Atoi(idstr)
-	if err != nil {
-		message := "Failed to convert id"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
-	}
-	image.ID = id
-	if image.ID > 0 {
-		idstr := r.FormValue("id")
-		id, err := strconv.Atoi(idstr)
-		if err != nil {
-			message := "Failed to convert id"
-			slog.Error(message, slog.Any("error", err))
-			http.Error(w, message, http.StatusInternalServerError)
-			return
-		}
-		image.ID = id
-	}
-	image.FilePath = r.FormValue("path")
-
-	if err := s.Bridge.DeleteImage(ctx, image); err != nil {
-		message := "Failed to delete File"
-		slog.Error(message, slog.Any("error", err))
-		http.Error(w, message, http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("HX-Trigger", `{"refresh-sidebar": "", "refresh-images": ""}`)
-	w.WriteHeader(http.StatusOK)
-}
-
 func (s *Server) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

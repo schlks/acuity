@@ -418,50 +418,9 @@ func (b *Bridge) ConvertImage(file []byte) (string, error) {
 	return base64Image, nil
 }
 
-func (b *Bridge) DeleteImage(ctx context.Context, inputImg SImage) error {
-	image, err := b.sDB.GetImageByID(inputImg.ID)
-	if err != nil {
-		return fmt.Errorf("failed to fetch image: %w", err)
-	}
-
-	slog.Info("Deleting image", slog.String("file", image.FilePath))
-
-	if err := b.sDB.RemoveImage(image.ID); err != nil {
-		return err
-	}
-
-	if err := b.vDB.RemoveImages(ctx, []int{image.ID}); err != nil {
-		return err
-	}
-
-	if image.FilePath != "" {
-		if err := os.Remove(image.FilePath); err != nil {
-			slog.Warn("Failed to delete physical file", slog.String("path", image.FilePath), slog.Any("error", err))
-		}
-	}
-	return nil
-}
-
 func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
-	// var paths []string
 	var imageIDs []int
 
-	/*for _, inputImg := range images {
-		img, err := b.sDB.GetImageByID(inputImg.ID)
-		if err != nil {
-			slog.Warn("Failed to fetch image for deletion, skipping", slog.Int("id", inputImg.ID), slog.Any("error", err))
-			continue
-		}
-
-		slog.Info("Removing Image from Databases", slog.String("Image", img.FilePath))
-		imageIDs = append(imageIDs, img.ID)
-		paths = append(paths, img.FilePath)
-
-		if err := b.sDB.RemoveImage(img.ID); err != nil {
-			return err
-		}
-	}
-	*/
 	for i := range images {
 		if images[i].FilePath == "" {
 			image, err := b.sDB.GetImageByID(images[i].ID)
