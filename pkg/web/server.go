@@ -554,10 +554,45 @@ func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string
 	return thumbPath, nil
 }
 
+// isPathInGallery reports whether path lies inside one of the registered
+// gallery roots, to stop the image endpoints from being used to read
+// arbitrary files off the host.
+func (s *Server) isPathInGallery(path string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+
+	galleries, err := s.Bridge.GetAllGalleries()
+	if err != nil {
+		return false
+	}
+
+	for _, g := range galleries {
+		galleryAbs, err := filepath.Abs(g.Path)
+		if err != nil {
+			continue
+		}
+
+		rel, err := filepath.Rel(galleryAbs, absPath)
+		if err != nil {
+			continue
+		}
+		if rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	image := query.String(r, "path", "")
 	if image == "" {
 		http.Error(w, "Image not found", http.StatusNotFound)
+		return
+	}
+	if !s.isPathInGallery(image) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
