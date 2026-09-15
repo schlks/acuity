@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image/jpeg"
 	"io/fs"
@@ -488,6 +489,10 @@ func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 	}
 
 	for _, img := range images {
+		if _, err := os.Stat(img.FilePath); errors.Is(err, os.ErrNotExist) {
+			slog.Info("Physical file alreaydy missing -> skipping", slog.Any("error", err))
+			continue
+		}
 		slog.Info("Deleting physical file", slog.String("file", img.FilePath))
 		err := os.Remove(img.FilePath)
 		if err != nil {
