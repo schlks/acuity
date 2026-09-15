@@ -82,13 +82,20 @@ func (a *App) startup(ctx context.Context) {
 	webServer := web.NewServer(sClient, vClient, a.config)
 	webServer.RegisterRoutes(a.mux)
 
-	slog.Info(fmt.Sprintf("Acuity Web-Interface listening on http://localhost:%s", a.config.Port))
-	go func() {
-		err := http.ListenAndServe(":"+a.config.Port, a.mux)
-		if err != nil {
-			slog.Error("Web server error", slog.Any("error", err))
-		}
-	}()
+	// The webview loads the UI through Wails' own wails:// scheme, which routes
+	// requests to a.mux in-process (no socket, no external access) via the
+	// AssetServer.Handler set up in main.go. A real TCP listener is only needed
+	// during `wails dev`, where the frontend runs in a separate Vite dev server
+	// that proxies /api requests to this port.
+	if runtime.Environment(ctx).BuildType == "dev" {
+		slog.Info(fmt.Sprintf("Acuity Web-Interface listening on http://localhost:%s", a.config.Port))
+		go func() {
+			err := http.ListenAndServe("127.0.0.1:"+a.config.Port, a.mux)
+			if err != nil {
+				slog.Error("Web server error", slog.Any("error", err))
+			}
+		}()
+	}
 }
 
 func (a *App) SelectDirectory() (string, error) {

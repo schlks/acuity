@@ -8,7 +8,7 @@ export const load: PageLoad = async ({ url, fetch}) => {
 		return { query: null, results: null };
 	}
 
-	const res = await fetch(`http://localhost:3000/api/search?q=${encodeURIComponent(query)}`);
+	const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
 
 	if (!res.ok) {
 		throw error(res.status, 'Failed to query the server for a search');
