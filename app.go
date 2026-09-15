@@ -4,6 +4,7 @@ import (
 	"acuity/pkg/ai"
 	"acuity/pkg/config"
 	"acuity/pkg/db"
+	"acuity/pkg/version"
 	"acuity/pkg/web"
 	"context"
 	"fmt"
@@ -94,4 +95,8 @@ func (a *App) SelectDirectory() (string, error) {
 	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Gallery Directory",
 	})
+}
+
+func (a *App) GetVersion() string {
+	return version.Version
 }

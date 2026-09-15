@@ -28,9 +28,19 @@
             					'';
         };
 
+        buildVersion =
+          let
+            raw = self.lastModifiedDate;
+            year = builtins.substring 0 4 raw;
+            month = builtins.substring 4 2 raw;
+            day = builtins.substring 6 2 raw;
+            time = builtins.substring 8 6 raw;
+          in
+          "${year}.${month}.${day}.${time}";
+
         acuity = pkgs.buildGoModule rec {
           pname = "acuity";
-          version = "0.1.0";
+          version = buildVersion;
           src = ./.;
 
           vendorHash = "sha256-kuAx2DiD0o6S8VX+aK5lkbvuqcE3TtsHpTaHZ/ufCro=";
@@ -40,7 +50,7 @@
 
           env.CGO_ENABLED = 1;
           tags = [ "production" "webkit2_41" ];
-          ldflags = [ "-s" "-w" ];
+          ldflags = [ "-s" "-w" "-X" "acuity/pkg/version.Version=${version}" ];
 
           buildInputs = with pkgs; [
             webkitgtk_4_1
