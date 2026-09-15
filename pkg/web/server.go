@@ -14,7 +14,6 @@ import (
 	"log/slog"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -117,8 +116,6 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST 	/api/gallery/batch", s.handleBatchAction)
 	mux.HandleFunc("GET 	/api/progress", s.getGlobalProgress)
 	mux.HandleFunc("GET 	/api/ai/status", s.handleAIStatus)
-	mux.HandleFunc("GET 	/api/browse", s.browseFiles)
-	mux.HandleFunc("POST 	/api/browse/mkdir", s.mkdir)
 	mux.HandleFunc("POST 	/api/reset", s.resetDatabase)
 
 	uiBuildDir := filepath.Join(webDir, "build")
@@ -303,71 +300,6 @@ func (s *Server) unflagGallery(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("HX-Trigger", "refresh-images")
 	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) browseFiles(w http.ResponseWriter, r *http.Request) {
-	dir := query.String(r, "dir", "/data")
-	if dir == "" {
-		dir = "/data"
-	}
-
-	dir = filepath.Clean(dir)
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		http.Error(w, "Kein Zugriff", http.StatusForbidden)
-		return
-	}
-
-	var folders []string
-	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-			folders = append(folders, e.Name())
-		}
-	}
-
-	parentDir := filepath.Dir(dir)
-	if dir == "/" {
-		parentDir = ""
-	}
-
-	target := query.String(r, "target", "")
-
-	data := struct {
-		CurrentDir string   `json:"current_dir"`
-		ParentDir  string   `json:"parent_dir"`
-		Folders    []string `json:"folders"`
-		Target     string   `json:"target"`
-	}{
-		CurrentDir: dir,
-		ParentDir:  parentDir,
-		Folders:    folders,
-		Target:     target,
-	}
-
-	s.writeJSON(w, data, http.StatusOK)
-}
-
-func (s *Server) mkdir(w http.ResponseWriter, r *http.Request) {
-	dir := r.FormValue("dir")
-	newFolder := r.FormValue("new_folder")
-	target := r.FormValue("target")
-
-	if dir != "" && newFolder != "" {
-		newPath := filepath.Join(dir, newFolder)
-		err := os.MkdirAll(newPath, 0o755)
-		if err != nil {
-			slog.Error("Failed to create folder", slog.String("path", newPath), slog.Any("error", err))
-		}
-	}
-
-	urlStr := fmt.Sprintf("/api/browse?dir=%s", url.QueryEscape(dir))
-	if target != "" {
-		urlStr += fmt.Sprintf("&target=%s", url.QueryEscape(target))
-	}
-
-	r.Method = "GET"
-	http.Redirect(w, r, urlStr, http.StatusSeeOther)
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
