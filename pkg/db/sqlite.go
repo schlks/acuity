@@ -245,7 +245,7 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
 	defer func(query *sqlx.NamedStmt) {
 		err := query.Close()
 		if err != nil {
-
+			return
 		}
 	}(query)
 
@@ -357,7 +357,7 @@ func (s *SQLiteClient) RemoveImages(images []SImage) error {
 	defer func(tx *sqlx.Tx) {
 		err := tx.Rollback()
 		if err != nil {
-
+			return
 		}
 	}(tx)
 
@@ -368,7 +368,7 @@ func (s *SQLiteClient) RemoveImages(images []SImage) error {
 	defer func(query *sql.Stmt) {
 		err := query.Close()
 		if err != nil {
-
+			return
 		}
 	}(query)
 
@@ -493,6 +493,7 @@ func (s *SQLiteClient) GetKnownPaths(galleryID int) ([]string, error) {
 	defer func(rows *sql.Rows) {
 		err := rows.Close()
 		if err != nil {
+			return
 		}
 	}(rows)
 
@@ -551,6 +552,7 @@ func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
 	defer func(tx *sqlx.Tx) {
 		err := tx.Rollback()
 		if err != nil {
+			return
 		}
 	}(tx)
 
@@ -565,6 +567,7 @@ func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
 	defer func(query *sql.Stmt) {
 		err := query.Close()
 		if err != nil {
+			return
 		}
 	}(query)
 

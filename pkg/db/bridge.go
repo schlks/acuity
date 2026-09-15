@@ -183,7 +183,12 @@ func (b *Bridge) ScanGallery(name string) error {
 		if len(missingPaths) > 0 {
 			var imagesToDelete []SImage
 			for _, path := range missingPaths {
-				imagesToDelete = append(imagesToDelete, SImage{FilePath: path, GalleryID: gallery.ID})
+				img, err := b.sDB.GetImageByPath(path)
+				if err != nil {
+					slog.Error("Failed to get Image from Path", slog.Any("error", err))
+					continue
+				}
+				imagesToDelete = append(imagesToDelete, img)
 			}
 			_ = b.DeleteImages(importCtx, imagesToDelete)
 		}
@@ -284,6 +289,9 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 				return err
 			}
 			stat, err := os.Stat(path)
+			if err != nil {
+				return err
+			}
 
 			bimgImg := bimg.NewImage(data)
 			var width, height int
@@ -434,10 +442,10 @@ func (b *Bridge) DeleteImage(ctx context.Context, inputImg SImage) error {
 }
 
 func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
-	var paths []string
+	// var paths []string
 	var imageIDs []int
 
-	for _, inputImg := range images {
+	/*for _, inputImg := range images {
 		img, err := b.sDB.GetImageByID(inputImg.ID)
 		if err != nil {
 			slog.Warn("Failed to fetch image for deletion, skipping", slog.Int("id", inputImg.ID), slog.Any("error", err))
@@ -452,6 +460,24 @@ func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 			return err
 		}
 	}
+	*/
+	for i := range images {
+		if images[i].FilePath == "" {
+			image, err := b.sDB.GetImageByID(images[i].ID)
+			if err != nil {
+				slog.Error("Failed to get Image", slog.Any("error", err))
+				continue
+			}
+			images[i].FilePath = image.FilePath
+		}
+	}
+
+	for _, img := range images {
+		imageIDs = append(imageIDs, img.ID)
+	}
+	if err := b.sDB.RemoveImages(images); err != nil {
+		slog.Error("Failed to remove Images from Database", slog.Any("error", err))
+	}
 
 	if err := b.sDB.RemoveImagesFromDuplicateCache(imageIDs); err != nil {
 		slog.Error("Failed to update duplicates cache after deletion", slog.Any("error", err))
@@ -461,11 +487,11 @@ func (b *Bridge) DeleteImages(ctx context.Context, images []SImage) error {
 		return err
 	}
 
-	for _, path := range paths {
-		slog.Info("Deleting physical file", slog.String("file", path))
-		err := os.Remove(path)
+	for _, img := range images {
+		slog.Info("Deleting physical file", slog.String("file", img.FilePath))
+		err := os.Remove(img.FilePath)
 		if err != nil {
-			slog.Warn("Failed to delete physical file", slog.String("path", path), slog.Any("error", err))
+			slog.Warn("Failed to delete physical file", slog.String("path", img.FilePath), slog.Any("error", err))
 		}
 	}
 	return nil
