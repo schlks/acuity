@@ -30,13 +30,13 @@ jobs:
 
       - name: Build .deb
         run: |
-          export CGO_CFLAGS="-I$(pwd)/internal/cgo -I$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
+          export CGO_CFLAGS="-I$(pwd)/internal/cgo"
           chmod +x install/linux/build-deb.sh
           ./install/linux/build-deb.sh
 
       - name: Build AppImage
         run: |
-          export CGO_CFLAGS="-I$(pwd)/internal/cgo -I$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
+          export CGO_CFLAGS="-I$(pwd)/internal/cgo"
           chmod +x install/linux/build-appimage.sh
           ./install/linux/build-appimage.sh
 
@@ -66,7 +66,7 @@ jobs:
 
       - name: Build .dmg (arm64)
         run: |
-          export CGO_CFLAGS="-I$(pwd)/internal/cgo -I$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
+          export CGO_CFLAGS="-I$(pwd)/internal/cgo"
           chmod +x install/macos/build-macos.sh
           ./install/macos/build-macos.sh darwin/arm64
 
