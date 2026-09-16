@@ -2,10 +2,9 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
-	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 
-let { onClose, selectedImages = [] } = $props();
+let { onClose, selectedImages = [], onSuccess = () => {} } = $props();
 
 	let criteria = $state("selected");
 	let action = $state("copy");
@@ -35,7 +34,8 @@ let { onClose, selectedImages = [] } = $props();
 		});
 		
 		if (res.ok) {
-			await invalidateAll();
+			const ids = selectedImages.map((img: any) => img.id ?? img.ID);
+			onSuccess?.(action, criteria, ids);
 			onClose();
 		} else {
 			console.error("Batch Action failed:", await res.text());

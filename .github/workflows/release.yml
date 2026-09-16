@@ -75,34 +75,8 @@ jobs:
           name: macos-arm64-artifacts
           path: build/bin/*.dmg
 
-  macos-intel:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - uses: oven-sh/setup-bun@v2
-
-      - name: Install system dependencies
-        run: brew install vips create-dmg pkg-config
-
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
-
-      - name: Build .dmg (Intel)
-        run: |
-          export CGO_CFLAGS="-I$(pwd)/internal/cgo -I$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
-          chmod +x install/macos/build-macos.sh
-          ./install/macos/build-macos.sh darwin/amd64
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-intel-artifacts
-          path: build/bin/*.dmg
-
   release:
-    needs: [linux, macos-arm64, macos-intel]
+    needs: [linux, macos-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

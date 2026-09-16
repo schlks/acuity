@@ -598,6 +598,16 @@
 		toast.info('All flags removed');
 	}
 
+	function handleBatchSuccess(action: 'delete' | 'move' | 'copy', criteria: string, ids: number[]) {
+		if ((action === 'delete' || action === 'move') && criteria === 'selected') {
+			const idSet = new Set(ids);
+			galleryImages = galleryImages.filter(i => !idSet.has(i.id));
+		} else {
+			invalidateAll();
+		}
+		selectedImages = [];
+	}
+
 	async function runBatchAction(action: 'delete' | 'move' | 'copy', criteria = 'selected') {
 		if (criteria === 'selected' && selectedImages.length === 0) return;
 
@@ -617,15 +627,14 @@
 		formData.append('batch_action', action);
 		formData.append('source_gallery', data.gallery.name);
 
+		const ids = selectedImages.map(img => img.id);
 		if (criteria === 'selected') {
-			const ids = selectedImages.map(img => img.id).join(',');
-			formData.append('image_ids', ids);
+			formData.append('image_ids', ids.join(','));
 		}
 
 		const res = await fetch('/api/gallery/batch', { method: 'POST', body: formData });
 		if (res.ok) {
-			await invalidateAll();
-			selectedImages = [];
+			handleBatchSuccess(action, criteria, ids);
 			toast.success(`Batch action completed`);
 		} else {
 			toast.error(`Batch action failed`);
@@ -973,6 +982,7 @@
 				<BatchActionDialog
 					selectedImages={selectedImages}
 					onClose={() => batchIsOpen = false}
+					onSuccess={handleBatchSuccess}
 				/>
 			{/if}
 		</div>
