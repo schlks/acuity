@@ -3,7 +3,6 @@
 package web
 
 import (
-	"acuity/pkg/config"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,7 +14,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -23,9 +21,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"acuity/pkg/config"
+
 	"acuity/pkg/ai"
 	"acuity/pkg/db"
 
+	"github.com/evanoberholster/imagemeta"
+	"github.com/evanoberholster/imagemeta/meta"
 	"github.com/h2non/bimg"
 	"github.com/mallardduck/go-http-helpers/pkg/query"
 )
@@ -337,23 +339,58 @@ func isRawExtension(ext string) bool {
 }
 
 func extractRawPreview(path string) ([]byte, error) {
-	var bestPreview []byte
+	var data []byte
 
-	for _, tag := range []string{"-JpgFromRaw", "-PreviewImage", "-OtherImage", "-ThumbnailImage"} {
-		cmd := exec.Command("exiftool", "-b", tag, path)
-		out, err := cmd.Output()
-		if err == nil && len(out) > 0 {
-			if len(out) > 100000 {
-				return out, nil
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	if filepath.Ext(path) == ".cr3" {
+		return imagemeta.PreviewCR3(file)
+	} else {
+		type preview struct {
+			Offset, Length uint32
+			Compression    meta.Compression
+		}
+		x, err := imagemeta.Decode(file)
+		if err != nil {
+			return nil, err
+		}
+		candidates := []preview{
+			{x.IFD0.ThumbnailOffset, x.IFD0.ThumbnailLength, meta.Compression(7)},
+		}
+
+		if x.IFD1 != nil {
+			candidates = append(candidates, preview{x.IFD1.ImageOffset, x.IFD1.ImageLength, x.IFD1.Compression})
+		}
+		if x.IFD2 != nil {
+			candidates = append(candidates, preview{x.IFD2.ImageOffset, x.IFD2.ImageLength, x.IFD2.Compression})
+		}
+
+		var length uint32
+		var offset uint32
+
+		for _, c := range candidates {
+			if c.Compression != 6 && c.Compression != 7 {
+				continue
 			}
-			if len(out) > len(bestPreview) {
-				bestPreview = out
+			if c.Length > length {
+				length = c.Length
+				offset = c.Offset
 			}
+		}
+
+		section := io.NewSectionReader(file, int64(offset), int64(length))
+		data, err = io.ReadAll(section)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	if len(bestPreview) > 0 {
-		return bestPreview, nil
+	if len(data) > 0 {
+		return data, nil
 	}
 	return nil, fmt.Errorf("no preview found")
 }
@@ -1273,7 +1310,6 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 		defer func(file multipart.File) {
 			err := file.Close()
 			if err != nil {
-
 			}
 		}(file)
 
