@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+env:
+  GO_VERSION: "1.26.3"
+  WAILS_VERSION: "v2.15.0"
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libvips-dev pkg-config
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Build .deb
+        run: |
+          chmod +x install/linux/build-deb.sh
+          ./install/linux/build-deb.sh
+
+      - name: Build AppImage
+        run: |
+          chmod +x install/linux/build-appimage.sh
+          ./install/linux/build-appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
+            build/bin/*.deb
+            build/bin/*.AppImage
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Install libvips (prebuilt Windows binaries)
+        shell: bash
+        run: |
+          curl -L -o vips.zip https://github.com/libvips/libvips/releases/download/v8.15.2/vips-dev-w64-web-8.15.2.zip
+          unzip -q vips.zip -d vips
+          echo "VIPS_DIR=$(pwd)/vips/vips-dev-8.15" >> "$GITHUB_ENV"
+
+      - name: Build Windows installer
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          CGO_CFLAGS: "-I${{ env.VIPS_DIR }}/include"
+          CGO_LDFLAGS: "-L${{ env.VIPS_DIR }}/lib"
+        run: |
+          mkdir -p build/bin
+          cp "$VIPS_DIR"/bin/*.dll build/bin/
+          wails build -platform windows/amd64 -nsis
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: build/bin/*installer*.exe
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install system dependencies
+        run: brew install vips create-dmg pkg-config
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Build .dmg
+        run: |
+          chmod +x install/macos/build-macos.sh
+          ./install/macos/build-macos.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: build/bin/*.dmg
+
+  release:
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create GitHub Release (draft)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          draft: true

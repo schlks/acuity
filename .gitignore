@@ -1,6 +1,9 @@
 # --- Go & Wails Binaries ---
 /bin/
 /build/bin/
+/build/AppDir/
+/build/tools/
+/build/dmg-staging/
 /acuity
 *.exe
 *.exe~
