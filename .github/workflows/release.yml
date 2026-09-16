@@ -30,11 +30,13 @@ jobs:
 
       - name: Build .deb
         run: |
+          export CGO_CFLAGS="-I$(pwd)/internal/cgo -I$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
           chmod +x install/linux/build-deb.sh
           ./install/linux/build-deb.sh
 
       - name: Build AppImage
         run: |
+          export CGO_CFLAGS="-I$(pwd)/internal/cgo -I$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
           chmod +x install/linux/build-appimage.sh
           ./install/linux/build-appimage.sh
 
@@ -45,47 +47,7 @@ jobs:
             build/bin/*.deb
             build/bin/*.AppImage
 
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - uses: oven-sh/setup-bun@v2
-
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
-
-      - name: Prefer the runner's pre-installed MinGW-w64 GCC over git-bash's own
-        shell: bash
-        run: echo "/c/mingw64/bin" >> "$GITHUB_PATH"
-
-      - name: Install pkg-config
-        run: choco install pkgconfiglite -y
-
-      - name: Install libvips (prebuilt Windows binaries)
-        shell: bash
-        run: |
-          curl -L -o vips.zip https://github.com/libvips/build-win64-mxe/releases/download/v8.18.6/vips-dev-x64-web-8.18.6.zip
-          unzip -q vips.zip -d vips
-          VIPS_DIR="$(pwd)/vips/vips-dev-8.18"
-          echo "PKG_CONFIG_PATH=$(cygpath -w "$VIPS_DIR/lib/pkgconfig")" >> "$GITHUB_ENV"
-          echo "VIPS_BIN=$VIPS_DIR/bin" >> "$GITHUB_ENV"
-
-      - name: Build Windows installer
-        shell: bash
-        env:
-          CGO_ENABLED: "1"
-        run: |
-          mkdir -p build/bin
-          cp "$VIPS_BIN"/*.dll build/bin/
-          wails build -platform windows/amd64 -nsis
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-artifacts
-          path: build/bin/*installer*.exe
+  # Windows-Build: coder/hnsw (Vektor-Index) does not support Windows
 
   macos-arm64:
     runs-on: macos-14
@@ -104,6 +66,7 @@ jobs:
 
       - name: Build .dmg (arm64)
         run: |
+          export CGO_CFLAGS="-I$(pwd)/internal/cgo -I$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
           chmod +x install/macos/build-macos.sh
           ./install/macos/build-macos.sh darwin/arm64
 
@@ -129,6 +92,7 @@ jobs:
 
       - name: Build .dmg (Intel)
         run: |
+          export CGO_CFLAGS="-I$(pwd)/internal/cgo -I$(go list -m -f '{{.Dir}}' github.com/mattn/go-sqlite3)"
           chmod +x install/macos/build-macos.sh
           ./install/macos/build-macos.sh darwin/amd64
 
@@ -138,7 +102,7 @@ jobs:
           path: build/bin/*.dmg
 
   release:
-    needs: [linux, windows, macos-arm64, macos-intel]
+    needs: [linux, macos-arm64, macos-intel]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
