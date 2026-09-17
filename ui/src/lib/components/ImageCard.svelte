@@ -152,53 +152,57 @@
 	tabindex="0"
 	use:lazyLoad
 >
-	<canvas bind:this={canvasElement} width="32" height="32" class="blurhash-canvas"></canvas>
+	{#if hasBeenInView}
+		<canvas bind:this={canvasElement} width="32" height="32" class="blurhash-canvas"></canvas>
 
-	<img
-		src={hasBeenInView ? `/api/image?path=${encodeURIComponent(image.filepath)}&thumb=true` : undefined}
-		alt=""
-		decoding="async"
-		class:loaded={isLoaded}
-		onload={() => (isLoaded = true)}
-	/>
+		<img
+			src={hasBeenInView
+				? `/api/image?path=${encodeURIComponent(image.filepath)}&thumb=true`
+				: undefined}
+			alt=""
+			decoding="async"
+			class:loaded={isLoaded}
+			onload={() => (isLoaded = true)}
+		/>
 
-	{#if image.rating > 0}
-		<div class="badge rating">
-			<span class="material-symbols-outlined icon-filled">star</span>
-			{image.rating}
-		</div>
-	{/if}
+		{#if image.rating > 0}
+			<div class="badge rating">
+				<span class="material-symbols-outlined icon-filled">star</span>
+				{image.rating}
+			</div>
+		{/if}
 
-	{#if image.flag === 1}
-		<div class="badge flag keep">
-			<span class="material-symbols-outlined">check_circle</span>
-		</div>
-	{:else if image.flag === -1}
-		<div class="badge flag reject">
-			<span class="material-symbols-outlined">cancel</span>
-		</div>
-	{/if}
+		{#if image.flag === 1}
+			<div class="badge flag keep">
+				<span class="material-symbols-outlined">check_circle</span>
+			</div>
+		{:else if image.flag === -1}
+			<div class="badge flag reject">
+				<span class="material-symbols-outlined">cancel</span>
+			</div>
+		{/if}
 
-	{#if isSelected}
-		<div class="selection-overlay">
-			<span class="material-symbols-outlined check-icon">select_check_box</span>
-		</div>
-	{/if}
+		{#if isSelected}
+			<div class="selection-overlay">
+				<span class="material-symbols-outlined check-icon">select_check_box</span>
+			</div>
+		{/if}
 
-	{#if showMeta && (image.size || image.resolution)}
-		<div class="meta-badge">
-			{#if image.resolution}<span>{formatResolution(image.resolution, image.aspect_ratio)}</span
-				>{/if}
-			{#if image.resolution && image.size}<span class="meta-dot">•</span>{/if}
-			{#if image.size}<span>{formatSize(image.size)}</span>{/if}
-		</div>
-	{/if}
+		{#if showMeta && (image.size || image.resolution)}
+			<div class="meta-badge">
+				{#if image.resolution}<span>{formatResolution(image.resolution, image.aspect_ratio)}</span
+					>{/if}
+				{#if image.resolution && image.size}<span class="meta-dot">•</span>{/if}
+				{#if image.size}<span>{formatSize(image.size)}</span>{/if}
+			</div>
+		{/if}
 
-	{#if image.distance !== undefined && image.distance !== null}
-		<div class="badge similarity" title="Distance: {image.distance.toFixed(3)}">
-			<span class="material-symbols-outlined">auto_awesome</span>
-			{Math.round((1 - image.distance) * 100)}%
-		</div>
+		{#if image.distance !== undefined && image.distance !== null}
+			<div class="badge similarity" title="Distance: {image.distance.toFixed(3)}">
+				<span class="material-symbols-outlined">auto_awesome</span>
+				{Math.round((1 - image.distance) * 100)}%
+			</div>
+		{/if}
 	{/if}
 </div>
 
