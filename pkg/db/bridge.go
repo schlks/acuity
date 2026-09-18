@@ -166,7 +166,7 @@ func (b *Bridge) ScanGallery(name string) error {
 			return
 		}
 
-		currentCount, err := b.sDB.GetGalleryCount(gallery.ID)
+		currentCount, err := b.sDB.GetGalleryCount(gallery.ID, "")
 		if err != nil {
 			cancel()
 			return
@@ -252,7 +252,7 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 			slog.Error("Failed to gallery name", slog.Any("error", err))
 		}
 
-		count, err := b.sDB.GetGalleryCount(galleryID)
+		count, err := b.sDB.GetGalleryCount(galleryID, "")
 		if err != nil {
 			slog.Error("Failed to gallery count", slog.Any("error", err))
 		}
@@ -559,16 +559,18 @@ func (b *Bridge) GetImageInfo(imageID int) (ImageInfo, error) {
 	return imageInfo, nil
 }
 
-func (b *Bridge) GetGalleryCount(galleryID int) (int, error) {
-	b.mu.Lock()
-	expected := b.ExpectedCount[galleryID]
-	current, hasCurrent := b.CurrentCount[galleryID]
-	b.mu.Unlock()
+func (b *Bridge) GetGalleryCount(galleryID int, folderFilter string) (int, error) {
+	if folderFilter == "" {
+		b.mu.Lock()
+		expected := b.ExpectedCount[galleryID]
+		current, hasCurrent := b.CurrentCount[galleryID]
+		b.mu.Unlock()
 
-	if expected > 0 && hasCurrent {
-		return current, nil
+		if expected > 0 && hasCurrent {
+			return current, nil
+		}
 	}
-	return b.sDB.GetGalleryCount(galleryID)
+	return b.sDB.GetGalleryCount(galleryID, folderFilter)
 }
 
 func (b *Bridge) SetRating(imageID int, rating int) error {

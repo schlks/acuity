@@ -129,7 +129,7 @@ func TestSQLiteImagesCRUDAndSorting(t *testing.T) {
 	}
 
 	// 2. Count verification
-	count, err := sDB.GetGalleryCount(g.ID)
+	count, err := sDB.GetGalleryCount(g.ID, "")
 	if err != nil {
 		t.Fatalf("GetGalleryCount failed: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestSQLiteImagesCRUDAndSorting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveImage failed: %v", err)
 	}
-	countAfter, _ := sDB.GetGalleryCount(g.ID)
+	countAfter, _ := sDB.GetGalleryCount(g.ID, "")
 	if countAfter != 2 {
 		t.Errorf("Expected 2 images after deletion, got %d", countAfter)
 	}

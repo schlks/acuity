@@ -656,7 +656,7 @@ func (s *Server) createGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
-	count, _ := s.Bridge.GetGalleryCount(id)
+	count, _ := s.Bridge.GetGalleryCount(id, "")
 
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
@@ -712,7 +712,7 @@ func (s *Server) getGlobalProgress(w http.ResponseWriter, _ *http.Request) {
 		expected := s.Bridge.GetExpectedCount(g.ID)
 		if expected != 0 {
 			hasAct = true
-			current, _ := s.Bridge.GetGalleryCount(g.ID)
+			current, _ := s.Bridge.GetGalleryCount(g.ID, "")
 			percent := 0
 			if expected == -1 {
 				percent = 0
@@ -938,7 +938,9 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := s.Bridge.GetGalleryCount(galleryID)
+	folder := r.URL.Query().Get("folder")
+
+	count, err := s.Bridge.GetGalleryCount(galleryID, folder)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get count of images in Gallery: %d", galleryID)
 		slog.Error(message, slog.Any("error", err))
@@ -946,7 +948,6 @@ func (s *Server) getGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	folder := r.URL.Query().Get("folder")
 	heading := name
 	if folder != "" {
 		heading = name + " / " + filepath.Base(folder)
@@ -1014,7 +1015,7 @@ func (s *Server) getGalleryImages(w http.ResponseWriter, r *http.Request) {
 	count := -1
 	lastPage := 1
 	if !s.Config.InfiniteScroll {
-		count, _ = s.Bridge.GetGalleryCount(galleryID)
+		count, _ = s.Bridge.GetGalleryCount(galleryID, folderFilter)
 		lastPage = count / s.Config.ImagesPerPage
 		if count%s.Config.ImagesPerPage != 0 {
 			lastPage++
@@ -1056,7 +1057,7 @@ func (s *Server) handleGalleryCount(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	count, _ := s.Bridge.GetGalleryCount(galleryID)
+	count, _ := s.Bridge.GetGalleryCount(galleryID, "")
 	data := struct {
 		Count int `json:"count"`
 	}{

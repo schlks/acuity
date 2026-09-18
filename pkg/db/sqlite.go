@@ -473,14 +473,25 @@ func (s *SQLiteClient) GetImageByPath(path string) (SImage, error) {
 	return image, nil
 }
 
-func (s *SQLiteClient) GetGalleryCount(galleryID int) (int, error) {
+func (s *SQLiteClient) GetGalleryCount(galleryID int, folderFilter string) (int, error) {
 	var count int
-	var err error
-	if galleryID == 0 {
-		err = s.DB.QueryRow("SELECT COUNT(*) FROM images").Scan(&count)
-	} else {
-		err = s.DB.QueryRow("SELECT COUNT(*) FROM images WHERE gallery_id = ?", galleryID).Scan(&count)
+	query := "SELECT COUNT(*) FROM images"
+	var args []any
+
+	if galleryID != 0 {
+		query += " WHERE gallery_id = ?"
+		args = append(args, galleryID)
 	}
+	if folderFilter != "" {
+		if len(args) > 0 {
+			query += " AND filepath LIKE ?"
+		} else {
+			query += " WHERE filepath LIKE ?"
+		}
+		args = append(args, folderFilter+"%")
+	}
+
+	err := s.DB.QueryRow(query, args...).Scan(&count)
 	return count, err
 }
 
