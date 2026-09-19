@@ -554,6 +554,11 @@ func (s *Server) isPathInGallery(path string) bool {
 	return false
 }
 
+const (
+	defaultPreviewWidth = 2560
+	maxPreviewWidth = 3840
+)
+
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	image := query.String(r, "path", "")
 	if image == "" {
@@ -570,11 +575,18 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 	if isThumb || isPreview {
 		width := 500
 		if isPreview {
-			width = 3840
+			width = query.Int(r, "width", defaultPreviewWidth)
+			if width < 1 || width > maxPreviewWidth {
+				width = defaultPreviewWidth
+			}
 		}
 		thumbPath, err := s.getOrCreateThumbnail(image, width)
 		if err == nil && thumbPath != "" {
-			w.Header().Set("Cache-Control", "public, max-age=604800")
+			if isPreview {
+				w.Header().Set("Cache-Control", "public, max-age=300")
+			} else {
+				w.Header().Set("Cache-Control", "public, max-age=604800")
+			}
 			http.ServeFile(w, r, thumbPath)
 			return
 		}

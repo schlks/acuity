@@ -12,13 +12,24 @@
 	let isDragging = $state(false);
 	let dragStart = $state({ x: 0, y: 0 });
 	let fullResFor = $state<string | null>(null);
+	let fullResUrl = $state('');
 
-	function loadFullRes() {
+	function releaseFullRes() {
+		if (fullResUrl) URL.revokeObjectURL(fullResUrl);
+		fullResUrl = '';
+		fullResFor = null;
+	}
+	
+	async function loadFullRes() {
 		const image = carousel.currentImage;
 		if (!image || fullResFor === image.filepath) return;
-		const img = new Image();
-		img.onload = () => (fullResFor = image.filepath);
-		img.src = `/api/image?path=${encodeURIComponent(image.filepath)}`;
+		const path = image.filepath;
+		const res = await fetch(`/api/image?path=${encodeURIComponent(path)}`);
+		const blob = await res.blob();
+		if (carousel.currentImage?.filepath !== path) return;
+		if (fullResUrl) URL.revokeObjectURL(fullResUrl);
+		fullResUrl = URL.createObjectURL(blob);
+		fullResFor = path;
 	}
 	
 	$effect(() => {
@@ -30,8 +41,13 @@
 	});
 
 	$effect(() => {
-        carousel.currentIndex;
-        resetZoom();
+		carousel.currentIndex;
+		resetZoom();
+		releaseFullRes();
+	})
+
+	$effect(() => {
+		if (!carousel.isOpen) releaseFullRes();
 	})
 
 	function resetZoom() {
@@ -296,8 +312,8 @@
 							draggable="false"
 							decoding="async"
 							src={fullResFor === item.image.filepath
-								? `/api/image?path=${encodeURIComponent(item.image.filepath)}`
-								: `/api/image?path=${encodeURIComponent(item.image.filepath)}&preview=true`}
+								? fullResUrl
+								: carousel.displaySrcs[item.image.filepath] || ''}
 							alt={item.image.name}
 							onload={() => loadedImages[item.image.id] = true}
 						/>

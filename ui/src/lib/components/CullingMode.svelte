@@ -3,6 +3,7 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import Info from '$lib/components/Info.svelte';
+	import { PreviewBlobCache } from '$lib/stores/previewBlobCache.svelte';
 
 	let {
 		isOpen = $bindable(false),
@@ -16,14 +17,39 @@
 		onClose
 	} = $props();
 
+	const PRELOAD_WINDOW = 3;
+	const previewCache = new PreviewBlobCache();
+
 	let currentImage = $derived(images[currentIndex]);
-	let imageSrc = $derived(
-		currentImage ? `/api/image?path=${encodeURIComponent(currentImage.filepath)}&preview=true` : ''
-	);
+	let displaySrc = $state('');
 	let loadedSrc = $state<string | null>(null);
 	let filmstripContainer = $state<HTMLElement | null>(null);
 	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
 	let isInfoOpen = $state(false);
+
+	$effect(() => {
+		const img = currentImage;
+		if (!isOpen || !img) return;
+
+		const windowPaths = images
+			.slice(Math.max(0, currentIndex - PRELOAD_WINDOW), currentIndex + PRELOAD_WINDOW + 1)
+			.map((i) => i.filepath);
+
+		let cancelled = false;
+		previewCache.loadBlob(img.filepath).then((url) => {
+			if (!cancelled) displaySrc = url;
+		});
+
+		previewCache.syncWindow(windowPaths);
+
+		return () => {
+			cancelled = true;
+		};
+	})
+
+	$effect(() => {
+		if (!isOpen) previewCache.releaseAll();
+	})
 
 	function updateFocusBox() {
 		if (!filmstripContainer) return;
@@ -291,7 +317,7 @@
 
 		<!-- Main Image View -->
 		<main class="culling-main">
-			{#if loadedSrc !== imageSrc}
+			{#if loadedSrc !== displaySrc}
 				<div class="loading-overlay">
 					<Spinner />
 				</div>
@@ -299,11 +325,11 @@
 
 			<div class="image-wrapper">
 				<img
-					src={imageSrc}
+					src={displaySrc}
 					alt=""
 					class="main-image"
-					onload={() => (loadedSrc = imageSrc)}
-					onerror={() => (loadedSrc = imageSrc)}
+					onload={() => (loadedSrc = displaySrc)}
+					onerror={() => (loadedSrc = displaySrc)}
 				/>
 
 				<!-- Flag Badge Overlay -->
