@@ -544,22 +544,21 @@
 	}
 
 	.btn-icon {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		position: relative;
 		background: transparent;
-		border: 1px;
+		border: none;
 		color: var(--text-muted);
 		padding: 8px;
-		border: none;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
 		transition:
-			background-color 0.2s,
-			color 0.2s,
-			box-shadow 0.2s,
-			border-color 0.2s;
+			background-color var(--duration-base) ease,
+			color var(--duration-base) ease,
+			box-shadow var(--duration-base) ease,
+			border-color var(--duration-base) ease;
 	}
 
 	.btn-icon::before {
@@ -572,12 +571,12 @@
 		background: var(--primary);
 		border-radius: 0;
 		z-index: -1;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		transition: all var(--duration-slow) var(--ease-standard);
 	}
 
 	.btn-icon:hover::before {
 		height: 100%;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 	}
 
 	.btn-icon.prev {
@@ -592,7 +591,7 @@
 
 	.btn-icon.active::before {
 		height: 2px;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		background: var(--tertiary);
 	}
 
@@ -602,7 +601,7 @@
 
 	.btn-icon.active:hover::before {
 		height: 100%;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 	}
 
 	.carousel-filmstrip {
@@ -627,8 +626,8 @@
 		top: 0;
 		left: 0;
 		pointer-events: none;
-		border-radius: 6px;
-		box-shadow: inset 0 0 0 3px var(--info), 0 0 15px color-mix(in srgb, var(--info) 45%, transparent);
+		border-radius: var(--radius-sm);
+		box-shadow: inset 0 0 0 3px var(--primary), 0 0 15px color-mix(in srgb, var(--primary) 45%, transparent);
 		z-index: 10;
 		transition:
 			transform 0.2s cubic-bezier(0.2, 0, 0, 1),

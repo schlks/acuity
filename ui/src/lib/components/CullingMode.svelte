@@ -123,7 +123,7 @@
 	function handleWindowClick(e: MouseEvent) {
 		if (!isInfoOpen) return;
 		const target = e.target as HTMLElement;
-		if (!target?.closest?.('.info-popup, .info-btn')) {
+		if (!target?.closest?.('.info-popup, .btn-icon')) {
 			isInfoOpen = false;
 		}
 	}
@@ -302,14 +302,14 @@
 
 			<div class="header-actions">
 				<button
-					class="close-btn info-btn"
+					class="btn-icon"
 					class:active={isInfoOpen}
 					onclick={() => (isInfoOpen = !isInfoOpen)}
 					title="Info (i)"
 				>
 					<span class="material-symbols-outlined">info</span>
 				</button>
-				<button class="close-btn" onclick={close} title="Close Culling Mode (Esc / c)">
+				<button class="btn-icon" onclick={close} title="Close Culling Mode (Esc / c)">
 					<span class="material-symbols-outlined">close</span>
 				</button>
 			</div>
@@ -484,32 +484,61 @@
 		color: var(--text);
 	}
 
-	.close-btn {
-		background: transparent;
-		border: none;
-		color: var(--text-muted);
-		cursor: pointer;
+	.btn-icon {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 6px;
-		border-radius: 6px;
-		transition: all 0.2s ease;
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		padding: 8px;
+		border-radius: var(--radius-md);
+		cursor: pointer;
+		transition:
+			background-color var(--duration-base) ease,
+			color var(--duration-base) ease,
+			box-shadow var(--duration-base) ease,
+			border-color var(--duration-base) ease;
 	}
 
-	.close-btn:hover {
-		color: var(--text);
-		background: rgba(255, 255, 255, 0.1);
+	.btn-icon::before {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		height: 2px;
+		background: var(--primary);
+		border-radius: 0;
+		z-index: -1;
+		transition: all var(--duration-slow) var(--ease-standard);
+	}
+
+	.btn-icon:hover::before {
+		height: 100%;
+		border-radius: var(--radius-md);
+	}
+
+	.btn-icon.active::before {
+		height: 2px;
+		border-radius: var(--radius-md);
+		background: var(--tertiary);
+	}
+
+	.btn-icon.active:hover {
+		color: var(--bg-dark);
+	}
+
+	.btn-icon.active:hover::before {
+		height: 100%;
+		border-radius: var(--radius-md);
 	}
 
 	.header-actions {
 		display: flex;
 		align-items: center;
 		gap: 4px;
-	}
-
-	.info-btn.active {
-		color: var(--info);
 	}
 
 	.culling-main {
@@ -613,7 +642,7 @@
 		top: 0;
 		left: 0;
 		pointer-events: none;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		box-shadow:
 			inset 0 0 0 3px var(--primary),
 			0 0 15px color-mix(in srgb, var(--primary) 45%, transparent);
@@ -643,6 +672,7 @@
 
 	.filmstrip-thumb:hover {
 		opacity: 0.9;
+		box-shadow: inset 0 0 0 3px var(--primary), 0 0 15px color-mix(in srgb, var(--primary) 45%, transparent);
 		transform: scale(1.04);
 	}
 

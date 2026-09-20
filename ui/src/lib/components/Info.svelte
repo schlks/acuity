@@ -23,7 +23,7 @@
 	)
 </script>
 
-<div class="info-popup" transition:fly={{ y: -15, duration: 250, easing: quintOut }}>
+<div class="info-popup panel-glass" transition:fly={{ y: -15, duration: 250, easing: quintOut }}>
 	<h3>Details</h3>
 	<hr />
 
@@ -94,10 +94,10 @@
 	<hr />
 
 	<div class="info-actions">
-		<a href="/gallery/{galleryName}/duplicates?imageID={image.id}" class="action-btn" onclick={onClose}>
+		<a href="/gallery/{galleryName}/duplicates?imageID={image.id}" class="btn btn-primary action-btn" onclick={onClose}>
 			<span class="material-symbols-outlined">search</span>
 		</a>
-		<button class="action-btn danger" onclick={onDelete}>
+		<button class="btn btn-danger action-btn" onclick={onDelete}>
 			<span class="material-symbols-outlined">delete</span>
 		</button>
 	</div>
@@ -110,10 +110,8 @@
 		right: 32px;
 		width: 320px;
 		max-height: calc(100vh - 120px);
-		background: var(--bg-light, #1c1c1c); 
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 12px;
-		box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-md);
 		padding: 24px;
 		display: flex;
 		flex-direction: column;
@@ -121,7 +119,7 @@
 		overflow-y: auto;
 		z-index: 1000;
 		color: var(--text);
-		pointer-events: auto; /* Wichtig für Klicks! */
+		pointer-events: auto;
 	}
 
 	.info-actions {
@@ -133,57 +131,8 @@
 	}
 
 	.action-btn {
-		position: relative;
-		z-index: 1;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 8px;
 		padding: 8px;
-		border-radius: 8px;
-		background: transparent;
-		color: var(--text);
-		font-family: inherit;
-		font-size: 0.95rem;
-		font-weight: 500;
-		cursor: pointer;
 		text-decoration: none;
-		border: none;
-		transition: color 0.3s;
-	}
-
-	.action-btn::before {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		width: 100%;
-		height: 2px;
-		border-radius: 0;
-		z-index: -1;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-		background: var(--primary); /* Standard-Farbe für Suchen */
-	}
-
-	.action-btn:hover {
-		color: var(--bg-dark);
-	}
-
-	.action-btn:hover::before {
-		height: 100%;
-		border-radius: 8px;
-	}
-
-	.action-btn.danger {
-		color: var(--text-muted);
-	}
-
-	.action-btn.danger::before {
-		background: var(--danger);
-	}
-
-	.action-btn.danger:hover {
-		color: var(--bg-dark);
 	}
 
 	h3 {
@@ -194,7 +143,7 @@
 
 	hr {
 		border: none;
-		border-top: 1px solid rgba(255, 255, 255, 0.1);
+		border-top: 1px solid var(--divider);
 		margin: 0;
 	}
 
@@ -205,7 +154,7 @@
 	}
 
 	.info-group .material-symbols-outlined {
-		color: var(--text-muted, #aaa);
+		color: var(--text-muted);
 		font-size: 1.5rem;
 		margin-top: 2px;
 	}
@@ -220,9 +169,9 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 16px;
-		background: rgba(255, 255, 255, 0.05);
+		background: color-mix(in srgb, var(--text) 5%, transparent);
 		padding: 16px;
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 	}
 
 	.grid-item {
@@ -235,7 +184,7 @@
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
-		color: var(--text-muted, #aaa);
+		color: var(--text-muted);
 	}
 
 	.value {
@@ -243,14 +192,14 @@
 		font-weight: 500;
 	}
 
-        .icon {
-            font-size: 1.2rem;
-            font-weight: 500;
-        }
+	.icon {
+		font-size: 1.2rem;
+		font-weight: 500;
+	}
 
 	.sub-value {
 		font-size: 0.75rem;
-		color: var(--text-muted, #aaa);
+		color: var(--text-muted);
 		margin-top: 4px;
 		word-break: break-all;
 	}

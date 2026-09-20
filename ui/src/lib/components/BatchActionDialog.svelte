@@ -43,7 +43,7 @@ let { onClose, selectedImages = [], onSuccess = () => {} } = $props();
 	}
 </script>
 
-<div class="settings-panel" transition:fly={{ y: 15, duration: 250, easing: quintOut }}>
+<div class="settings-panel panel-glass" transition:fly={{ y: 15, duration: 250, easing: quintOut }}>
 	<h3>Batch Actions</h3>
 
 	<form onsubmit={executeBatch}>
@@ -86,8 +86,8 @@ let { onClose, selectedImages = [], onSuccess = () => {} } = $props();
 		<button title="submit" type="submit" style="display: none;"></button>
 		
 		<div class="actions">
-			<button type="button" class="btn-cancel" onclick={onClose}>Cancel</button>
-			<button type="submit" class="btn-primary">Execute</button>
+			<button type="button" class="btn btn-cancel" onclick={onClose}>Cancel</button>
+			<button type="submit" class="btn btn-primary">Execute</button>
 		</div>
 	</form>
 </div>
@@ -99,14 +99,12 @@ let { onClose, selectedImages = [], onSuccess = () => {} } = $props();
 		left: 50%;
 		transform: translateX(-50%);
 		width: max-content;
-		background: var(--bg-light);
-		border: 1px solid var(--border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 16px;
 		margin-top: 8px;
 		z-index: 100;
 	}
-	
+
 	.settings-panel h3 {
 		margin-top: 0;
 		margin-bottom: 16px;
@@ -132,12 +130,12 @@ let { onClose, selectedImages = [], onSuccess = () => {} } = $props();
 		color: var(--text);
 		border: 1px solid var(--bg);
 		padding: 10px 12px;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		font-family: inherit;
 		font-size: 0.95rem;
 		outline: none;
 		cursor: pointer;
-		transition: border-color 0.2s;
+		transition: border-color var(--duration-base) ease;
 	}
 
 	select:focus {
@@ -153,95 +151,5 @@ let { onClose, selectedImages = [], onSuccess = () => {} } = $props();
 		justify-content: flex-end;
 		gap: 12px;
 		margin-top: 24px;
-	}
-
-	button {
-		position: relative;
-		z-index: 1;
-		font-family: inherit;
-		font-size: 0.95rem;
-		border-radius: 8px;
-		padding: 10px 18px;
-		cursor: pointer;
-		border: none;
-		background: transparent;
-		transition: color 0.3s;
-	}
-
-	button::before {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		width: 100%;
-		height: 2px;
-		border-radius: 0;
-		z-index: -1;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-	}
-
-	button:hover::before {
-		height: 100%;
-		border-radius: 8px;
-	}
-
-	.btn-cancel {
-		color: var(--text-muted);
-	}
-	
-	.btn-cancel::before {
-		background: var(--text-muted);
-	}
-
-	.btn-cancel:hover {
-		color: var(--bg-dark);
-	}
-
-	.btn-danger {
-		color: var(--text-muted);
-	}
-
-	.btn-danger::before {
-		background: var(--danger);
-	}
-
-	.btn-danger:hover {
-		color: var(--bg-dark);
-	}
-
-	.btn-primary {
-		color: var(--text);
-	}
-
-	.btn-primary::before {
-		background: var(--primary);
-	}
-
-	.btn-primary:hover {
-		color: var(--bg-dark);
-	}
-
-	.btn-toggle {
-		color: var(--text);
-	}
-
-	.btn-toggle::before {
-		background: var(--primary);
-	}
-
-	.btn-toggle:hover {
-		color: var(--bg-dark);
-	}
-
-	.btn-toggle.active {
-		color: var(--text);
-	}
-
-	.btn-toggle.active::before {
-		background: var(--tertiary);
-	}
-
-	.btn-toggle.active:hover {
-		color: var(--bg-dark);
 	}
 </style>

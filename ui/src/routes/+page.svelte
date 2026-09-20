@@ -191,7 +191,7 @@
 	</section>
 
 	{#if showAddGallery}
-		<div class="modal-backdrop" onclick={() => showAddGallery = false}>
+		<div class="modal-backdrop overlay" onclick={() => showAddGallery = false}>
 			<div class="modal-dialog import-modal" onclick={(e) => e.stopPropagation()}>
 				<AddGalleryDialog onClose={() => showAddGallery = false} />
 			</div>
@@ -199,7 +199,7 @@
 	{/if}
 
 	{#if showSettings}
-		<div class="modal-backdrop" onclick={() => showSettings = false}>
+		<div class="modal-backdrop overlay" onclick={() => showSettings = false}>
 			<div class="modal-dialog" onclick={(e) => e.stopPropagation()}>
 				<SettingsDialog onClose={() => showSettings = false} />
 			</div>
@@ -257,7 +257,7 @@
 		align-items: center;
 		background: var(--bg);
 		border: 1px solid var(--border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		padding: 6px 14px 6px 42px;
 		transition: border-color 0.15s ease;
 	}
@@ -300,32 +300,47 @@
 	}
 
 	.quick-btn {
+		position: relative;
+		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		padding: 10px 18px;
 		background: var(--bg);
 		border: 1px solid var(--border);
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		color: var(--text);
 		font-size: 0.88rem;
 		font-weight: 500;
 		text-decoration: none;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		overflow: hidden;
+		transition: border-color var(--duration-base) ease, color var(--duration-slow) ease;
+	}
+
+	.quick-btn::before {
+		content: '';
+		position: absolute;
+		inset: auto 0 0 0;
+		height: 0px;
+		z-index: -1;
+		background: color-mix(in srgb, var(--primary) 15%, transparent);
+		transition: all var(--duration-slow) var(--ease-standard);
 	}
 
 	.quick-btn:hover {
 		border-color: var(--primary);
 		color: var(--primary);
-		transform: translateY(-2px);
-		background: var(--bg-light);
+	}
+
+	.quick-btn:hover::before {
+		height: 100%;
 	}
 
 	.quick-btn .icon {
 		font-size: 1.15rem;
 		color: var(--text-muted);
-		transition: color 0.15s ease;
+		transition: color var(--duration-base) ease;
 	}
 
 	.quick-btn:hover .icon {
@@ -362,17 +377,18 @@
 	}
 
 	.gallery-card {
+		position: relative;
+		z-index: 1;
 		background: var(--bg);
 		border: 1px solid var(--border);
-		border-radius: 10px;
+		border-radius: var(--radius-lg);
 		padding: 18px;
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
 		text-decoration: none;
 		color: var(--text);
-		transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1),
-		            border-color 0.18s ease;
+		transition: border-color var(--duration-base) ease;
 		cursor: pointer;
 		user-select: none;
 		overflow: hidden;
@@ -380,9 +396,22 @@
                 contain-intrinsic-size: 150px;
 	}
 
+	.gallery-card::before {
+		content: '';
+		position: absolute;
+		inset: auto 0 0 0;
+		height: 0px;
+		z-index: -1;
+		background: color-mix(in srgb, var(--primary) 15%, transparent);
+		transition: all var(--duration-slow) var(--ease-standard);
+	}
+
 	.gallery-card:hover {
-		transform: translateY(-3px);
 		border-color: var(--primary);
+	}
+
+	.gallery-card:hover::before {
+		height: 100%;
 	}
 
 	.card-icon-area {
@@ -472,10 +501,12 @@
 	}
 
 	.empty-import-box {
+		position: relative;
+		z-index: 1;
 		width: 100%;
 		min-height: 240px;
 		border: 2px dashed var(--border);
-		border-radius: 12px;
+		border-radius: var(--radius-lg);
 		background: var(--bg);
 		display: flex;
 		flex-direction: column;
@@ -484,21 +515,34 @@
 		gap: 12px;
 		cursor: pointer;
 		color: var(--text);
-		transition: all 0.2s ease;
+		overflow: hidden;
+		transition: border-color var(--duration-base) ease;
 		padding: 40px 24px;
 		text-align: center;
 	}
 
+	.empty-import-box::before {
+		content: '';
+		position: absolute;
+		inset: auto 0 0 0;
+		height: 2px;
+		z-index: -1;
+		background: color-mix(in srgb, var(--primary) 15%, transparent);
+		transition: all var(--duration-slow) var(--ease-standard);
+	}
+
 	.empty-import-box:hover {
 		border-color: var(--primary);
-		background: var(--bg-light);
-		transform: translateY(-2px);
+	}
+
+	.empty-import-box:hover::before {
+		height: 100%;
 	}
 
 	.empty-icon {
 		font-size: 3.2rem;
 		color: var(--primary);
-		transition: transform 0.2s ease;
+		transition: transform var(--duration-base) ease;
 	}
 
 	.empty-import-box:hover .empty-icon {
@@ -524,9 +568,6 @@
                 top: 0;
                 left: 0;
 		z-index: 10000;
-		background: color-mix(in srgb, var(--bg-dark) 40%, transparent);
-		backdrop-filter: blur(24px);
-		-webkit-backdrop-filter: blur(24px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -560,7 +601,7 @@
 
 	.drop-zone-card {
 		border: 2px dashed var(--primary);
-		border-radius: 16px;
+		border-radius: var(--radius-xl);
 		background: var(--bg);
 		padding: 48px 64px;
 		display: flex;
@@ -568,7 +609,7 @@
 		align-items: center;
 		gap: 12px;
 		text-align: center;
-		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+		box-shadow: var(--shadow-lg);
 	}
 
 	.drop-icon {

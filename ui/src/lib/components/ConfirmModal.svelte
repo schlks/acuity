@@ -18,9 +18,9 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if modal.isOpen}
-	<div class="modal-backdrop" transition:fade={{ duration: 150 }} onclick={() => modal.handleCancel()}>
+	<div class="modal-backdrop overlay" transition:fade={{ duration: 150 }} onclick={() => modal.handleCancel()}>
 		<div
-			class="modal-card"
+			class="modal-card panel-glass"
 			transition:scale={{ duration: 200, start: 0.95, easing: quintOut }}
 			onclick={(e) => e.stopPropagation()}
 			tabindex="-1"
@@ -39,12 +39,12 @@
 			<p class="modal-message">{modal.message}</p>
 
 			<div class="modal-actions">
-				<button type="button" class="btn-cancel" onclick={() => modal.handleCancel()}>
+				<button type="button" class="btn btn-cancel" onclick={() => modal.handleCancel()}>
 					{modal.cancelText}
 				</button>
 				<button
 					type="button"
-					class={modal.danger ? 'btn-danger' : 'btn-primary'}
+					class={modal.danger ? 'btn btn-danger' : 'btn btn-primary'}
 					onclick={() => modal.handleConfirm()}
 					autofocus
 				>
@@ -60,9 +60,6 @@
 		position: fixed;
 		inset: 0;
 		z-index: 100000;
-		background: rgba(0, 0, 0, 0.7);
-		backdrop-filter: blur(8px);
-		-webkit-backdrop-filter: blur(8px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -72,10 +69,8 @@
 	.modal-card {
 		width: 100%;
 		max-width: 440px;
-		background: color-mix(in srgb, var(--bg) 92%, black);
-		border: 1px solid color-mix(in srgb, var(--secondary) 40%, var(--bg-light));
-		border-radius: 12px;
-		box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-lg);
 		padding: 24px;
 		display: flex;
 		flex-direction: column;
@@ -125,43 +120,4 @@
 		margin-top: 8px;
 	}
 
-	button {
-		padding: 8px 18px;
-		border-radius: 6px;
-		font-size: 0.88rem;
-		font-weight: 600;
-		cursor: pointer;
-		border: none;
-		transition: all 0.12s ease;
-	}
-
-	.btn-cancel {
-		background: transparent;
-		color: var(--text-muted);
-		border: 1px solid var(--bg-light);
-	}
-
-	.btn-cancel:hover {
-		background: var(--bg-light);
-		color: var(--primary);
-		border-color: var(--primary);
-	}
-
-	.btn-primary {
-		background: var(--primary);
-		color: white;
-	}
-
-	.btn-primary:hover {
-		filter: brightness(1.1);
-	}
-
-	.btn-danger {
-		background: var(--danger);
-		color: white;
-	}
-
-	.btn-danger:hover {
-		filter: brightness(1.15);
-	}
 </style>

@@ -50,7 +50,7 @@
 </script>
 
 {#if isVisible && status}
-	<div class="modal-backdrop" transition:fade={{ duration: 150 }}>
+	<div class="modal-backdrop overlay" transition:fade={{ duration: 150 }}>
 		<div class="setup-card" transition:scale={{ start: 0.95, duration: 200 }}>
 			<div class="icon-header">
                 <div class="icon-wrapper">
@@ -125,9 +125,6 @@
 		position: fixed;
 		inset: 0;
 		z-index: 100000;
-		background: color-mix(in srgb, var(--bg-dark) 85%, transparent);
-		backdrop-filter: blur(14px);
-		-webkit-backdrop-filter: blur(14px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -137,14 +134,14 @@
 	.setup-card {
 		background: var(--bg);
 		border: 1px solid var(--border);
-		border-radius: 16px;
+		border-radius: var(--radius-xl);
 		width: 100%;
 		max-width: 520px;
 		padding: 36px 32px;
 		display: flex;
 		flex-direction: column;
 		gap: 24px;
-		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+		box-shadow: var(--shadow-lg);
 		text-align: center;
 	}
 
@@ -208,7 +205,7 @@
 		text-align: left;
 		background: var(--bg-light);
 		border: 1px solid var(--border-subtle);
-		border-radius: 10px;
+		border-radius: var(--radius-lg);
 		padding: 14px 16px;
 	}
 
@@ -316,7 +313,7 @@
 		border: 1px solid var(--danger);
 		color: var(--danger);
 		padding: 10px 14px;
-		border-radius: 8px;
+		border-radius: var(--radius-md);
 		font-size: 0.85rem;
 		text-align: left;
 	}

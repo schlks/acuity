@@ -223,7 +223,7 @@
 		padding: 8px 12px;
 		color: var(--text-muted);
 		text-decoration: none;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		cursor: pointer;
 		border: none;
 		font-family: inherit;
@@ -342,7 +342,7 @@
 	}
 
 	.delete-btn:hover {
-		background: rgba(255, 0, 0, 0.1);
+		background: color-mix(in srgb, var(--danger) 15%, transparent);
 	}
 
 	.gallery-block {
@@ -399,7 +399,7 @@
 		padding: 6px 10px;
 		width: 100%;
 		gap: 8px;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 	}
 
 	.sub-item .material-symbols-outlined {

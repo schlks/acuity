@@ -38,11 +38,14 @@ func main() {
 
 	app := NewApp(Config)
 	err = wails.Run(&options.App{
-		Title:     "Acuity",
-		Width:     1280,
-		Height:    800,
-		MinWidth:  1024,
-		MinHeight: 700,
+		Title:            "Acuity",
+		Width:            1280,
+		Height:           800,
+		MinWidth:         1024,
+		MinHeight:        700,
+		MaxWidth:         7680,
+		MaxHeight:        4320,
+		WindowStartState: options.Maximised,
 
 		BackgroundColour: &options.RGBA{R: 9, G: 9, B: 9, A: 255},
 		AssetServer: &assetserver.Options{

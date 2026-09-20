@@ -74,7 +74,7 @@
 </script>
 
 {#if progresses.length > 0 || completed}
-    <div class="overlay" transition:fade={{ duration: 300 }}>
+    <div class="overlay progress-overlay" transition:fade={{ duration: 300 }}>
         <div class="progress-box" transition:fly={{ y: 20, duration: 400 }}>
             {#if completed}
                 <div class="checkmark-circle">
@@ -108,14 +108,12 @@
 {/if}
 
 <style>
-    .overlay {
+    .progress-overlay {
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
         height: 100vh;
-        background: rgba(0, 0, 0, 0.6);
-        backdrop-filter: blur(12px);
         z-index: 9999;
         display: flex;
         align-items: center;
@@ -125,13 +123,13 @@
     .progress-box {
         background: var(--bg);
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: var(--radius-lg);
         padding: 32px 40px;
         display: flex;
         flex-direction: column;
         align-items: center;
         min-width: 420px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        box-shadow: var(--shadow-lg);
     }
 
     h3 {
@@ -155,7 +153,7 @@
         gap: 20px;
         background: var(--bg-light);
         padding: 12px 16px;
-        border-radius: 8px;
+        border-radius: var(--radius-md);
         border: 1px solid var(--border);
     }
 
@@ -183,7 +181,7 @@
     }
 
     .count {
-        color: var(--text-secondary);
+        color: var(--text-muted);
         font-size: 0.9rem;
         min-width: 80px;
         text-align: right;
@@ -192,19 +190,19 @@
     .cancel-btn {
         background: none;
         border: none;
-        color: var(--text-secondary);
+        color: var(--text-muted);
         cursor: pointer;
         padding: 4px;
         border-radius: 4px;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.2s ease;
+        transition: all var(--duration-base) ease;
     }
 
     .cancel-btn:hover {
         color: var(--danger);
-        background: rgba(255, 255, 255, 0.05);
+        background: color-mix(in srgb, var(--danger) 15%, transparent);
     }
 
     .checkmark-circle {
