@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"image/jpeg"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -535,6 +536,145 @@ func (b *Bridge) CopyToGallery(newID int, sImages []SImage) error {
 	}
 
 	return b.sDB.InsertImage(sImages)
+}
+
+func isInside(parent string, child string) bool {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil || rel == "." || rel == ".." {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func copyFile(src string, dst string, perm fs.FileMode, modTime time.Time) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	return os.Chtimes(dst, modTime, modTime)
+}
+
+func copyDir(src string, dst string) error {
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+
+		if d.IsDir() {
+			return os.MkdirAll(target, info.Mode().Perm()|0o700)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported file type: %s", path)
+		}
+		return copyFile(path, target, info.Mode().Perm(), info.ModTime())
+	})
+}
+
+func moveDir(src string, dst string) (bool, error) {
+	if err := os.Rename(src, dst); err == nil {
+		return false, nil
+	}
+	if err := copyDir(src, dst); err != nil {
+		_ = os.RemoveAll(dst)
+		return true, fmt.Errorf("failed to copy folder: %w", err)
+	}
+	return true, nil
+}
+
+func (b *Bridge) MoveFolder(srcFolder string, srcGalleryID int, dstGalleryID int) (string, error) {
+	srcGallery, err := b.sDB.GetGalleryByID(srcGalleryID)
+	if err != nil {
+		return "", err
+	}
+	dstGallery, err := b.sDB.GetGalleryByID(dstGalleryID)
+	if err != nil {
+		return "", err
+	}
+
+	srcFolder = filepath.Clean(srcFolder)
+	dstFolder := filepath.Clean(dstGallery.Path)
+
+	if !isInside(srcGallery.Path, srcFolder) {
+		return "", fmt.Errorf("folder is not inside gallery %s", srcGallery.Name)
+	}
+	if dstFolder == srcFolder || isInside(srcFolder, dstFolder) {
+		return "", fmt.Errorf("cannot move a folder into itself")
+	}
+
+	info, err := os.Stat(dstFolder)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("gallery folder %s is not available", dstGallery.Name)
+	}
+
+	newPath := filepath.Join(dstFolder, filepath.Base(srcFolder))
+	if newPath == srcFolder {
+		return "", fmt.Errorf("folder is already in this gallery")
+	}
+	if _, err := os.Lstat(newPath); err == nil {
+		return "", fmt.Errorf("target already contains %s", filepath.Base(srcFolder))
+	}
+
+	b.mu.Lock()
+	if b.ExpectedCount[srcGalleryID] != 0 || b.ExpectedCount[dstGalleryID] != 0 {
+		b.mu.Unlock()
+		return "", fmt.Errorf("gallery is currently being imported")
+	}
+	b.ExpectedCount[srcGalleryID] = -1
+	b.ExpectedCount[dstGalleryID] = -1
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		b.ExpectedCount[srcGalleryID] = 0
+		b.ExpectedCount[dstGalleryID] = 0
+		b.mu.Unlock()
+	}()
+
+	copied, err := moveDir(srcFolder, newPath)
+	if err != nil {
+		return "", err
+	}
+
+	if err := b.sDB.MoveFolderImages(srcFolder, newPath, srcGalleryID, dstGalleryID); err != nil {
+		if copied {
+			if rbErr := os.RemoveAll(newPath); rbErr != nil {
+				slog.Error("Failed to remove copied folder", slog.String("path", newPath), slog.Any("error", rbErr))
+			}
+		} else if rbErr := os.Rename(newPath, srcFolder); rbErr != nil {
+			slog.Error("Failed to roll back folder move", slog.String("path", newPath), slog.Any("error", rbErr))
+		}
+		return "", err
+	}
+
+	if copied {
+		if err := os.RemoveAll(srcFolder); err != nil {
+			slog.Error("Failed to remove original folder after copy", slog.String("path", srcFolder), slog.Any("error", err))
+		}
+	}
+
+	_ = b.sDB.ClearAllDuplicateCache()
+	return newPath, nil
 }
 
 func (b *Bridge) GetImageInfo(imageID int) (ImageInfo, error) {

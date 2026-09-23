@@ -7,10 +7,12 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import SettingsDialog from './SettingsDialog.svelte';
 	import AddGalleryDialog from './AddGalleryDialog.svelte';
+	import MoveFolderDialog from './MoveFolderDialog.svelte';
 
 	let { galleries } = $props();
 	let showSettings = $state(false);
 	let showAddGallery = $state(false);
+	let moveFolder = $state<{ gallery: string; name: string; path: string } | null>(null);
 	let expandedGalleries = $state<Record<string, boolean>>({});
 
 	async function deleteGallery(name: string) {
@@ -104,22 +106,34 @@
 					{#if isExpanded && subFolders.length > 0}
 						<div class="subfolder-list" transition:slide={{ duration: 180, easing: cubicOut }}>
 							{#each subFolders as sub}
-								<a
-									href="/gallery/{encodeURIComponent(gallery.name)}?folder={encodeURIComponent(
-										sub.path
-									)}"
-									class="nav-item sub-item"
-									class:active={page.params.name === gallery.name &&
-										page.url.searchParams.get('folder') === sub.path}
-								>
-									<span class="material-symbols-outlined"
-										>{page.params.name === gallery.name &&
-										page.url.searchParams.get('folder') == sub.path
-											? 'folder_open'
-											: 'folder'}</span
+								<div class="sub-item-wrapper">
+									<a
+										href="/gallery/{encodeURIComponent(gallery.name)}?folder={encodeURIComponent(
+											sub.path
+										)}"
+										class="nav-item sub-item"
+										class:active={page.params.name === gallery.name &&
+											page.url.searchParams.get('folder') === sub.path}
 									>
-									<span class="sub-name">{sub.name}</span>
-								</a>
+										<span class="material-symbols-outlined"
+											>{page.params.name === gallery.name &&
+											page.url.searchParams.get('folder') == sub.path
+												? 'folder_open'
+												: 'folder'}</span
+										>
+										<span class="sub-name">{sub.name}</span>
+									</a>
+									{#if galleries.length > 1}
+										<button
+											class="move-btn"
+											onclick={() =>
+												(moveFolder = { gallery: gallery.name, name: sub.name, path: sub.path })}
+											title="move subgallery"
+										>
+											<span class="material-symbols-outlined">drive_file_move</span>
+										</button>
+									{/if}
+								</div>
 							{/each}
 						</div>
 					{/if}
@@ -168,6 +182,15 @@
 		</div>
 	</nav>
 </aside>
+
+{#if moveFolder}
+	<MoveFolderDialog
+		gallery={moveFolder.gallery}
+		folder={moveFolder}
+		{galleries}
+		onClose={() => (moveFolder = null)}
+	/>
+{/if}
 
 <style>
 	.sidebar-left {
@@ -391,6 +414,46 @@
 		border-left: 1px solid var(--border-subtle);
 		margin-top: 4px;
 		margin-bottom: 6px;
+	}
+
+	.sub-item-wrapper {
+		display: flex;
+		align-items: center;
+		position: relative;
+		width: 100%;
+	}
+
+	.move-btn {
+		position: absolute;
+		right: 6px;
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		opacity: 0;
+		transition:
+			opacity 0.2s,
+			color 0.2s;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2px;
+		border-radius: 4px;
+		z-index: 2;
+	}
+
+	.move-btn .material-symbols-outlined {
+		font-size: 1.1rem;
+	}
+
+	.sub-item-wrapper:hover .move-btn,
+	.move-btn:focus-visible {
+		opacity: 1;
+	}
+
+	.move-btn:hover {
+		color: var(--primary);
+		background: color-mix(in srgb, var(--primary) 15%, transparent);
 	}
 
 	.sub-item {

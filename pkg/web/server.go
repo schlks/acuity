@@ -109,6 +109,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST	/api/gallery/{name}/scan", s.scanGallery)
 	mux.HandleFunc("DELETE /api/gallery/{name}/scan", s.cancelScan)
 	mux.HandleFunc("POST 	/api/gallery/{name}/edit", s.editGallery)
+	mux.HandleFunc("POST	/api/gallery/{name}/folder/move", s.moveFolder)
 	mux.HandleFunc("POST 	/api/gallery/{name}/unflag", s.unflagGallery)
 	mux.HandleFunc("GET	/api/gallery/{name}", s.getGallery)
 	mux.HandleFunc("GET	/api/gallery/{name}/count", s.handleGalleryCount)
@@ -705,6 +706,42 @@ func (s *Server) editGallery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, map[string]any{"success": true, "name": newName}, http.StatusOK)
+}
+
+func (s *Server) moveFolder(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	folder := r.FormValue("folder")
+	targetName := r.FormValue("target_gallery")
+
+	if folder == "" || targetName == "" {
+		http.Error(w, "Missing folder or target gallery", http.StatusBadRequest)
+		return
+	}
+
+	srcID, err, isGlobal := s.Bridge.GetGalleryID(name)
+	if err != nil || isGlobal {
+		message := "Failed to get source Gallery ID"
+		slog.Error(message, slog.String("gallery", name), slog.Any("error", err))
+		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
+
+	dstID, err, isGlobal := s.Bridge.GetGalleryID(targetName)
+	if err != nil || isGlobal {
+		message := "Failed to get target Gallery ID"
+		slog.Error(message, slog.String("gallery", targetName), slog.Any("error", err))
+		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
+
+	newPath, err := s.Bridge.MoveFolder(folder, srcID, dstID)
+	if err != nil {
+		slog.Error("Failed to move folder", slog.String("folder", folder), slog.String("target", targetName), slog.Any("error", err))
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+
+	s.writeJSON(w, map[string]any{"success": true, "gallery": targetName, "path": newPath}, http.StatusOK)
 }
 
 func (s *Server) getGlobalProgress(w http.ResponseWriter, _ *http.Request) {

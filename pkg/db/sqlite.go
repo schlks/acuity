@@ -598,6 +598,16 @@ func (s *SQLiteClient) ChangeGallery(newGalleryID int, sImages []SImage) error {
 	return nil
 }
 
+func (s *SQLiteClient) MoveFolderImages(oldPrefix string, newPrefix string, fromGalleryID int, toGalleryID int) error {
+	_, err := s.DB.Exec(
+		`UPDATE images
+		 SET gallery_id = ?, filepath = ? || substr(filepath, length(?) + 1)
+		 WHERE gallery_id = ? AND filepath >= ? AND filepath < ?`,
+		toGalleryID, newPrefix, oldPrefix, fromGalleryID, oldPrefix+"/", oldPrefix+"0",
+	)
+	return err
+}
+
 func (s *SQLiteClient) Unflag(galleryID int) error {
 	query := "UPDATE images SET flag = ? WHERE gallery_id = ?;"
 	_, err := s.DB.Exec(query, 0, galleryID)
