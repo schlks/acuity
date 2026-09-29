@@ -69,9 +69,34 @@ func init() {
 	sqlitevec.Auto()
 	sql.Register("sqlite3_custom", &sqlite3.SQLiteDriver{
 		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-			return conn.RegisterCollation("NATSORT", naturalCompare)
+			if err := conn.RegisterCollation("NATSORT", naturalCompare); err != nil {
+				return err
+			}
+			return conn.RegisterFunc("natkey", naturalKey, true)
 		},
 	})
+}
+
+func naturalKey(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	for i := 0; i < len(s); {
+		if s[i] < '0' || s[i] > '9' {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		j := i
+		for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+			j++
+		}
+		digits := strings.TrimLeft(s[i:j], "0")
+		b.WriteString(strconv.Itoa(len(digits) + 10))
+		b.WriteString(digits)
+		i = j
+	}
+	return b.String()
 }
 
 func naturalCompare(a, b string) int {
@@ -186,6 +211,7 @@ func (s *SQLiteClient) InitTable() error {
 	CREATE INDEX IF NOT EXISTS idx_flag ON images(flag);
 	CREATE INDEX IF NOT EXISTS idx_gallery_flag ON images(gallery_id, flag);
 	CREATE INDEX IF NOT EXISTS idx_file_hash ON images(file_hash);
+	CREATE INDEX IF NOT EXISTS idx_gallery_natkey ON images(gallery_id, natkey(filepath));
 	CREATE TABLE IF NOT EXISTS duplicate_cache (
 		gallery_ids TEXT NOT NULL,
 		threshold REAL NOT NULL,
@@ -314,9 +340,9 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 	case "iso":
 		query += " ORDER BY iso "
 	case "name":
-		query += " ORDER BY filepath COLLATE NATSORT "
+		query += " ORDER BY natkey(filepath) "
 	default:
-		query += " ORDER BY filepath COLLATE NATSORT "
+		query += " ORDER BY natkey(filepath) "
 	}
 
 	if sortOrder == "asc" {
