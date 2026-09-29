@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
@@ -20,6 +19,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"sync"
 
 	"acuity/pkg/config"
 
@@ -35,6 +35,7 @@ import (
 type Server struct {
 	Bridge *db.Bridge
 	Config *config.Config
+	folders *folderTreeCache
 }
 
 type Progress struct {
@@ -69,12 +70,24 @@ func NewServer(sdatabase *db.SQLiteClient, vdatabase *db.VectorClient, config *c
 	server := &Server{
 		Bridge: service,
 		Config: config,
+		folders: newFolderTreeCache(),
 	}
+
+	go func() {
+		galleries, err := service.GetAllGalleries()
+		if err != nil {
+			return
+		}
+		for _, g := range galleries {
+			go server.folders.get(g.ID, g.Path)
+		}
+	}()
 
 	// Background task for periodic gallery scans (every hour)
 	go func() {
 		for {
 			time.Sleep(1 * time.Hour)
+			server.folders.invalidateAll()
 			galleries, err := service.GetAllGalleries()
 			if err == nil {
 				for _, g := range galleries {
@@ -211,38 +224,15 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		slog.Error("Failed to load galleries", slog.Any("error", err))
 	}
 
-	var galleryViews []GalleryView
-	for _, g := range galleries {
-		gv := GalleryView{Gallery: g}
-		nodeMap := make(map[string]*SubFolder)
-		err := filepath.WalkDir(g.Path, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || path == g.Path {
-				return nil
-			}
-			if d.IsDir() {
-				if strings.HasPrefix(d.Name(), ".") {
-					return filepath.SkipDir
-				}
-				node := &SubFolder{
-					Name: d.Name(),
-					Path: path,
-				}
-				nodeMap[path] = node
-
-				parentPath := filepath.Dir(path)
-				if parentPath == g.Path {
-					gv.SubFolders = append(gv.SubFolders, node)
-				} else if parentNode, ok := nodeMap[parentPath]; ok {
-					parentNode.SubFolders = append(parentNode.SubFolders, node)
-				}
-			}
-			return nil
+	galleryViews := make([]GalleryView, len(galleries))
+	var wg sync.WaitGroup
+	for i, g := range galleries {
+		galleryViews[i] = GalleryView{Gallery: g}
+		wg.Go(func() {
+			galleryViews[i].SubFolders = s.folders.get(g.ID, g.Path)
 		})
-		if err != nil {
-			return
-		}
-		galleryViews = append(galleryViews, gv)
 	}
+	wg.Wait()
 
 	data := struct {
 		Galleries []GalleryView  `json:"galleries"`
@@ -741,6 +731,8 @@ func (s *Server) moveFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.folders.invalidate(srcID, dstID)
+
 	s.writeJSON(w, map[string]any{"success": true, "gallery": targetName, "path": newPath}, http.StatusOK)
 }
 
@@ -798,6 +790,10 @@ func (s *Server) scanGallery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if id, err, _ := s.Bridge.GetGalleryID(name); err == nil {
+		s.folders.invalidate(id)
+	}
+
 	w.Header().Set("HX-Trigger", "check-progress")
 	w.WriteHeader(http.StatusOK)
 }
@@ -833,6 +829,8 @@ func (s *Server) deleteGallery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, message, http.StatusInternalServerError)
 		return
 	}
+
+	s.folders.invalidate(id)
 
 	s.writeJSON(w, map[string]any{"success": true}, http.StatusOK)
 }
