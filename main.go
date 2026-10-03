@@ -50,7 +50,7 @@ func main() {
 		BackgroundColour: &options.RGBA{R: 9, G: 9, B: 9, A: 255},
 		AssetServer: &assetserver.Options{
 			Assets:  assets,
-			Handler: app.mux,
+			Handler: app.handler(),
 		},
 
 		OnStartup: app.startup,
