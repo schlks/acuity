@@ -10,7 +10,7 @@
 	} = $props();
 
 	let container = $state<HTMLElement | null>(null);
-	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false});
+	let focusBox = $state({ x: 0, y: 0, w: 0, h: 0, visible: false });
 
 	function activeThumb() {
 		return container?.querySelector(`[data-thumb-index="${currentIndex}"]`) as HTMLElement | null;
@@ -36,7 +36,7 @@
 		currentIndex;
 		if (!container) return;
 		requestAnimationFrame(() => updateFocusBox());
-		activeThumb()?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto'});
+		activeThumb()?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
 	});
 </script>
 
@@ -111,7 +111,7 @@
 	.filmstrip-thumb {
 		position: relative;
 		height: 60px;
-		min-width: 60px;
+		min-width: 10px;
 		flex-shrink: 0;
 		border-radius: 6px;
 		overflow: hidden;
