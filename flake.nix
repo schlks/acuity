@@ -112,10 +112,18 @@
         wailsUnwrapped = pkgs.writeShellScriptBin "wails" ''
           exec "${pkgs.wails}/bin/.wails-wrapped" "$@"
         '';
+
+        iconTools = pkgs.python3.withPackages (p: [ p.fonttools p.brotli p.uharfbuzz ]);
       in
       {
         packages.default = acuity;
         packages.acuity = acuity;
+
+        checks.icons = pkgs.runCommand "acuity-icons-check" { nativeBuildInputs = [ iconTools ]; } ''
+          cd ${./ui}
+          python3 scripts/subset-icons.py --check
+          touch $out
+        '';
 
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
@@ -123,6 +131,7 @@
             go
             bun
             wailsUnwrapped
+            iconTools
           ];
 
           buildInputs = acuity.buildInputs;
