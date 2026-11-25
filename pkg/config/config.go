@@ -54,8 +54,6 @@ func Load() (*Config, error) {
 	viper.SetDefault("thumb_cache_max_mb", 2048)
 	viper.SetDefault("debug", false)
 
-
-
 	viper.SetConfigName("config")
 	viper.AddConfigPath(appDir)
 	viper.AddConfigPath(".")

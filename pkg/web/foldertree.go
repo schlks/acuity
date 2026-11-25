@@ -8,13 +8,13 @@ import (
 )
 
 type folderTree struct {
-	once sync.Once
-	path string
+	once       sync.Once
+	path       string
 	subFolders []*SubFolder
 }
 
 type folderTreeCache struct {
-	mu sync.Mutex
+	mu    sync.Mutex
 	trees map[int]*folderTree
 }
 
