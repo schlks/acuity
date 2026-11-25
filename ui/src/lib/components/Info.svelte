@@ -76,7 +76,7 @@
 		<span class="material-symbols-outlined">insert_drive_file</span>
 		<div class="info-text">
 			<span class="label">File</span>
-			<span class="value">{formatResolution(image.resolution)} • {formatSize(image.size)} • {formatExt(image.extension)}</span>
+			<span class="value">{formatResolution(image.width, image.height)} • {formatSize(image.size)} • {formatExt(image.extension)}</span>
 			<span class="sub-value">{image.filepath.split('/').pop().split('.')[0]}</span>
 		</div>
 	</div>

@@ -17,7 +17,6 @@ depends=(
 makedepends=(
 	'go'
 	'bun'
-	'wails'
 	'git'
 	'pkgconf'
 )
@@ -40,7 +39,9 @@ prepare() {
 build() {
 	cd "$startdir/../.."
 	export CGO_ENABLED=1
-	wails build -clean -tags webkit2_41
+	local wails_version
+	wails_version="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+	go run "github.com/wailsapp/wails/v2/cmd/wails@${wails_version}" build -clean -tags webkit2_41
 }
 
 package() {

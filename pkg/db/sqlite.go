@@ -224,6 +224,7 @@ func (s *SQLiteClient) InitTable() error {
 	CREATE INDEX IF NOT EXISTS idx_gallery_flag ON images(gallery_id, flag);
 	CREATE INDEX IF NOT EXISTS idx_file_hash ON images(file_hash);
 	CREATE INDEX IF NOT EXISTS idx_gallery_natkey ON images(gallery_id, natkey(filepath));
+	CREATE INDEX IF NOT EXISTS idx_gallery_alphabet ON images(gallery_id, filepath);
 	CREATE TABLE IF NOT EXISTS duplicate_cache (
 		gallery_ids TEXT NOT NULL,
 		threshold REAL NOT NULL,
@@ -383,6 +384,8 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 		} else {
 			query += " ORDER BY sharpness "
 		}
+	case "name_lex":
+		query += " ORDER BY filepath "
 	default:
 		query += " ORDER BY natkey(filepath) "
 	}

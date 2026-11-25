@@ -1,7 +1,7 @@
 .PHONY: dev test generate clean icons
 
 dev:
-	air
+	wails dev
 
 test:
 	go test ./...

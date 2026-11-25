@@ -10,7 +10,8 @@ ARCH="amd64"
 DEB_DIR="$ROOT_DIR/build/deb/acuity_${VERSION}_${ARCH}"
 
 echo "==> Building Acuity binary with Wails..."
-wails build -clean -tags webkit2_41
+WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+go run "github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}" build -clean -tags webkit2_41
 
 rm -rf "$DEB_DIR"
 mkdir -p "$DEB_DIR/DEBIAN"

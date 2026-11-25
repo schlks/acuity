@@ -266,10 +266,11 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 	eg, gCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(maxWorkers)
 
+loop:
 	for _, path := range filePaths {
 		select {
 		case <-gCtx.Done():
-			break
+			break loop
 		default:
 		}
 

@@ -190,7 +190,7 @@
 
 		{#if showMeta && (image.size || image.resolution)}
 			<div class="meta-badge">
-				{#if image.resolution}<span>{formatResolution(image.resolution, image.aspect_ratio)}</span
+				{#if image.width}<span>{formatResolution(image.width, image.height)}</span
 					>{/if}
 				{#if image.resolution && image.size}<span class="meta-dot">•</span>{/if}
 				{#if image.size}<span>{formatSize(image.size)}</span>{/if}

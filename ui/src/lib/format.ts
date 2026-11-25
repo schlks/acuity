@@ -16,25 +16,19 @@ export function formatSize(bytes: number | string): string {
 	return `${(num / div).toFixed(1)} ${units[exp]}B`;
 }
 
-export function formatResolution(pixels: number | string, aspectRatio?: number): string {
-	const num = Number(pixels);
-	if (!num) return '';
-	if (!aspectRatio || aspectRatio === 0) {
-		return `${(num / 1_000_000).toFixed(1)} MP`;
-	}
+const resolutionLabels: Record<string, string> = {
+	'1280x720': 'HD',
+	'1920x1080': 'FHD',
+	'2560x1440': 'QHD',
+	'3840x2160': '4K',
+	'7680x4320': '8K'
+};
 
-	const h = Math.round(Math.sqrt(num / aspectRatio));
-	const w = Math.round(num / h);
+export function formatResolution(width?: number, height?: number): string {
+	if (!width || !height) return '';
+	const key = `${Math.max(width, height)}x${Math.min(width, height)}`;
 
-	const resMap: Record<number, string> = {
-		720: 'HD',
-		1080: 'FHD',
-		1440: 'QHD',
-		2160: '4K',
-		4320: '8K'
-	};
-
-	return resMap[h] ?? `${Math.round(w)} x ${Math.round(h)}`;
+	return resolutionLabels[key] ?? `${width} x ${height}`
 }
 
 const dateFormat = new Intl.DateTimeFormat('de-DE', {

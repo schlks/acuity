@@ -8,7 +8,8 @@ PLATFORM="${1:-darwin/universal}"
 ARCH_LABEL="${PLATFORM#darwin/}"
 
 echo "==> Building Acuity.app ($PLATFORM) with Wails..."
-wails build -clean -platform "$PLATFORM"
+WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+go run "github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}" build -clean -platform "$PLATFORM"
 
 APP="$ROOT_DIR/build/bin/Acuity.app"
 DMG_STAGING="$ROOT_DIR/build/dmg-staging"

@@ -6,7 +6,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 echo "==> Building Acuity binary with Wails..."
-wails build -clean -tags webkit2_41
+WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+go run "github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}" build -clean -tags webkit2_41
 
 APPDIR="$ROOT_DIR/build/AppDir"
 rm -rf "$APPDIR"
