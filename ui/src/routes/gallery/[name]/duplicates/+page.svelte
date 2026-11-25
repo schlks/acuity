@@ -64,7 +64,7 @@
 
 			selectedGalleries.forEach(g => params.append('galleries', g));
 
-			const res = await fetch(`/api/gallery/${page.params.name}/duplicates?${params.toString()}`, { signal: controller.signal });
+			const res = await fetch(`/api/gallery/${encodeURIComponent(page.params.name ?? '')}/duplicates?${params.toString()}`, { signal: controller.signal });
 			if (res.ok) {
 				const data = await res.json();
 				if (abortController === controller) {

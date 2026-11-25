@@ -11,7 +11,8 @@
                 formatShutter,
                 formatIso,
                 formatFocalLength,
-                formatLens
+                formatMakeModel,
+		formatSharpness
         } from '$lib/format';
 	
 	let { image, onDelete, onClose } = $props();
@@ -31,7 +32,10 @@
 		<span class="material-symbols-outlined">photo_camera</span>
 		<div class="info-text">
 			<span class="label">Camera and Lens</span>
-			<span class="value">{formatLens(image.camera_make, image.lens_make)}</span>
+			<span class="value">{formatMakeModel(image.camera_make, image.camera_model)}</span>
+			{#if image.lens_make || image.lens_model}
+				<span class="sub-value">{formatMakeModel(image.lens_make, image.lens_model)}</span>
+			{/if}
 		</div>
 	</div>
 
@@ -59,6 +63,10 @@
                                 <span class="material-symbols-outlined icon">flash_off</span>
                         {/if}
                 </div>
+		<div class="grid-item">
+			<span class="label">Sharpness</span>
+			<span class="value">{formatSharpness(image.sharpness)}</span>
+		</div>
 	</div>
 
     

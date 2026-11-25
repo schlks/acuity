@@ -1,6 +1,6 @@
 export function formatSize(bytes: number | string): string {
 	const num = Number(bytes);
-	if (!num || isNaN(num) || num <= 0) return '';
+	if (!num) return '';
 	const unit = 1024.0;
 	if (num < unit) return `${num} B`;
 
@@ -18,7 +18,7 @@ export function formatSize(bytes: number | string): string {
 
 export function formatResolution(pixels: number | string, aspectRatio?: number): string {
 	const num = Number(pixels);
-	if (!num || isNaN(num) || num <= 0) return '';
+	if (!num) return '';
 	if (!aspectRatio || aspectRatio === 0) {
 		return `${(num / 1_000_000).toFixed(1)} MP`;
 	}
@@ -29,7 +29,7 @@ export function formatResolution(pixels: number | string, aspectRatio?: number):
 	const resMap: Record<number, string> = {
 		720: 'HD',
 		1080: 'FHD',
-		1440: 'UHD',
+		1440: 'QHD',
 		2160: '4K',
 		4320: '8K'
 	};
@@ -37,17 +37,19 @@ export function formatResolution(pixels: number | string, aspectRatio?: number):
 	return resMap[h] ?? `${Math.round(w)} x ${Math.round(h)}`;
 }
 
+const dateFormat = new Intl.DateTimeFormat('de-DE', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+
 export function formatDate(dateStr: string): string {
 	const date = new Date(dateStr);
 	if (isNaN(date.getTime())) return dateStr;
 
-	return new Intl.DateTimeFormat('de-DE', {
-		day: '2-digit',
-		month: 'short',
-		year: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit'
-	}).format(date);
+	return dateFormat.format(date);
 }
 
 export function formatExt(ext: string): string {
@@ -94,16 +96,20 @@ export function formatIso(iso: string): string {
 	return trimmed;
 }
 
-const lensMetaRegex = /\b\d+(\.\d+)?mm\b|\bf\/\d+(\.\d+)?\b/gi;
+export function formatMakeModel(make?: string, model?: string): string {
+	const cleanMake = (make ?? '').trim();
+	const cleanModel = (model ?? '').trim();
+	if (!cleanModel) return cleanMake || '--';
 
-export function formatLens(make: string, model: string): string {
-	let cleanMake = (make || 'NA').trim();
-	const cleanModel = (model || 'NA').trim();
+	const brand = cleanMake.split(/\s+/)[0].toLowerCase();
+	if (!brand || cleanModel.toLowerCase().startsWith(brand)) return cleanModel;
+	return `${cleanMake} ${cleanModel}`;
+}
 
-	if (cleanMake && cleanModel.toLowerCase().startsWith(cleanMake.toLowerCase())) {
-		cleanMake = 'NA';
-	}
+const sharpnessFormat = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 });
 
-	let res = `${cleanMake} ${cleanModel}`.trim();
-	return res.replace(lensMetaRegex, '').replace(/\s+/g, ' ').trim();
+export function formatSharpness(s?: number): string {
+	if (s == null) return '...';
+	if (s < 0) return '--';
+	return sharpnessFormat.format(s);
 }

@@ -56,6 +56,7 @@
 				<option value="name_lex">Alphabet</option>
 				<option value="resolution">Resolution</option>
 				<option value="aspect_ratio">Aspect Ratio</option>
+				<option value="sharpness">Sharpness</option>
 			</select>
 		</div>
 

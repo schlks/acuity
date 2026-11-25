@@ -7,12 +7,13 @@
 	import ImageCard from '$lib/components/ImageCard.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import BatchActionDialog from '$lib/components/BatchActionDialog.svelte';
+	import BlurryDialog from '$lib/components/BlurryDialog.svelte';
 	import CullingMode from '$lib/components/CullingMode.svelte';
 	import ContextMenu from '$lib/components/ContextMenu.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { modal } from '$lib/stores/modal.svelte';
-    import type { GalleryImage } from '$lib/types/GalleryImage';
-    import type { ActionReturn } from "svelte/action";
+	import type { GalleryImage } from '$lib/types/GalleryImage';
+	import type { ActionReturn } from "svelte/action";
 
 	let { data } = $props();
 	let searchQuery = $state(page.url.searchParams.get('q') || '');
@@ -27,7 +28,6 @@
 			page.url.searchParams.get('q') ||
 			page.url.searchParams.get('flagFilter') ||
 			page.url.searchParams.get('sortBy') ||
-			page.url.searchParams.get('folderFilter') ||
 			page.url.searchParams.get('sortOrder')
 		)
 	);
@@ -39,7 +39,11 @@
 			URL.revokeObjectURL(droppedImagePreview);
 			droppedImagePreview = null;
 		}
-		goto(page.url.pathname);
+		goto(
+			folderFilter
+				? `${page.url.pathname}?folder=${encodeURIComponent(folderFilter)}`
+				: page.url.pathname
+		);
 	}
 	let pageButtons = $derived.by(() => {
 		let p = [];
@@ -66,6 +70,8 @@
 	let selectedImages = $state<GalleryImage[]>([]);
 	let selectedIds = $derived(new Set(selectedImages.map(i => i.id)));
 	let batchIsOpen = $state(false);
+	let blurryIsOpen = $state(false);
+	let folderFilter = $derived(page.url.searchParams.get('folder') ?? '');
 	let hasMore = $state(false);
 	let currentInfinitePage = $state(1);
 	let isLoadingMore = $state(false);
@@ -330,7 +336,7 @@
 		formData.append('threshold', searchThreshold);
 
 		try {
-			const res = await fetch(`/api/gallery/${data.gallery.name}/search`, {
+			const res = await fetch(`/api/gallery/${encodeURIComponent(data.gallery.name)}/search`, {
 				method: 'POST',
 				body: formData
 			});
@@ -459,7 +465,7 @@
 		url.searchParams.set('page', (Number(currentInfinitePage) + 1).toString());
 
 		try {
-		const res = await fetch(`/api/gallery/${data.gallery.name}/images?${url.searchParams.toString()}`);
+		const res = await fetch(`/api/gallery/${encodeURIComponent(data.gallery.name)}/images?${url.searchParams.toString()}`);
 			if (res.ok) {
 				const json = await res.json();
 				galleryImages.push(...json.images);
@@ -520,7 +526,7 @@
 		});
 		if (!ok) return;
 		toast.info('Scanning gallery...');
-		await fetch(`/api/gallery/${data.gallery.name}/scan`, { method: 'POST' });
+		await fetch(`/api/gallery/${encodeURIComponent(data.gallery.name)}/scan`, { method: 'POST' });
 		await invalidateAll();
 		toast.success('Gallery scan complete');
 	}
@@ -593,7 +599,7 @@
 			danger: true
 		});
 		if (!ok) return;
-		await fetch(`/api/gallery/${data.gallery.name}/unflag`, { method: 'POST' });
+		await fetch(`/api/gallery/${encodeURIComponent(data.gallery.name)}/unflag`, { method: 'POST' });
 		await invalidateAll();
 		toast.info('All flags removed');
 	}
@@ -814,7 +820,7 @@
 		const tag = (e.target as HTMLElement)?.tagName;
 		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-		if (carousel.isOpen || batchIsOpen || isCullingOpen) return;
+		if (carousel.isOpen || batchIsOpen || isCullingOpen || blurryIsOpen) return;
 
 		if (galleryImages.length === 0) return;
 
@@ -887,8 +893,9 @@
 		const target = e.target as HTMLElement;
 		if (!target || typeof target.closest !== 'function') return;
 
-		if (!target.closest('.batch-dialog, .inline-edit-form, .btn-icon, .page-dots-btn, .page-input-wrapper')) {
+		if (!target.closest('.batch-dialog, .blurry-dialog, .inline-edit-form, .btn-icon, .page-dots-btn, .page-input-wrapper')) {
 			batchIsOpen = false;
+			blurryIsOpen = false;
 			if (isEditingName) cancelEditingName();
 			jumpInputIndex = null;
 		}
@@ -974,7 +981,28 @@
 		</button>
 
 		<div style="position: relative;">
-			<button class="btn-icon" class:active={batchIsOpen} title="Batch Actions" onclick={() => batchIsOpen = !batchIsOpen}>
+			<button class="btn-icon" class:active={blurryIsOpen} title="Reject blurry images" onclick={() => {
+				blurryIsOpen = !blurryIsOpen;
+				batchIsOpen = false;
+			}}>
+				<span class="material-symbols-outlined">blur_on</span>
+			</button>
+
+			{#if blurryIsOpen}
+				<BlurryDialog 
+					galleryName={data.gallery.name}
+					folder={folderFilter}
+					onClose={() => (blurryIsOpen = false)}
+					onSuccess={() => invalidateAll()}
+				/>
+			{/if}
+		</div>
+
+		<div style="position: relative;">
+			<button class="btn-icon" class:active={batchIsOpen} title="Batch Actions" onclick={() => {
+				batchIsOpen = !batchIsOpen;
+				blurryIsOpen = false;
+			}}>
 				<span class="material-symbols-outlined">more_vert</span>
 			</button>
 
@@ -1106,6 +1134,14 @@
 			>
 				<span class="material-symbols-outlined">image_aspect_ratio</span>
 			</button>
+			<button
+				class="filter-pill"
+				class:active={currentSort === 'sharpness'}
+				onclick={() => applyFilter('sortBy', 'sharpness')}
+				title="Sort By Sharpness"
+			>
+				<span class="material-symbols-outlined">center_focus_strong</span>
+			</button>
 
 			<div class="divider"></div>
 
@@ -1169,7 +1205,7 @@
 		</p>
 		
 		{#if page.url.searchParams.get('q') || currentFlag}
-			<button class="empty-action-btn" onclick={() => goto(`/gallery/${data.gallery.name}`)}>
+			<button class="empty-action-btn" onclick={() => goto(`/gallery/${encodeURIComponent(data.gallery.name)}`)}>
 				<span class="material-symbols-outlined">restart_alt</span>
 				Reset filters
 			</button>

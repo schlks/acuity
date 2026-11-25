@@ -15,7 +15,7 @@ export async function load({ fetch, params, url }) {
 		const formData = new FormData();
 		formData.append('q', q);
 		formData.append('threshold', threshold);
-		imagesRes = await fetch(`/api/gallery/${params.name}/search`, {
+		imagesRes = await fetch(`/api/gallery/${encodeURIComponent(params.name)}/search`, {
 			method: 'POST',
 			body: formData
 		})
@@ -27,11 +27,11 @@ export async function load({ fetch, params, url }) {
 		if (sortOrder) query.set('sortOrder', sortOrder);
         if (folder) query.set('folder', folder);
 
-		imagesRes = await fetch(`/api/gallery/${params.name}/images?${query.toString()}`);
+		imagesRes = await fetch(`/api/gallery/${encodeURIComponent(params.name)}/images?${query.toString()}`);
 	}
 
 	const [galleryRes, settingsRes] = await Promise.all([
-		fetch(`/api/gallery/${params.name}${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`),
+		fetch(`/api/gallery/${encodeURIComponent(params.name)}${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`),
 		fetch(`/api/settings`)
 	]);
 

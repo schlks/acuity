@@ -17,10 +17,13 @@ export interface GalleryImage {
     aspect_ratio: number;
     camera_make?: string;
     lens_make?: string;
+    camera_model?: string;
+    lens_model?: string;
     focal_length?: string;
     aperture?: string;
     shutter_speed?: string;
     iso?: string;
     flash?: boolean;
+    sharpness?: number;
     distance?: number;
 }

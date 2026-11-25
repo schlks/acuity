@@ -6,6 +6,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -41,11 +42,14 @@ type SImage struct {
 	AspectRatio  float64  `db:"aspect_ratio" json:"aspect_ratio"`
 	CameraMake   string   `db:"camera_make" json:"camera_make"`
 	LensMake     string   `db:"lens_make" json:"lens_make"`
+	CameraModel  *string  `db:"camera_model" json:"camera_model,omitempty"`
+	LensModel    *string  `db:"lens_model" json:"lens_model,omitempty"`
 	FocalLength  string   `db:"focal_length" json:"focal_length"`
 	Aperture     string   `db:"aperture" json:"aperture"`
 	ShutterSpeed string   `db:"shutter_speed" json:"shutter_speed"`
 	Iso          string   `db:"iso" json:"iso"`
 	Flash        bool     `db:"flash" json:"flash"`
+	Sharpness    *float64 `db:"sharpness" json:"sharpness,omitempty"`
 	Distance     *float64 `db:"distance" json:"distance,omitempty"`
 }
 
@@ -63,6 +67,11 @@ type CacheItem struct {
 type UnindexedImage struct {
 	ID       int    `db:"id"`
 	FilePath string `db:"filepath"`
+}
+
+type SharpnessStats struct {
+	Scored  int `db:"scored" json:"scored"`
+	Pending int `db:"pending" json:"pending"`
 }
 
 func init() {
@@ -198,11 +207,14 @@ func (s *SQLiteClient) InitTable() error {
 		aspect_ratio REAL,
 		camera_make TEXT,
 		lens_make TEXT,
+		camera_model TEXT,
+		lens_model TEXT,
 		focal_length TEXT,
 		aperture TEXT,
 		shutter_speed TEXT,
 		iso TEXT,
 		flash BOOLEAN,
+		sharpness REAL,
 		FOREIGN KEY(gallery_id) REFERENCES galleries(id)
 	);
 	CREATE INDEX IF NOT EXISTS idx_gallery_id ON images(gallery_id);
@@ -222,7 +234,28 @@ func (s *SQLiteClient) InitTable() error {
 	if err != nil {
 		return err
 	}
-	return nil
+	for _, column := range []string{"sharpness REAL", "camera_model TEXT", "lens_model TEXT"} {
+		name, definition, _ := strings.Cut(column, " ")
+		if err := s.addColumnIfMissing("images", name, definition); err != nil {
+			return err
+		}
+	}
+	_, err = s.DB.Exec(`
+	CREATE INDEX IF NOT EXISTS idx_gallery_sharpness ON images(gallery_id, sharpness);
+	CREATE INDEX IF NOT EXISTS idx_gallery_sharpness_valid ON images(gallery_id, (sharpness IS NULL OR sharpness < 0), sharpness);`)
+	return err
+}
+
+func (s *SQLiteClient) addColumnIfMissing(table, column, definition string) error {
+	var count int
+	if err := s.DB.Get(&count, "SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", table, column); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := s.DB.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition)
+	return err
 }
 
 func (s *SQLiteClient) InsertGallery(name string, path string) error {
@@ -249,8 +282,8 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
 	}(tx)
 
 	query, err := tx.PrepareNamed(`
-		INSERT INTO images (gallery_id, filepath, file_hash, blurhash, width, height, rating, flag, tags, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, focal_length, aperture, shutter_speed, iso, flash)
-		VALUES (:gallery_id, :filepath, :file_hash, :blurhash, :width, :height, :rating, :flag, :tags, :extension, :date, :taken, :size, :resolution, :aspect_ratio, :camera_make, :lens_make, :focal_length, :aperture, :shutter_speed, :iso, :flash)
+		INSERT INTO images (gallery_id, filepath, file_hash, blurhash, width, height, rating, flag, tags, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, camera_model, lens_model, focal_length, aperture, shutter_speed, iso, flash, sharpness)
+		VALUES (:gallery_id, :filepath, :file_hash, :blurhash, :width, :height, :rating, :flag, :tags, :extension, :date, :taken, :size, :resolution, :aspect_ratio, :camera_make, :lens_make, :camera_model, :lens_model, :focal_length, :aperture, :shutter_speed, :iso, :flash, :sharpness)
 		ON CONFLICT(filepath) DO UPDATE SET
                 gallery_id = :gallery_id,
                 file_hash = :file_hash,
@@ -259,7 +292,10 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
                 height = :height,
                 tags = :tags,
                 size = :size,
-				date = :date;
+		date = :date,
+		sharpness = :sharpness,
+		camera_model = :camera_model,
+		lens_model = :lens_model;
 	`)
 	if err != nil {
 		err := tx.Rollback()
@@ -341,18 +377,24 @@ func (s *SQLiteClient) GetAllImages(galleryID int, sortBy string, sortOrder stri
 		query += " ORDER BY iso "
 	case "name":
 		query += " ORDER BY natkey(filepath) "
+	case "sharpness":
+		if sortOrder == "asc" {
+			query += " ORDER BY (sharpness IS NULL OR sharpness < 0), sharpness "
+		} else {
+			query += " ORDER BY sharpness "
+		}
 	default:
 		query += " ORDER BY natkey(filepath) "
 	}
 
 	if sortOrder == "asc" {
-		query += "ASC"
+		query += "ASC, id ASC "
 	} else {
-		query += "DESC"
+		query += "DESC, id DESC "
 	}
 
 	if page > 0 {
-		query += " LIMIT ? OFFSET ?;"
+		query += "LIMIT ? OFFSET ?;"
 		offset := (page - 1) * imagesPerPage
 		args = append(args, imagesPerPage, offset)
 	}
@@ -769,4 +811,98 @@ func (s *SQLiteClient) GetImagesWithoutVectors() ([]UnindexedImage, error) {
 	var list []UnindexedImage
 	err := s.DB.Select(&list, query)
 	return list, err
+}
+
+func (s *SQLiteClient) GetImagesWithoutSharpness() ([]UnindexedImage, error) {
+	var list []UnindexedImage
+	err := s.DB.Select(&list, "SELECT id, filepath FROM images WHERE sharpness IS NULL;")
+	return list, err
+}
+
+func (s *SQLiteClient) SetSharpness(scores map[int]float64) error {
+	tx, err := s.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare("UPDATE images SET sharpness = ? WHERE id = ?;")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for id, score := range scores {
+		if _, err := stmt.Exec(score, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *SQLiteClient) GetSharpnessStats(galleryID int, folderFilter string) (SharpnessStats, error) {
+	var stats SharpnessStats
+	query := `
+		SELECT
+			COUNT(CASE WHEN sharpness >= 0 THEN 1 END) AS scored,
+			COUNT(CASE WHEN sharpness IS NULL THEN 1 END) AS pending
+		FROM images
+		WHERE gallery_id = ? AND filepath LIKE ?;`
+	args := []any{galleryID, folderFilter + "%"}
+
+	err := s.DB.Get(&stats, query, args...)
+	return stats, err
+}
+
+func (s *SQLiteClient) SharpnessAtRank(galleryID int, folderFilter string, rank int) (float64, error) {
+	if rank <= 0 {
+		return 0, fmt.Errorf("rank must be at least 1, got %d", rank)
+	}
+	var cutoff float64
+	query := `
+		SELECT sharpness FROM images
+		WHERE gallery_id = ? AND filepath LIKE ? AND sharpness >= 0
+		ORDER BY sharpness
+		LIMIT 1 OFFSET ?`
+	args := []any{galleryID, folderFilter + "%", rank - 1}
+
+	err := s.DB.Get(&cutoff, query, args...)
+	return cutoff, err
+}
+
+func (s *SQLiteClient) RejectBelowSharpness(galleryID int, folderFilter string, cutoff float64) (int64, error) {
+	query := "UPDATE images SET flag = -1 WHERE gallery_id = ? AND filepath LIKE ? AND sharpness >= 0 AND sharpness <= ? AND flag = 0;"
+
+	res, err := s.DB.Exec(query, galleryID, folderFilter+"%", cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+func (s *SQLiteClient) GetImagesWithoutCameraInfo() ([]UnindexedImage, error) {
+	var list []UnindexedImage
+	err := s.DB.Select(&list, "SELECT id, filepath FROM images WHERE camera_model IS NULL;")
+	return list, err
+}
+
+func (s *SQLiteClient) SetCameraInfo(infos map[int]cameraInfo) error {
+	tx, err := s.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare("UPDATE images SET camera_model = ?, lens_model = ? WHERE id = ?;")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for id, info := range infos {
+		if _, err := stmt.Exec(info.camera, info.lens, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

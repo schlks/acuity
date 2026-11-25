@@ -4,6 +4,7 @@ package web
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,24 +18,23 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
-	"sync"
 
 	"acuity/pkg/config"
 
 	"acuity/pkg/ai"
 	"acuity/pkg/db"
+	"acuity/pkg/raw"
 
-	"github.com/evanoberholster/imagemeta"
-	"github.com/evanoberholster/imagemeta/meta"
 	"github.com/h2non/bimg"
 	"github.com/mallardduck/go-http-helpers/pkg/query"
 )
 
 type Server struct {
-	Bridge *db.Bridge
-	Config *config.Config
+	Bridge  *db.Bridge
+	Config  *config.Config
 	folders *folderTreeCache
 }
 
@@ -68,8 +68,8 @@ type searchResult struct {
 func NewServer(sdatabase *db.SQLiteClient, vdatabase *db.VectorClient, config *config.Config) *Server {
 	service := db.NewBridge(sdatabase, vdatabase)
 	server := &Server{
-		Bridge: service,
-		Config: config,
+		Bridge:  service,
+		Config:  config,
 		folders: newFolderTreeCache(),
 	}
 
@@ -127,6 +127,8 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET	/api/gallery/{name}", s.getGallery)
 	mux.HandleFunc("GET	/api/gallery/{name}/count", s.handleGalleryCount)
 	mux.HandleFunc("GET	/api/gallery/{name}/images", s.getGalleryImages)
+	mux.HandleFunc("GET	/api/gallery/{name}/sharpness", s.getSharpnessStats)
+	mux.HandleFunc("POST	/api/gallery/{name}/reject-blurry", s.rejectBlurry)
 	mux.HandleFunc("POST	/api/gallery", s.createGallery)
 	mux.HandleFunc("DELETE /api/gallery/{name}", s.deleteGallery)
 	mux.HandleFunc("POST 	/api/gallery/batch", s.handleBatchAction)
@@ -321,71 +323,6 @@ func (s *Server) setSettings(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func isRawExtension(ext string) bool {
-	rawExts := map[string]bool{
-		".nef": true, ".cr2": true, ".cr3": true, ".arw": true,
-		".dng": true, ".raf": true, ".orf": true, ".rw2": true, ".srw": true,
-	}
-	return rawExts[strings.ToLower(ext)]
-}
-
-func extractRawPreview(path string) ([]byte, error) {
-	var data []byte
-
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	if filepath.Ext(path) == ".cr3" {
-		return imagemeta.PreviewCR3(file)
-	} else {
-		type preview struct {
-			Offset, Length uint32
-			Compression    meta.Compression
-		}
-		x, err := imagemeta.Decode(file)
-		if err != nil {
-			return nil, err
-		}
-		candidates := []preview{
-			{x.IFD0.ThumbnailOffset, x.IFD0.ThumbnailLength, meta.Compression(7)},
-		}
-
-		if x.IFD1 != nil {
-			candidates = append(candidates, preview{x.IFD1.ImageOffset, x.IFD1.ImageLength, x.IFD1.Compression})
-		}
-		if x.IFD2 != nil {
-			candidates = append(candidates, preview{x.IFD2.ImageOffset, x.IFD2.ImageLength, x.IFD2.Compression})
-		}
-
-		var length uint32
-		var offset uint32
-
-		for _, c := range candidates {
-			if c.Compression != 6 && c.Compression != 7 {
-				continue
-			}
-			if c.Length > length {
-				length = c.Length
-				offset = c.Offset
-			}
-		}
-
-		section := io.NewSectionReader(file, int64(offset), int64(length))
-		data, err = io.ReadAll(section)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if len(data) > 0 {
-		return data, nil
-	}
-	return nil, fmt.Errorf("no preview found")
-}
-
 var (
 	thumbSemaphore = make(chan struct{}, 4)
 	thumbsWritten  atomic.Int64
@@ -473,8 +410,8 @@ func (s *Server) getOrCreateThumbnail(imagePath string, targetWidth int) (string
 	defer func() { <-thumbSemaphore }()
 
 	var buffer []byte
-	if isRawExtension(filepath.Ext(imagePath)) {
-		preview, err := extractRawPreview(imagePath)
+	if raw.IsRawExtension(filepath.Ext(imagePath)) {
+		preview, err := raw.ExtractPreview(imagePath)
 		if err == nil {
 			buffer = preview
 		}
@@ -547,7 +484,7 @@ func (s *Server) isPathInGallery(path string) bool {
 
 const (
 	defaultPreviewWidth = 2560
-	maxPreviewWidth = 3840
+	maxPreviewWidth     = 3840
 )
 
 func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
@@ -583,8 +520,8 @@ func (s *Server) handleImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if isRawExtension(filepath.Ext(image)) {
-		if previewBytes, err := extractRawPreview(image); err == nil {
+	if raw.IsRawExtension(filepath.Ext(image)) {
+		if previewBytes, err := raw.ExtractPreview(image); err == nil {
 			mimeType := http.DetectContentType(previewBytes)
 
 			if mimeType == "image/tiff" {
@@ -1467,4 +1404,56 @@ func (s *Server) setRating(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAIStatus(w http.ResponseWriter, _ *http.Request) {
 	status := ai.GetStatus()
 	s.writeJSON(w, status, http.StatusOK)
+}
+
+func (s *Server) getSharpnessStats(w http.ResponseWriter, r *http.Request) {
+	galleryName := r.PathValue("name")
+	folder := r.URL.Query().Get("folder")
+
+	stats, err := s.Bridge.GetSharpnessStats(galleryName, folder)
+	switch {
+	case errors.Is(err, db.ErrGlobalGallery):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	case errors.Is(err, sql.ErrNoRows):
+		http.Error(w, "Gallery not found", http.StatusNotFound)
+		return
+	case err != nil:
+		message := "Failed to get Sharpness stats"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+
+	s.writeJSON(w, stats, http.StatusOK)
+}
+
+func (s *Server) rejectBlurry(w http.ResponseWriter, r *http.Request) {
+	galleryName := r.PathValue("name")
+	folder := r.FormValue("folder")
+	percent, err := strconv.ParseFloat(r.FormValue("percent"), 64)
+	if err != nil {
+		message := "Invalid percent"
+		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
+
+	rejected, err := s.Bridge.RejectBlurriest(galleryName, folder, percent)
+	switch {
+	case errors.Is(err, db.ErrInvalidPercent), errors.Is(err, db.ErrGlobalGallery):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	case errors.Is(err, sql.ErrNoRows):
+		http.Error(w, "Gallery not found", http.StatusNotFound)
+		return
+	case err != nil:
+		message := "Failed to reject Images"
+		slog.Error(message, slog.Any("error", err))
+		http.Error(w, message, http.StatusInternalServerError)
+		return
+	}
+
+	s.writeJSON(w, struct {
+		Rejected int64 `json:"rejected"`
+	}{rejected}, http.StatusOK)
 }

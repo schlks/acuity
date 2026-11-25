@@ -3,6 +3,7 @@
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { page } from '$app/state';
+	import { toast } from '$lib/stores/toast.svelte';
 
 let { onClose, selectedImages = [], onSuccess = () => {} } = $props();
 
@@ -39,11 +40,12 @@ let { onClose, selectedImages = [], onSuccess = () => {} } = $props();
 			onClose();
 		} else {
 			console.error("Batch Action failed:", await res.text());
+			toast.error("Batch Action failed");
 		}
 	}
 </script>
 
-<div class="settings-panel panel-glass" transition:fly={{ y: 15, duration: 250, easing: quintOut }}>
+<div class="settings-panel panel-glass batch-dialog" transition:fly={{ y: 15, duration: 250, easing: quintOut }}>
 	<h3>Batch Actions</h3>
 
 	<form onsubmit={executeBatch}>

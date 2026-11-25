@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -329,6 +330,9 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 			}
 			sImage.Blurhash = bhash
 
+			sharpness := sharpnessFor(data, sImage.Extension)
+			sImage.Sharpness = &sharpness
+
 			hash := sha256.Sum256(data)
 			sImage.FileHash = hex.EncodeToString(hash[:])
 			sImage.Width = width
@@ -341,7 +345,9 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 			sImage.Resolution = resolution
 			sImage.AspectRatio = aspectRatio
 
+			var camera cameraInfo
 			if x, err := imagemeta.Decode(bytes.NewReader(data)); err == nil {
+				camera = cameraInfoFrom(x)
 				tm := x.OriginalDate()
 				if !tm.IsZero() {
 					sImage.Taken = tm.Format(time.RFC3339)
@@ -354,6 +360,8 @@ func (b *Bridge) ImportImages(ctx context.Context, filePaths []string, galleryID
 				sImage.Iso = fmt.Sprintf("%v", x.ExifIFD.ISOSpeedRatings)
 				sImage.Flash = x.ExifIFD.Flash.Fired()
 			}
+			sImage.CameraModel = &camera.camera
+			sImage.LensModel = &camera.lens
 
 			var embedding []float32
 			if b.vDB != nil && b.vDB.embedder != nil {
@@ -1048,4 +1056,191 @@ func (b *Bridge) IndexMissingVectors(ctx context.Context) error {
 
 	slog.Info("Vector backfill finished", slog.Int("indexed", count), slog.Int("total", len(images)))
 	return nil
+}
+
+const sharpnessBatchSize = 100
+
+type sharpnessResult struct {
+	id    int
+	score float64
+}
+
+func (b *Bridge) BackfillSharpness(ctx context.Context) error {
+	images, err := b.sDB.GetImagesWithoutSharpness()
+	if err != nil || len(images) == 0 {
+		return err
+	}
+
+	slog.Info("Starting sharpness backfill", slog.Int("count", len(images)))
+
+	result := make(chan sharpnessResult, sharpnessBatchSize)
+	written := make(chan int)
+
+	go func() {
+		batch := make(map[int]float64, sharpnessBatchSize)
+		total := 0
+		flush := func() {
+			if len(batch) == 0 {
+				return
+			}
+			if err := b.sDB.SetSharpness(batch); err != nil {
+				slog.Error("Failed to write sharpness batch", slog.Any("error", err))
+			} else {
+				total += len(batch)
+			}
+			clear(batch)
+			if total%1000 == 0 {
+				slog.Info("Sharpness backfill progress", slog.Int("processed", total), slog.Int("total", len(images)))
+			}
+		}
+		for r := range result {
+			batch[r.id] = r.score
+			if len(batch) >= sharpnessBatchSize {
+				flush()
+			}
+		}
+		flush()
+		written <- total
+	}()
+
+	eg, gCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(max(1, runtime.NumCPU()/2))
+
+	for _, img := range images {
+		if gCtx.Err() != nil {
+			break
+		}
+		eg.Go(func() error {
+			data, err := os.ReadFile(img.FilePath)
+			if err != nil {
+				slog.Warn("Failed to read image for sharpness backfill", slog.String("path", img.FilePath), slog.Any("error", err))
+				return nil
+			}
+			select {
+			case result <- sharpnessResult{id: img.ID, score: sharpnessFor(data, filepath.Ext(img.FilePath))}:
+			case <-gCtx.Done():
+			}
+			return nil
+		})
+	}
+
+	_ = eg.Wait()
+	close(result)
+
+	slog.Info("Sharpness backfill finished", slog.Int("written", <-written), slog.Int("total", len(images)))
+	return ctx.Err()
+}
+
+const cameraInfoBatchSize = 500
+
+type cameraInfoResult struct {
+	id   int
+	info cameraInfo
+}
+
+func (b *Bridge) BackfillCameraInfo(ctx context.Context) error {
+	images, err := b.sDB.GetImagesWithoutCameraInfo()
+	if err != nil || len(images) == 0 {
+		return err
+	}
+
+	slog.Info("Starting camera info backfill", slog.Int("count", len(images)))
+
+	result := make(chan cameraInfoResult, cameraInfoBatchSize)
+	written := make(chan int)
+
+	go func() {
+		batch := make(map[int]cameraInfo, cameraInfoBatchSize)
+		total := 0
+		flush := func() {
+			if len(batch) == 0 {
+				return
+			}
+			if err := b.sDB.SetCameraInfo(batch); err != nil {
+				slog.Error("Failed to write camera info batch", slog.Any("error", err))
+			} else {
+				total += len(batch)
+			}
+			clear(batch)
+		}
+		for r := range result {
+			batch[r.id] = r.info
+			if len(batch) >= cameraInfoBatchSize {
+				flush()
+			}
+		}
+		flush()
+		written <- total
+	}()
+
+	eg, gCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(runtime.NumCPU())
+
+	for _, img := range images {
+		if gCtx.Err() != nil {
+			break
+		}
+		eg.Go(func() error {
+			f, err := os.Open(img.FilePath)
+			if err != nil {
+				slog.Warn("Failed to open image for camera info backfill", slog.String("path", img.FilePath), slog.Any("error", err))
+				return nil
+			}
+			info := readCameraInfo(f)
+			f.Close()
+			select {
+			case result <- cameraInfoResult{id: img.ID, info: info}:
+			case <-gCtx.Done():
+			}
+			return nil
+		})
+	}
+
+	_ = eg.Wait()
+	close(result)
+
+	slog.Info("Camera info backfill finished", slog.Int("written", <-written), slog.Int("total", len(images)))
+	return ctx.Err()
+}
+
+func (b *Bridge) GetSharpnessStats(galleryName string, folderFilter string) (SharpnessStats, error) {
+	id, err, isGlobal := b.GetGalleryID(galleryName)
+	if err != nil {
+		return SharpnessStats{}, err
+	}
+	if isGlobal {
+		return SharpnessStats{}, ErrGlobalGallery
+	}
+
+	return b.sDB.GetSharpnessStats(id, folderFilter)
+}
+
+func (b *Bridge) RejectBlurriest(galleryName string, folderFilter string, percent float64) (int64, error) {
+	if !(percent > 0 && percent <= 100) {
+		return 0, ErrInvalidPercent
+	}
+
+	id, err, isGlobal := b.GetGalleryID(galleryName)
+	if err != nil {
+		return 0, err
+	}
+	if isGlobal {
+		return 0, ErrGlobalGallery
+	}
+
+	stats, err := b.sDB.GetSharpnessStats(id, folderFilter)
+	if err != nil {
+		return 0, err
+	}
+	n := math.Ceil(float64(stats.Scored) * percent / 100)
+	if n == 0 {
+		return 0, nil
+	}
+
+	cutoff, err := b.sDB.SharpnessAtRank(id, folderFilter, int(n))
+	if err != nil {
+		return 0, err
+	}
+
+	return b.sDB.RejectBelowSharpness(id, folderFilter, cutoff)
 }

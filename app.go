@@ -77,6 +77,16 @@ func (a *App) startup(ctx context.Context) {
 
 	bridge := db.NewBridge(sClient, vClient)
 
+	go func() {
+		ctx := context.Background()
+		if err := bridge.BackfillCameraInfo(ctx); err != nil {
+			slog.Error("Camera info backfill error", slog.Any("error", err))
+		}
+		if err := bridge.BackfillSharpness(ctx); err != nil {
+			slog.Error("Sharpness backfill error", slog.Any("error", err))
+		}
+	}()
+
 	// Initialize AI models in background (so UI opens instantly and shows setup modal if downloading)
 	go func() {
 		modelPaths, err := ai.EnsureModels()
