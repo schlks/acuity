@@ -23,6 +23,7 @@ makedepends=(
 
 provides=('acuity')
 conflicts=('acuity')
+options=('!debug')
 source=()
 sha256sums=()
 
@@ -41,7 +42,7 @@ build() {
 	export CGO_ENABLED=1
 	local wails_version
 	wails_version="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
-	go run "github.com/wailsapp/wails/v2/cmd/wails@${wails_version}" build -clean -tags webkit2_41
+	go run "github.com/wailsapp/wails/v2/cmd/wails@${wails_version}" build -clean -m -tags webkit2_41
 }
 
 package() {
