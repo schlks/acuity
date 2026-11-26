@@ -50,6 +50,7 @@ type SImage struct {
 	Iso          string   `db:"iso" json:"iso"`
 	Flash        bool     `db:"flash" json:"flash"`
 	Sharpness    *float64 `db:"sharpness" json:"sharpness,omitempty"`
+	VectorFailed bool     `db:"vector_failed" json:"-"`
 	Distance     *float64 `db:"distance" json:"distance,omitempty"`
 }
 
@@ -215,6 +216,7 @@ func (s *SQLiteClient) InitTable() error {
 		iso TEXT,
 		flash BOOLEAN,
 		sharpness REAL,
+		vector_failed INTEGER NOT NULL DEFAULT 0,
 		FOREIGN KEY(gallery_id) REFERENCES galleries(id)
 	);
 	CREATE INDEX IF NOT EXISTS idx_gallery_id ON images(gallery_id);
@@ -235,7 +237,7 @@ func (s *SQLiteClient) InitTable() error {
 	if err != nil {
 		return err
 	}
-	for _, column := range []string{"sharpness REAL", "camera_model TEXT", "lens_model TEXT"} {
+	for _, column := range []string{"sharpness REAL", "camera_model TEXT", "lens_model TEXT", "vector_failed INTEGER NOT NULL DEFAULT 0"} {
 		name, definition, _ := strings.Cut(column, " ")
 		if err := s.addColumnIfMissing("images", name, definition); err != nil {
 			return err
@@ -283,8 +285,8 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
 	}(tx)
 
 	query, err := tx.PrepareNamed(`
-		INSERT INTO images (gallery_id, filepath, file_hash, blurhash, width, height, rating, flag, tags, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, camera_model, lens_model, focal_length, aperture, shutter_speed, iso, flash, sharpness)
-		VALUES (:gallery_id, :filepath, :file_hash, :blurhash, :width, :height, :rating, :flag, :tags, :extension, :date, :taken, :size, :resolution, :aspect_ratio, :camera_make, :lens_make, :camera_model, :lens_model, :focal_length, :aperture, :shutter_speed, :iso, :flash, :sharpness)
+		INSERT INTO images (gallery_id, filepath, file_hash, blurhash, width, height, rating, flag, tags, extension, date, taken, size, resolution, aspect_ratio, camera_make, lens_make, camera_model, lens_model, focal_length, aperture, shutter_speed, iso, flash, sharpness, vector_failed)
+		VALUES (:gallery_id, :filepath, :file_hash, :blurhash, :width, :height, :rating, :flag, :tags, :extension, :date, :taken, :size, :resolution, :aspect_ratio, :camera_make, :lens_make, :camera_model, :lens_model, :focal_length, :aperture, :shutter_speed, :iso, :flash, :sharpness, :vector_failed)
 		ON CONFLICT(filepath) DO UPDATE SET
                 gallery_id = :gallery_id,
                 file_hash = :file_hash,
@@ -296,7 +298,8 @@ func (s *SQLiteClient) InsertImage(images []SImage) error {
 		date = :date,
 		sharpness = :sharpness,
 		camera_model = :camera_model,
-		lens_model = :lens_model;
+		lens_model = :lens_model,
+		vector_failed = :vector_failed;
 	`)
 	if err != nil {
 		err := tx.Rollback()
@@ -809,11 +812,16 @@ func (s *SQLiteClient) GetImagesWithoutVectors() ([]UnindexedImage, error) {
 	query := `
 		SELECT i.id, i.filepath
 		FROM images i
-		WHERE i.id NOT IN (SELECT image_id FROM vec_images);
+		WHERE i.vector_failed = 0 AND i.id NOT IN (SELECT image_id FROM vec_images);
 	`
 	var list []UnindexedImage
 	err := s.DB.Select(&list, query)
 	return list, err
+}
+
+func (s *SQLiteClient) MarkVectorFailed(imageID int) error {
+	_, err := s.DB.Exec("UPDATE images SET vector_failed = 1 WHERE id = ?;", imageID)
+	return err
 }
 
 func (s *SQLiteClient) GetImagesWithoutSharpness() ([]UnindexedImage, error) {

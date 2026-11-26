@@ -368,6 +368,8 @@ loop:
 			if b.vDB != nil && b.vDB.embedder != nil {
 				if emb, err := b.vDB.embedder.EmbedImage(data); err == nil {
 					embedding = emb
+				} else {
+					sImage.VectorFailed = true
 				}
 			}
 
@@ -1041,6 +1043,9 @@ func (b *Bridge) IndexMissingVectors(ctx context.Context) error {
 		emb, err := b.vDB.embedder.EmbedImage(data)
 		if err != nil {
 			slog.Warn("Failed to embed image", slog.Int("id", img.ID), slog.Any("error", err))
+			if err := b.sDB.MarkVectorFailed(img.ID); err != nil {
+				slog.Warn("Failed to mark image as not embeddable", slog.Int("id", img.ID), slog.Any("error", err))
+			}
 			continue
 		}
 

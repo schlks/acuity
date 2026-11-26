@@ -45,4 +45,7 @@ func TestInitTableMigratesOldSchema(t *testing.T) {
 	if img.CameraModel != nil || img.LensModel != nil {
 		t.Fatalf("expected NULL camera/lens model for migrated row, got %v / %v", img.CameraModel, img.LensModel)
 	}
+	if img.VectorFailed {
+		t.Fatal("expected vector_failed = 0 for migrated row")
+	}
 }
