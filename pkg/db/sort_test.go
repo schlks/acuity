@@ -89,3 +89,30 @@ func TestTiesAreBrokenByIDInSortDirection(t *testing.T) {
 		}
 	}
 }
+
+func TestSortByNameLexIsBytewise(t *testing.T) {
+	sDB := setupTestDB(t)
+
+	var images []db.SImage
+	for _, path := range []string{"/img2.jpg", "/a.jpg", "/Äpfel.jpg", "/B.jpg", "/img10.jpg", "/A.jpg"} {
+		images = append(images, db.SImage{GalleryID: 1, FilePath: path, Blurhash: "x"})
+	}
+	if err := sDB.InsertImage(images); err != nil {
+		t.Fatal(err)
+	}
+
+	ascending := []string{"/A.jpg", "/B.jpg", "/a.jpg", "/img10.jpg", "/img2.jpg", "/Äpfel.jpg"}
+	descending := slices.Clone(ascending)
+	slices.Reverse(descending)
+
+	for _, tt := range []struct {
+		order string
+		want  []string
+	}{{"asc", ascending}, {"desc", descending}} {
+		t.Run(tt.order, func(t *testing.T) {
+			if got := sortedPaths(t, sDB, "name_lex", tt.order, 1, 100); !slices.Equal(got, tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
