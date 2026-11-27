@@ -8,7 +8,6 @@ on:
 
 env:
   GO_VERSION: "1.26.3"
-  WAILS_VERSION: "v2.15.0"
 
 permissions:
   contents: write
@@ -27,9 +26,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libvips-dev pkg-config
-
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
 
       - name: Build .deb
         run: |
@@ -63,9 +59,6 @@ jobs:
 
       - name: Install system dependencies
         run: brew install vips create-dmg pkg-config
-
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
 
       - name: Build .dmg (arm64)
         run: |
