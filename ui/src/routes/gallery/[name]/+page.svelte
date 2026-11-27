@@ -18,6 +18,7 @@
 	let { data } = $props();
 	let searchQuery = $state(page.url.searchParams.get('q') || '');
 	let searchThreshold = $state(page.url.searchParams.get('threshold') || '0.9');
+	// svelte-ignore state_referenced_locally
 	let infiniteScroll = $state(data.settings?.infinite_scroll || false);
 	let currentPage = $derived(Number(data.images.current_page || 1));
 	let currentFlag = $derived(page.url.searchParams.get('flagFilter') || '');
@@ -915,6 +916,8 @@
 {#if isWindowDragging}
 	<div
 		class="drag-drop-overlay"
+		role="region"
+		aria-label="Drop image to search"
 		transition:fade={{ duration: 120 }}
 		ondragover={handleWindowDragOver}
 		ondrop={handleWindowDrop}
@@ -937,7 +940,7 @@
 				onkeydown={(e) => { if (e.key === 'Escape') cancelEditingName(); }}
 				onblur={saveGalleryName}
 			/>
-			<button type="submit" style="display: none;"></button>
+			<button type="submit" style="display: none;" aria-label="Search"></button>
 		</form>
 	{:else}
 		<h1 ondblclick={startEditingName} title="Double Click to rename">{data.gallery.heading || data.gallery.name}</h1>
@@ -1020,6 +1023,7 @@
 		<form class="search-form" onsubmit={handleSearch}>
 			<div
 				class="input-wrapper"
+				role="presentation"
 				class:active={searchQuery.trim() !== '' || Boolean(droppedImagePreview)}
 				class:drag-over={isDragging}
 				ondragover={(e) => { e.preventDefault(); isDragging = true; }}
@@ -1063,7 +1067,7 @@
 					onchange={handleDebounceSearch}
 				/>
 			</div>
-			<button type="submit" style="display: none;"></button>
+			<button type="submit" style="display: none;" aria-label="Search"></button>
 		</form>
 
 		<div class="filter-icons">
@@ -1293,6 +1297,7 @@
 						}}
 					>
 						{#if jumpInputIndex === i}
+							<!-- svelte-ignore a11y_autofocus -->
 							<input
 								type="number"
 								class="page-jump-input"

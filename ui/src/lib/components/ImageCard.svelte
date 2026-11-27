@@ -68,6 +68,7 @@
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
 	let isLoaded = $state(false);
+	// svelte-ignore state_referenced_locally
 	let lastPath = $state(image.filepath);
 	let hasBeenInView = $state(false);
 
@@ -139,8 +140,10 @@
 	});
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
 	class="image-card"
+	role="button"
 	class:focused={isFocused}
 	data-index={dataIndex}
 	{onmouseenter}

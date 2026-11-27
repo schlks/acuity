@@ -29,6 +29,7 @@
     }: ContextMenuProps = $props();
 
     let menuElement = $state<HTMLDivElement | null>(null);
+    // svelte-ignore state_referenced_locally
     let pos = $state({ top: y, left: x});
 
     $effect(() => {
@@ -230,22 +231,6 @@
 			opacity: 1;
 			transform: scale(1);
 		}
-	}
-
-	.status-banner {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 12px 16px;
-		font-size: 0.9rem;
-		font-weight: 500;
-		color: var(--info);
-		justify-content: center;
-	}
-
-	.status-banner .material-symbols-outlined {
-		color: var(--info);
-		font-size: 1.2rem;
 	}
 
 	.menu-section-title {

@@ -18,9 +18,12 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if modal.isOpen}
-	<div class="modal-backdrop overlay" transition:fade={{ duration: 150 }} onclick={() => modal.handleCancel()}>
+	<div class="modal-backdrop overlay" role="presentation" transition:fade={{ duration: 150 }} onclick={() => modal.handleCancel()}>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
 			class="modal-card panel-glass"
+			role="dialog"
+			aria-modal="true"
 			transition:scale={{ duration: 200, start: 0.95, easing: quintOut }}
 			onclick={(e) => e.stopPropagation()}
 			tabindex="-1"
@@ -42,6 +45,7 @@
 				<button type="button" class="btn btn-cancel" onclick={() => modal.handleCancel()}>
 					{modal.cancelText}
 				</button>
+				<!-- svelte-ignore a11y_autofocus -->
 				<button
 					type="button"
 					class={modal.danger ? 'btn btn-danger' : 'btn btn-primary'}

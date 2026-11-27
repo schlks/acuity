@@ -13,6 +13,7 @@
 		images_per_page: 100,
 		infinite_scroll: false
 	});
+	// svelte-ignore state_referenced_locally
 	let originalConfig = $state({...config});
 
 	onMount(async () => {
@@ -99,8 +100,6 @@
 			<button id="wipe-btn" type="button" class="btn btn-danger" onclick={wipeDatabases}>Delete</button>
 		</div>
 
-		<button type="submit" style="display: none;"></button>
-		
 		<div class="actions">
 			<button type="button" class="btn btn-cancel" onclick={onClose}>Cancel</button>
 			<button type="submit" class="btn btn-primary">Save</button>

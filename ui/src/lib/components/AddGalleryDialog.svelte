@@ -90,8 +90,6 @@
 			</div>
 		</div>
 
-		<button type="submit" style="display: none;"></button>
-		
 		<div class="actions">
 			<button type="button" class="btn btn-cancel" onclick={onClose}>Cancel</button>
 			<button type="submit" class="btn btn-primary">Import</button>

@@ -321,14 +321,6 @@
                 z-index: 10;
         }
 
-        .settings-container.down :global(.settings-panel) {
-                position: absolute;
-                top: 100%;
-                left: 0;
-                margin-top: 8px;
-                z-index: 10;
-        }
-
 	.gallery-item-wrapper {
 		display: flex;
 		align-items: center;

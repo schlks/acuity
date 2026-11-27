@@ -132,7 +132,7 @@
 					<span class="material-symbols-outlined search-icon">search</span>
 					<input type="search" placeholder="Search across collections..." bind:value={searchQuery} />
 				</div>
-				<button type="submit" style="display: none;"></button>
+				<button type="submit" style="display: none;" aria-label="Search"></button>
 			</form>
 		{/if}
 	</header>
@@ -191,16 +191,16 @@
 	</section>
 
 	{#if showAddGallery}
-		<div class="modal-backdrop overlay" onclick={() => showAddGallery = false}>
-			<div class="modal-dialog import-modal" onclick={(e) => e.stopPropagation()}>
+		<div class="modal-backdrop overlay" role="presentation" onclick={() => showAddGallery = false}>
+			<div class="modal-dialog import-modal" role="presentation" onclick={(e) => e.stopPropagation()}>
 				<AddGalleryDialog onClose={() => showAddGallery = false} />
 			</div>
 		</div>
 	{/if}
 
 	{#if showSettings}
-		<div class="modal-backdrop overlay" onclick={() => showSettings = false}>
-			<div class="modal-dialog" onclick={(e) => e.stopPropagation()}>
+		<div class="modal-backdrop overlay" role="presentation" onclick={() => showSettings = false}>
+			<div class="modal-dialog" role="presentation" onclick={(e) => e.stopPropagation()}>
 				<SettingsDialog onClose={() => showSettings = false} />
 			</div>
 		</div>
